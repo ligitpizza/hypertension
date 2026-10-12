@@ -18,6 +18,12 @@ Future<void> bootstrap({
   required Widget Function() app,
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (firebaseOptions.apiKey.isEmpty) {
+    throw StateError(
+      'Firebase API key missing. Build with --dart-define-from-file=.env '
+      '(copy app/.env.example to app/.env).',
+    );
+  }
   await Firebase.initializeApp(options: firebaseOptions);
 
   if (AppConfig.useEmulators) {

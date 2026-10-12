@@ -2,10 +2,24 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "firebase config",
+      "detail": "Generate google-services.json from app/.env",
+      "type": "shell",
+      "command": "python tasks.py firebase-config",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
       "label": "adb reverse",
       "type": "shell",
       "command": "python tasks.py adb-reverse",
       "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "prepare phone",
+      "dependsOn": ["firebase config", "adb reverse"],
+      "dependsOrder": "sequence",
       "problemMatcher": []
     }
   ]

@@ -54,6 +54,8 @@ app/android/captures/
 app/android/gradlew
 app/android/gradlew.bat
 app/android/gradle/wrapper/gradle-wrapper.jar
+# Generated from google-services.template.json + app/.env by `python tasks.py firebase-config`
+app/android/app/src/*/google-services.json
 *.apk
 *.aab
 

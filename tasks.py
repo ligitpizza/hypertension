@@ -7,6 +7,7 @@ Local tasks
                    importing/exporting firebase/seed-data
   seed             Seed the running emulators (symptom_catalog + demo accounts)
   api              Run FastAPI locally with reload (backend/.venv, backend/.env)
+  firebase-config  Generate google-services.json files from app/.env (run after cloning)
   adb-reverse      Physical phone over USB: forward ports 8000/9099/8080/9199 to this PC
   test             flutter test + pytest + Firestore rules tests
   lint             flutter analyze + ruff + ruff format --check + mypy
@@ -246,7 +247,15 @@ def task_deploy_backend() -> None:
 
 
 def task_deploy_web() -> None:
-    build = [exe("flutter"), "build", "web", "--release", "-t", "lib/main_staff.dart"]
+    build = [
+        exe("flutter"),
+        "build",
+        "web",
+        "--release",
+        "-t",
+        "lib/main_staff.dart",
+        "--dart-define-from-file=.env",
+    ]
     deploy = [exe("firebase"), "deploy", "--only", "hosting", "--project", PROJECT_ID]
     confirm_cloud("build the staff portal and deploy Firebase Hosting", [build, deploy])
     run(build, cwd=APP)
@@ -342,6 +351,34 @@ def task_create_scheduler_jobs() -> None:
         run(p)
 
 
+def read_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            values[key.strip()] = value.strip()
+    return values
+
+
+def task_firebase_config() -> None:
+    """Generate android/app/src/<flavor>/google-services.json from templates + app/.env."""
+    env_file = APP / ".env"
+    if not env_file.exists():
+        sys.exit("app/.env missing. Copy app/.env.example to app/.env and fill in the keys.")
+    values = read_env_file(env_file)
+    key = values.get("FIREBASE_ANDROID_API_KEY", "")
+    if not key:
+        sys.exit("FIREBASE_ANDROID_API_KEY is empty in app/.env.")
+    for flavor in ("patient", "family"):
+        folder = APP / "android" / "app" / "src" / flavor
+        text = (folder / "google-services.template.json").read_text(encoding="utf-8")
+        (folder / "google-services.json").write_text(
+            text.replace("${FIREBASE_ANDROID_API_KEY}", key), encoding="utf-8"
+        )
+    print("Generated google-services.json for patient and family flavors.")
+
+
 def task_adb_reverse() -> None:
     """Physical phone over USB: forward FastAPI + emulator ports to this PC (docs/10 §3)."""
     sdk_adb = Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools"
@@ -366,9 +403,11 @@ def task_build_apk() -> None:
             "-t",
             f"lib/main_{flavor}.dart",
             f"--dart-define=API_BASE_URL={url}",
+            "--dart-define-from-file=.env",
         ]
         for flavor in ("patient", "family")
     ]
+    task_firebase_config()
     for c in cmds:
         run(c, cwd=APP)
 
@@ -386,6 +425,7 @@ TASKS = {
     "build-apk": task_build_apk,
     "backend-url": task_backend_url,
     "adb-reverse": task_adb_reverse,
+    "firebase-config": task_firebase_config,
 }
 
 

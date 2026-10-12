@@ -25,13 +25,15 @@
     {
       "name": "Patient app (Android emulator)",
       "type": "dart",
+      "preLaunchTask": "firebase config",
       "request": "launch",
       "cwd": "${workspaceFolder}/app",
       "program": "lib/main_patient.dart",
       "args": [
         "--flavor", "patient",
         "--dart-define=API_BASE_URL=http://10.0.2.2:8000",
-        "--dart-define=USE_EMULATORS=true"
+        "--dart-define=USE_EMULATORS=true",
+        "--dart-define-from-file=.env"
       ]
     },
     {
@@ -42,24 +44,27 @@
       "request": "launch",
       "cwd": "${workspaceFolder}/app",
       "program": "lib/main_patient.dart",
-      "preLaunchTask": "adb reverse",
+      "preLaunchTask": "prepare phone",
       "args": [
         "--flavor", "patient",
         "--dart-define=API_BASE_URL=http://localhost:8000",
         "--dart-define=USE_EMULATORS=true",
+        "--dart-define-from-file=.env",
         "--dart-define=EMULATOR_HOST=localhost"
       ]
     },
     {
       "name": "Family app (Android emulator)",
       "type": "dart",
+      "preLaunchTask": "firebase config",
       "request": "launch",
       "cwd": "${workspaceFolder}/app",
       "program": "lib/main_family.dart",
       "args": [
         "--flavor", "family",
         "--dart-define=API_BASE_URL=http://10.0.2.2:8000",
-        "--dart-define=USE_EMULATORS=true"
+        "--dart-define=USE_EMULATORS=true",
+        "--dart-define-from-file=.env"
       ]
     },
     {
@@ -71,7 +76,8 @@
       "deviceId": "chrome",
       "args": [
         "--dart-define=API_BASE_URL=http://localhost:8000",
-        "--dart-define=USE_EMULATORS=true"
+        "--dart-define=USE_EMULATORS=true",
+        "--dart-define-from-file=.env"
       ]
     }
   ],
