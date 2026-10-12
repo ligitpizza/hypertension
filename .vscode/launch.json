@@ -83,6 +83,13 @@
   ],
   "compounds": [
     {
+      // Daily start: Firebase emulators + FastAPI only. Then install/open the app on
+      // the phone with `python tasks.py phone-install` (no debugger needed).
+      "name": "CareFlow: backend only (emulators + API)",
+      "configurations": ["Firebase emulators", "FastAPI (uvicorn)"],
+      "stopAll": true
+    },
+    {
       "name": "CareFlow: full local stack",
       "configurations": ["Firebase emulators", "FastAPI (uvicorn)", "Patient app (Android emulator)"],
       "stopAll": true
