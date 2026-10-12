@@ -239,6 +239,7 @@ def task_deploy_backend() -> None:
             f"JOBS_OIDC_AUDIENCE={JOBS_AUDIENCE}",
             f"JOBS_SERVICE_ACCOUNT={SCHEDULER_SA}",
             f"FIREBASE_PROJECT_ID={PROJECT_ID}",
+            "ML_ARTIFACTS_DIR=/srv/ml_artifacts",
         ]
     )
     cmd = [
@@ -267,10 +268,11 @@ def task_deploy_backend() -> None:
         env_vars,
     ]
     confirm_cloud("deploy FastAPI to Cloud Run (Cloud Build builds backend/Dockerfile)", [cmd])
+    # Ship only what FastAPI loads: selected calibrated models + JSON metadata.
     target = BACKEND / "ml_artifacts"
     if ML_ARTIFACTS.exists():
         for f in ML_ARTIFACTS.iterdir():
-            if f.is_file():
+            if f.name.endswith("_model.joblib") or f.suffix == ".json":
                 shutil.copy2(f, target / f.name)
     run(cmd)
 

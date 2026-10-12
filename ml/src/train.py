@@ -26,25 +26,25 @@ import joblib
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-import sklearn  # noqa: E402
-import xgboost  # noqa: E402
-from sklearn.calibration import CalibratedClassifierCV  # noqa: E402
-from sklearn.ensemble import RandomForestClassifier  # noqa: E402
-from sklearn.impute import SimpleImputer  # noqa: E402
-from sklearn.metrics import roc_auc_score, roc_curve  # noqa: E402
-from sklearn.model_selection import (  # noqa: E402
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import sklearn
+import xgboost
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.model_selection import (
     RandomizedSearchCV,
     StratifiedKFold,
     cross_val_score,
     train_test_split,
 )
-from sklearn.pipeline import Pipeline  # noqa: E402
-from xgboost import XGBClassifier  # noqa: E402
+from sklearn.pipeline import Pipeline
+from xgboost import XGBClassifier
 
-from feasibility import BASE, MEDICATION, OUTCOMES  # noqa: E402
+from feasibility import BASE, MEDICATION, OUTCOMES
 
 ML = Path(__file__).resolve().parents[1]
 DATA = ML / "data" / "processed" / "nhanes_adults.csv"
@@ -162,7 +162,7 @@ def main() -> None:
         name = "RandomForest" if chosen == "rf" else "XGBoost"
         model_used[target] = f"{name} v1"
         metrics[target] = {
-            "n_total": int(len(y)),
+            "n_total": len(y),
             "cases": int(y.sum()),
             "prevalence": round(float(y.mean()), 4),
             "cv5_auc_train": {k: round(v, 4) for k, v in cv_auc.items()},

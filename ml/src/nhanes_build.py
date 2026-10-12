@@ -53,7 +53,9 @@ def egfr_ckd_epi_2021(creatinine: pd.Series, age: pd.Series, female: pd.Series) 
 
 def build_cycle(s: str) -> pd.DataFrame:
     demo = read("DEMO", s, ["SEQN", "RIDAGEYR", "RIAGENDR"])
-    bpx = read("BPX", s, ["SEQN", "BPXSY1", "BPXSY2", "BPXSY3", "BPXDI1", "BPXDI2", "BPXDI3", "BPXPLS"])
+    bpx = read(
+        "BPX", s, ["SEQN", "BPXSY1", "BPXSY2", "BPXSY3", "BPXDI1", "BPXDI2", "BPXDI3", "BPXPLS"]
+    )
     bmx = read("BMX", s, ["SEQN", "BMXBMI"])
     smq = read("SMQ", s, ["SEQN", "SMQ020", "SMQ040"])
     bpq = read("BPQ", s, ["SEQN", "BPQ020", "BPQ050A", "BPQ080"])
@@ -84,6 +86,7 @@ def build_cycle(s: str) -> pd.DataFrame:
     # Smoking: never / former / current -> 0 / 1 / 2 (app SmokingStatus order).
     ever = yes(df["SMQ020"])
     now = df["SMQ040"].map({1.0: 1, 2.0: 1, 3.0: 0})
+
     def mask(cond: pd.Series) -> np.ndarray:
         return cond.fillna(False).to_numpy(dtype=bool)
 
@@ -112,7 +115,9 @@ def build_cycle(s: str) -> pd.DataFrame:
     egfr = egfr_ckd_epi_2021(df["LBXSCR"], df["RIDAGEYR"], df["RIAGENDR"] == 2)
     ckd_lab = (egfr < 60) | (df["URDACT"] >= 30)
     ckd_self = yes(df["KIQ022"]) == 1
-    has_any_kidney_info = df["LBXSCR"].notna() | df["URDACT"].notna() | df["KIQ022"].isin([1.0, 2.0])
+    has_any_kidney_info = (
+        df["LBXSCR"].notna() | df["URDACT"].notna() | df["KIQ022"].isin([1.0, 2.0])
+    )
     out["ckd"] = (ckd_lab | ckd_self).astype("Float64").where(has_any_kidney_info)
     return out
 
@@ -123,7 +128,9 @@ def main() -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     data.to_csv(OUT, index=False)
     print(f"Wrote {OUT} with {len(data)} adults (age >= {MIN_AGE}).")
-    print(data[["stroke", "cad", "heartFailure", "ckd", "t2d"]].agg(["count", "sum", "mean"]).round(3))
+    print(
+        data[["stroke", "cad", "heartFailure", "ckd", "t2d"]].agg(["count", "sum", "mean"]).round(3)
+    )
 
 
 if __name__ == "__main__":

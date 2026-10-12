@@ -74,5 +74,7 @@ pubsub-debug.log
 # ---- Node ----
 node_modules/
 ml/data/processed/
-ml/artifacts/*.joblib
+# Tuned intermediate models are reproducible; the selected *_model.joblib files are committed.
+ml/artifacts/*_rf.joblib
+ml/artifacts/*_xgb.joblib
 firebase/firebase-export-*/

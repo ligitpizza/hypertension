@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "trained_at": "2026-10-12T21:29:35+00:00",
+    "dataset": "NHANES 2011-2018 adults (age >= 20), US CDC, public domain (D-29)",
+    "sklearn": "1.9.1",
+    "xgboost": "3.2.0",
+    "seed": 42
+  },
+  "stroke": {
+    "n_total": 22592,
+    "cases": 913,
+    "prevalence": 0.0404,
+    "cv5_auc_train": {
+      "rf": 0.8406,
+      "xgb": 0.8429
+    },
+    "test_auc": {
+      "rf": 0.8436,
+      "xgb": 0.8424
+    },
+    "selected": "XGBoost",
+    "selected_calibrated_test_auc": 0.8434,
+    "meets_target_0_80": true
+  },
+  "cad": {
+    "n_total": 22616,
+    "cases": 1416,
+    "prevalence": 0.0626,
+    "cv5_auc_train": {
+      "rf": 0.9003,
+      "xgb": 0.9025
+    },
+    "test_auc": {
+      "rf": 0.8993,
+      "xgb": 0.9003
+    },
+    "selected": "XGBoost",
+    "selected_calibrated_test_auc": 0.8998,
+    "meets_target_0_80": true
+  },
+  "heartFailure": {
+    "n_total": 22565,
+    "cases": 784,
+    "prevalence": 0.0347,
+    "cv5_auc_train": {
+      "rf": 0.9188,
+      "xgb": 0.922
+    },
+    "test_auc": {
+      "rf": 0.939,
+      "xgb": 0.9398
+    },
+    "selected": "XGBoost",
+    "selected_calibrated_test_auc": 0.9406,
+    "meets_target_0_80": true
+  },
+  "ckd": {
+    "n_total": 22601,
+    "cases": 4129,
+    "prevalence": 0.1827,
+    "cv5_auc_train": {
+      "rf": 0.7887,
+      "xgb": 0.7929
+    },
+    "test_auc": {
+      "rf": 0.7915,
+      "xgb": 0.7987
+    },
+    "selected": "XGBoost",
+    "selected_calibrated_test_auc": 0.7995,
+    "meets_target_0_80": false
+  },
+  "t2d": {
+    "n_total": 22602,
+    "cases": 3146,
+    "prevalence": 0.1392,
+    "cv5_auc_train": {
+      "rf": 0.8795,
+      "xgb": 0.8833
+    },
+    "test_auc": {
+      "rf": 0.8864,
+      "xgb": 0.8897
+    },
+    "selected": "XGBoost",
+    "selected_calibrated_test_auc": 0.89,
+    "meets_target_0_80": true
+  }
+}

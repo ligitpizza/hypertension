@@ -1,0 +1,35 @@
+{
+  "rule": "Low < moderate <= Moderate < high <= High < critical <= Critical",
+  "percentiles": {
+    "moderate": 50,
+    "high": 80,
+    "critical": 95
+  },
+  "cut_points": {
+    "stroke": {
+      "moderate": 0.013309709681198,
+      "high": 0.06945784017443657,
+      "critical": 0.17625612616539002
+    },
+    "cad": {
+      "moderate": 0.013302630954422056,
+      "high": 0.08408989980816842,
+      "critical": 0.2984913855791092
+    },
+    "heartFailure": {
+      "moderate": 0.00481099784374237,
+      "high": 0.030651520192623138,
+      "critical": 0.1975829929113388
+    },
+    "ckd": {
+      "moderate": 0.10425882339477538,
+      "high": 0.28761832118034364,
+      "critical": 0.6089787226915356
+    },
+    "t2d": {
+      "moderate": 0.03791393265128136,
+      "high": 0.26472610235214233,
+      "critical": 0.5882155239582062
+    }
+  }
+}
