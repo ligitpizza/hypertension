@@ -5,7 +5,7 @@ import 'core/router/routers.dart';
 import 'firebase_options_staff.dart';
 
 Future<void> main() => bootstrap(
-      flavor: AppFlavor.staff,
-      firebaseOptions: DefaultFirebaseOptions.currentPlatform,
-      app: () => CareFlowApp(title: 'CareFlow Staff Portal', router: buildStaffRouter()),
-    );
+  flavor: AppFlavor.staff,
+  firebaseOptions: DefaultFirebaseOptions.currentPlatform,
+  app: () => CareFlowApp(title: 'CareFlow Staff Portal', router: staffRouterProvider),
+);

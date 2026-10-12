@@ -54,11 +54,13 @@ class ApiClient {
   ApiClient(this._dio);
 
   factory ApiClient.create({required String baseUrl, FirebaseAuth? auth}) {
-    final dio = Dio(BaseOptions(
-      baseUrl: '$baseUrl/api/v1',
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
-    ));
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: '$baseUrl/api/v1',
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 15),
+      ),
+    );
     if (auth != null) dio.interceptors.add(FirebaseAuthInterceptor(auth));
     return ApiClient(dio);
   }
@@ -66,9 +68,54 @@ class ApiClient {
   final Dio _dio;
 
   /// GET /api/v1/health — used by the walking skeleton and system health (FR-11.3).
-  Future<Map<String, dynamic>> health() async {
+  Future<Map<String, dynamic>> health() => _get('/health');
+
+  // ---- Module 1 (FR-1.1 to FR-1.6) ----
+
+  /// UC1.1: create the users doc and role claim after Firebase sign-up.
+  Future<Map<String, dynamic>> registerProfile({required String name, required String role}) =>
+      _post('/auth/register-profile', {'name': name, 'role': role});
+
+  /// UC1.4: submit the onboarding health profile (D-25 shape).
+  Future<Map<String, dynamic>> completeOnboarding(Map<String, dynamic> body) =>
+      _post('/auth/onboarding', body);
+
+  /// FR-1.5: audit LOGIN / LOGOUT; LOGIN also enforces app match and active account.
+  Future<Map<String, dynamic>> sessionEvent({required String event, required String app}) =>
+      _post('/auth/session-events', {'event': event, 'app': app});
+
+  /// D-27: report a failed sign-in (unauthenticated; backend stores the email domain only).
+  Future<void> reportLoginFailed({
+    required String email,
+    required String reason,
+    required String app,
+  }) => _post('/auth/login-failed', {'email': email, 'reason': reason, 'app': app});
+
+  /// UC1.5: admin creates a staff account.
+  Future<Map<String, dynamic>> createStaff({
+    required String name,
+    required String email,
+    required String role,
+    String? specialty,
+  }) => _post('/admin/staff', {
+    'name': name,
+    'email': email,
+    'role': role,
+    if (specialty != null && specialty.isNotEmpty) 'specialty': specialty,
+  });
+
+  Future<Map<String, dynamic>> _get(String path) async {
     try {
-      final res = await _dio.get<Map<String, dynamic>>('/health');
+      final res = await _dio.get<Map<String, dynamic>>(path);
+      return res.data ?? const {};
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(path, data: body);
       return res.data ?? const {};
     } on DioException catch (e) {
       throw ApiException.fromDio(e);

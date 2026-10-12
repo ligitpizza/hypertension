@@ -1,37 +1,145 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../shared/widgets/walking_skeleton_page.dart';
+import '../../features/admin/presentation/create_staff_page.dart';
+import '../../features/auth/presentation/forgot_password_page.dart';
+import '../../features/auth/presentation/login_page.dart';
+import '../../features/auth/presentation/onboarding/onboarding_complete_page.dart';
+import '../../features/auth/presentation/onboarding/onboarding_page.dart';
+import '../../features/auth/presentation/register_page.dart';
+import '../../features/auth/presentation/staff_login_page.dart';
+import '../../features/auth/presentation/status_pages.dart';
+import '../../features/auth/state/auth_providers.dart';
+import '../../features/auth/state/auth_redirect.dart';
+import '../../features/staff_shell/staff_shell.dart';
+import '../../shared/widgets/home_placeholder.dart';
+import '../constants/enums.dart';
 
 // One router per entrypoint; each registers only its own roles' routes
-// (docs/05 "Routes per entrypoint", NFR-3.2). Increment 0 has a single
-// placeholder route; auth redirects arrive with Module 1 (Increment 1).
+// (docs/05 "Routes per entrypoint", NFR-3.2). Feature routes are added per module.
 
-GoRouter buildPatientRouter() => GoRouter(
-      initialLocation: '/dashboard',
-      routes: [
-        GoRoute(
-          path: '/dashboard',
-          builder: (_, _) => const WalkingSkeletonPage(title: 'CareFlow'),
-        ),
-      ],
-    );
+/// Rebuilds go_router's redirect whenever auth state changes.
+GoRouter _guardedRouter(
+  Ref ref, {
+  required ClientApp app,
+  required String home,
+  required List<RouteBase> routes,
+  String? Function(String location)? roleGuard,
+}) {
+  final refresh = ValueNotifier<int>(0);
+  ref
+    ..listen(authUidProvider, (_, _) => refresh.value++)
+    ..listen(currentUserProvider, (_, _) => refresh.value++)
+    ..listen(authBusyProvider, (_, _) => refresh.value++)
+    ..onDispose(refresh.dispose);
 
-GoRouter buildFamilyRouter() => GoRouter(
-      initialLocation: '/home',
-      routes: [
-        GoRoute(
-          path: '/home',
-          builder: (_, _) => const WalkingSkeletonPage(title: 'CareFlow Family'),
-        ),
-      ],
-    );
+  return GoRouter(
+    initialLocation: '/splash',
+    refreshListenable: refresh,
+    redirect: (context, state) {
+      final uid = ref.read(authUidProvider);
+      final profile = ref.read(currentUserProvider);
+      final location = state.matchedLocation;
+      final target = authRedirect(
+        location: location,
+        app: app,
+        authLoading: uid.isLoading && !uid.hasValue,
+        uid: uid.value,
+        profileLoading: profile.isLoading && !profile.hasValue,
+        profile: profile.value,
+        busy: ref.read(authBusyProvider),
+        home: home,
+      );
+      return target ?? roleGuard?.call(location);
+    },
+    routes: [
+      GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
+      GoRoute(path: '/forgot-password', builder: (_, _) => const ForgotPasswordPage()),
+      GoRoute(path: '/finish-registration', builder: (_, _) => const FinishRegistrationPage()),
+      GoRoute(path: '/deactivated', builder: (_, _) => const DeactivatedPage()),
+      GoRoute(path: '/wrong-app', builder: (_, _) => const WrongAppPage()),
+      ...routes,
+    ],
+  );
+}
 
-GoRouter buildStaffRouter() => GoRouter(
-      initialLocation: '/login',
-      routes: [
-        GoRoute(
-          path: '/login',
-          builder: (_, _) => const WalkingSkeletonPage(title: 'CareFlow Staff Portal'),
-        ),
-      ],
-    );
+final patientRouterProvider = Provider<GoRouter>(
+  (ref) => _guardedRouter(
+    ref,
+    app: ClientApp.patient,
+    home: '/dashboard',
+    routes: [
+      GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
+      GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
+      GoRoute(path: '/onboard', builder: (_, _) => const OnboardingPage()),
+      GoRoute(path: '/onboard/complete', builder: (_, _) => const OnboardingCompletePage()),
+      GoRoute(path: '/dashboard', builder: (_, _) => const HomePlaceholder()),
+    ],
+  ),
+);
+
+final familyRouterProvider = Provider<GoRouter>(
+  (ref) => _guardedRouter(
+    ref,
+    app: ClientApp.family,
+    home: '/home',
+    routes: [
+      GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
+      GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
+      GoRoute(path: '/home', builder: (_, _) => const HomePlaceholder()),
+    ],
+  ),
+);
+
+/// Staff sections are limited to their role (FR-1.3, NFR-3.2).
+String? staffRoleGuard(String location, UserRole? role) {
+  final allowed = switch (role) {
+    UserRole.doctor => '/doctor',
+    UserRole.pharmacist => '/pharmacy',
+    UserRole.admin => '/admin',
+    _ => null,
+  };
+  const sections = ['/doctor', '/pharmacy', '/admin'];
+  final inSection = sections.where(location.startsWith).firstOrNull;
+  if (inSection == null || allowed == null || inSection == allowed) return null;
+  return staffHome(role);
+}
+
+final staffRouterProvider = Provider<GoRouter>((ref) {
+  String home() => staffHome(ref.read(currentUserProvider).value?.role);
+  Widget shell(GoRouterState s, Widget child) =>
+      StaffShell(location: s.matchedLocation, child: child);
+  return _guardedRouter(
+    ref,
+    app: ClientApp.staff,
+    home: '/staff-home',
+    roleGuard: (location) => location == '/staff-home'
+        ? home()
+        : staffRoleGuard(location, ref.read(currentUserProvider).value?.role),
+    routes: [
+      GoRoute(path: '/login', builder: (_, _) => const StaffLoginPage()),
+      GoRoute(path: '/staff-home', redirect: (_, _) => home()),
+      ShellRoute(
+        builder: (_, state, child) => shell(state, child),
+        routes: [
+          GoRoute(
+            path: '/doctor',
+            builder: (_, _) => const ComingSoon(
+              title: 'My patients',
+              note: 'The patient list by risk level arrives with Module 8 (Increment 2).',
+            ),
+          ),
+          GoRoute(
+            path: '/pharmacy',
+            builder: (_, _) => const ComingSoon(
+              title: 'Prescription queue',
+              note: 'The order queue arrives with Module 13 (Increment 3).',
+            ),
+          ),
+          GoRoute(path: '/admin/users', builder: (_, _) => const CreateStaffPage()),
+        ],
+      ),
+    ],
+  );
+});

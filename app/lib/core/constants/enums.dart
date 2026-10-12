@@ -27,18 +27,36 @@ abstract final class Collections {
   static const familyLinkRequests = 'family_link_requests';
 
   static const all = [
-    users, healthProfiles, vitalReadings, riskScores, triageOutcomes,
-    medications, doseLogs, healthRecords, appointments, clinicalNotes,
-    prescriptions, carePlans, messages, medicationOrders, auditLogs,
-    agentMessages, emergencyAlerts, symptomCatalog, paymentTransactions,
-    deliveryTrackingEvents, familyLinkRequests,
+    users,
+    healthProfiles,
+    vitalReadings,
+    riskScores,
+    triageOutcomes,
+    medications,
+    doseLogs,
+    healthRecords,
+    appointments,
+    clinicalNotes,
+    prescriptions,
+    carePlans,
+    messages,
+    medicationOrders,
+    auditLogs,
+    agentMessages,
+    emergencyAlerts,
+    symptomCatalog,
+    paymentTransactions,
+    deliveryTrackingEvents,
+    familyLinkRequests,
   ];
 }
 
 /// Looks up an enum constant by its stored string value.
 T enumFromValue<T extends Enum>(List<T> values, String value, String Function(T) toValue) =>
-    values.firstWhere((e) => toValue(e) == value,
-        orElse: () => throw ArgumentError.value(value, 'value', 'Unknown ${T.toString()}'));
+    values.firstWhere(
+      (e) => toValue(e) == value,
+      orElse: () => throw ArgumentError.value(value, 'value', 'Unknown ${T.toString()}'),
+    );
 
 enum UserRole {
   patient('patient'),

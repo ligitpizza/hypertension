@@ -9,4 +9,6 @@ final apiClientProvider = Provider<ApiClient>((ref) => locator<ApiClient>());
 /// Result of `GET /api/v1/health`.
 final apiHealthProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
   (ref) => ref.watch(apiClientProvider).health(),
+  // A status check should report failure immediately, not retry silently.
+  retry: (_, _) => null,
 );

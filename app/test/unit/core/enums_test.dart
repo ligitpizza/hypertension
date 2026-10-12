@@ -6,8 +6,8 @@ import 'package:hypertension/core/constants/enums.dart';
 
 /// Dart enums must match docs/fixtures/enums.json (shared with the backend).
 void main() {
-  final fixture = jsonDecode(File('../docs/fixtures/enums.json').readAsStringSync())
-      as Map<String, dynamic>;
+  final fixture =
+      jsonDecode(File('../docs/fixtures/enums.json').readAsStringSync()) as Map<String, dynamic>;
   List<String> expected(String key) => List<String>.from(fixture[key] as List);
 
   final cases = <String, List<String>>{
@@ -21,8 +21,7 @@ void main() {
     'payment_status': PaymentStatus.values.map((e) => e.value).toList(),
     'order_delivery_status': OrderDeliveryStatus.values.map((e) => e.value).toList(),
     'tracking_event_status': TrackingEventStatus.values.map((e) => e.value).toList(),
-    'payment_transaction_status':
-        PaymentTransactionStatus.values.map((e) => e.value).toList(),
+    'payment_transaction_status': PaymentTransactionStatus.values.map((e) => e.value).toList(),
     'agent_message_role': AgentMessageRole.values.map((e) => e.value).toList(),
     'family_link_status': FamilyLinkStatus.values.map((e) => e.value).toList(),
     'complication': Complication.values.map((e) => e.value).toList(),
