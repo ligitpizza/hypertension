@@ -104,6 +104,21 @@ class ApiClient {
     if (specialty != null && specialty.isNotEmpty) 'specialty': specialty,
   });
 
+  // ---- Module 3 (FR-3.1, FR-3.2) ----
+
+  /// UC3.1: log a BP reading with optional PPG heart rate (UC3.3) and note (UC3.2).
+  Future<Map<String, dynamic>> logReading({
+    required int systolic,
+    required int diastolic,
+    int? heartRate,
+    String? note,
+  }) => _post('/vitals', {
+    'systolic': systolic,
+    'diastolic': diastolic,
+    'heartRate': ?heartRate,
+    if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+  });
+
   Future<Map<String, dynamic>> _get(String path) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(path);

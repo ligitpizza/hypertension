@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/enums.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/bp_classifier.dart';
 import '../../../shared/models/health_models.dart';
 import '../../auth/state/auth_providers.dart';
 import '../domain/dashboard_logic.dart';
@@ -259,6 +260,17 @@ class _LatestBpCard extends ConsumerWidget {
                   ),
                   Text(timeAgo(latest.timestamp, now)),
                 ],
+              ),
+              const SizedBox(height: 4),
+              Builder(
+                builder: (context) {
+                  final c = BpClassifier.classify(latest.systolic, latest.diastolic);
+                  return Chip(
+                    key: const Key('latest-bp-category'),
+                    avatar: CircleAvatar(backgroundColor: BpClassifier.color(c), radius: 5),
+                    label: Text(BpClassifier.label(c)),
+                  );
+                },
               ),
               const SizedBox(height: 8),
               Text.rich(

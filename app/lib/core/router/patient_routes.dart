@@ -2,6 +2,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/dashboard/presentation/patient_shell.dart';
+import '../../features/vitals/data/vitals_repository.dart';
+import '../../features/vitals/presentation/log_vitals_page.dart';
+import '../../features/vitals/presentation/reading_saved_page.dart';
+import '../../features/vitals/presentation/vitals_page.dart';
 
 /// Patient app feature routes (docs/05). Tabs live inside the bottom-navigation
 /// shell; full-screen flows sit outside it. Placeholders are replaced module by module.
@@ -10,13 +14,7 @@ final List<RouteBase> patientFeatureRoutes = [
     builder: (_, state, child) => PatientShell(location: state.matchedLocation, child: child),
     routes: [
       GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
-      GoRoute(
-        path: '/vitals',
-        builder: (_, _) => const ComingSoonPage(
-          title: 'Vitals',
-          note: 'Your blood pressure readings and trends are coming soon.',
-        ),
-      ),
+      GoRoute(path: '/vitals', builder: (_, _) => const VitalsPage()),
       GoRoute(
         path: '/medications',
         builder: (_, _) => const ComingSoonPage(
@@ -34,10 +32,16 @@ final List<RouteBase> patientFeatureRoutes = [
       GoRoute(path: '/more', builder: (_, _) => const MorePage()),
     ],
   ),
+  GoRoute(path: '/vitals/log', builder: (_, _) => const LogVitalsPage()),
   GoRoute(
-    path: '/vitals/log',
+    path: '/vitals/saved',
+    redirect: (_, state) => state.extra is LoggedReading ? null : '/vitals',
+    builder: (_, state) => ReadingSavedPage(reading: state.extra! as LoggedReading),
+  ),
+  GoRoute(
+    path: '/trends',
     builder: (_, _) =>
-        const ComingSoonPage(title: 'Log vitals', note: 'Blood pressure logging is coming soon.'),
+        const ComingSoonPage(title: 'Health Trends', note: 'Trend charts are coming soon.'),
   ),
   GoRoute(
     path: '/symptom',
