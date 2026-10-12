@@ -15,10 +15,18 @@ from pathlib import Path
 from typing import Any
 
 import firebase_admin
-from firebase_admin import auth, firestore
+from firebase_admin import auth, credentials, firestore
+from google.auth.credentials import AnonymousCredentials
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ID = "hypertension-dd85f"
+
+
+class _EmulatorCredential(credentials.Base):  # type: ignore[misc]
+    """The emulators accept any caller; no Application Default Credentials needed."""
+
+    def get_credential(self) -> AnonymousCredentials:
+        return AnonymousCredentials()
 
 
 def _require_emulators() -> None:
@@ -91,7 +99,9 @@ def seed_accounts(db: Any) -> int:
 
 def main() -> None:
     _require_emulators()
-    firebase_admin.initialize_app(options={"projectId": PROJECT_ID})
+    firebase_admin.initialize_app(
+        credential=_EmulatorCredential(), options={"projectId": PROJECT_ID}
+    )
     db = firestore.client()
     n_sym = seed_symptoms(db)
     n_acc = seed_accounts(db)
