@@ -73,3 +73,5 @@ pubsub-debug.log
 
 # ---- Node ----
 node_modules/
+ml/data/processed/
+ml/artifacts/*.joblib
