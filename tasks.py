@@ -165,6 +165,20 @@ def task_test() -> None:
         )
     else:
         print("\n(skipping rules tests: run `npm install` in firebase/tests first)")
+    # Backend services against the Auth + Firestore emulators (skipped in plain pytest).
+    python = Path("..") / Path(venv_python()).relative_to(ROOT)
+    run(
+        [
+            exe("firebase"),
+            "emulators:exec",
+            "--project",
+            PROJECT_ID,
+            "--only",
+            "auth,firestore",
+            f"cd ../backend && {python} -m pytest tests/test_integration_emulator.py",
+        ],
+        cwd=FIREBASE,
+    )
 
 
 def task_lint() -> None:

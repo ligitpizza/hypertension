@@ -157,5 +157,79 @@ class InteractionSeverity(StrEnum):
     CRITICAL = "critical"
 
 
+class Gender(StrEnum):
+    MALE = "male"
+    FEMALE = "female"
+    OTHER = "other"
+
+
+class SmokingStatus(StrEnum):
+    NEVER = "never"
+    FORMER = "former"
+    CURRENT = "current"
+
+
+class AlcoholUse(StrEnum):
+    NONE = "none"
+    OCCASIONAL = "occasional"
+    REGULAR = "regular"
+
+
+class SaltIntake(StrEnum):
+    LOW = "low"
+    MODERATE = "moderate"
+    HIGH = "high"
+
+
+class MedicalCondition(StrEnum):
+    """Existing conditions captured at onboarding (D-25)."""
+
+    DIABETES = "diabetes"
+    CHRONIC_KIDNEY_DISEASE = "chronic_kidney_disease"
+    HEART_DISEASE = "heart_disease"
+    HEART_FAILURE = "heart_failure"
+    STROKE = "stroke"
+    HIGH_CHOLESTEROL = "high_cholesterol"
+
+
+class FamilyHistoryCondition(StrEnum):
+    HYPERTENSION = "hypertension"
+    HEART_DISEASE = "heart_disease"
+    STROKE = "stroke"
+    DIABETES = "diabetes"
+    KIDNEY_DISEASE = "kidney_disease"
+
+
+class ClientApp(StrEnum):
+    """Which client surface made the request (D-14)."""
+
+    PATIENT = "patient"
+    FAMILY = "family"
+    STAFF = "staff"
+
+
+class SessionEvent(StrEnum):
+    LOGIN = "LOGIN"
+    LOGOUT = "LOGOUT"
+
+
+class LoginFailureReason(StrEnum):
+    """Reasons recorded for failed sign-ins (D-27)."""
+
+    INVALID_CREDENTIALS = "invalid_credentials"
+    ACCOUNT_DEACTIVATED = "account_deactivated"
+    ROLE_MISMATCH = "role_mismatch"
+    WRONG_APP = "wrong_app"
+    TOO_MANY_ATTEMPTS = "too_many_attempts"
+    OTHER = "other"
+
+
 STAFF_ROLES = frozenset({UserRole.DOCTOR, UserRole.PHARMACIST, UserRole.ADMIN})
 SELF_REGISTER_ROLES = frozenset({UserRole.PATIENT, UserRole.FAMILY_MEMBER})  # FR-1.1, FR-1.6
+
+# Which role each client app serves (D-14, D-26).
+APP_ROLES: dict[ClientApp, frozenset[UserRole]] = {
+    ClientApp.PATIENT: frozenset({UserRole.PATIENT}),
+    ClientApp.FAMILY: frozenset({UserRole.FAMILY_MEMBER}),
+    ClientApp.STAFF: STAFF_ROLES,
+}

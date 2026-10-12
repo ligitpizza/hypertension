@@ -29,6 +29,15 @@ CASES: dict[str, type[StrEnum]] = {
     "bp_category": enums.BpCategory,
     "alert_level": enums.AlertLevel,
     "interaction_severity": enums.InteractionSeverity,
+    "gender": enums.Gender,
+    "smoking_status": enums.SmokingStatus,
+    "alcohol_use": enums.AlcoholUse,
+    "salt_intake": enums.SaltIntake,
+    "medical_condition": enums.MedicalCondition,
+    "family_history_condition": enums.FamilyHistoryCondition,
+    "client_app": enums.ClientApp,
+    "session_event": enums.SessionEvent,
+    "login_failure_reason": enums.LoginFailureReason,
 }
 
 

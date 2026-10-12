@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     # Third-party adapters: "fake" locally, "real" in the cloud (docs/05).
     integrations_mode: Literal["fake", "real"] = "fake"
 
+    # Email (D-22: Brevo). Used for staff setup links (UC1.5) and later reminders.
+    email_api_key: str = ""
+    email_from: str = ""
+    email_from_name: str = "CareFlow"
+
+    # Unauthenticated failed-login reporting (D-27): max reports per client IP per minute.
+    failed_login_rate_per_minute: int = 10
+
     # /internal/jobs/* auth (D-08). "oidc" verifies the Cloud Scheduler OIDC token;
     # "none" is for local development and tests only.
     internal_jobs_auth: Literal["oidc", "none"] = "oidc"

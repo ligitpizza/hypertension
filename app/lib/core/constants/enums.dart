@@ -225,3 +225,104 @@ enum InteractionSeverity {
   final String value;
   static InteractionSeverity fromValue(String v) => enumFromValue(values, v, (e) => e.value);
 }
+
+/// Patient gender (users.gender, D-25).
+enum Gender {
+  male('male'),
+  female('female'),
+  other('other');
+
+  const Gender(this.value);
+  final String value;
+  static Gender fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+enum SmokingStatus {
+  never('never'),
+  former('former'),
+  current('current');
+
+  const SmokingStatus(this.value);
+  final String value;
+  static SmokingStatus fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+enum AlcoholUse {
+  none('none'),
+  occasional('occasional'),
+  regular('regular');
+
+  const AlcoholUse(this.value);
+  final String value;
+  static AlcoholUse fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+enum SaltIntake {
+  low('low'),
+  moderate('moderate'),
+  high('high');
+
+  const SaltIntake(this.value);
+  final String value;
+  static SaltIntake fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+/// Existing conditions captured at onboarding (D-25).
+enum MedicalCondition {
+  diabetes('diabetes'),
+  chronicKidneyDisease('chronic_kidney_disease'),
+  heartDisease('heart_disease'),
+  heartFailure('heart_failure'),
+  stroke('stroke'),
+  highCholesterol('high_cholesterol');
+
+  const MedicalCondition(this.value);
+  final String value;
+  static MedicalCondition fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+enum FamilyHistoryCondition {
+  hypertension('hypertension'),
+  heartDisease('heart_disease'),
+  stroke('stroke'),
+  diabetes('diabetes'),
+  kidneyDisease('kidney_disease');
+
+  const FamilyHistoryCondition(this.value);
+  final String value;
+  static FamilyHistoryCondition fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+/// Which client surface is calling the API (D-14).
+enum ClientApp {
+  patient('patient'),
+  family('family'),
+  staff('staff');
+
+  const ClientApp(this.value);
+  final String value;
+  static ClientApp fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+enum SessionEvent {
+  login('LOGIN'),
+  logout('LOGOUT');
+
+  const SessionEvent(this.value);
+  final String value;
+  static SessionEvent fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+/// Reasons recorded for failed sign-ins (D-27).
+enum LoginFailureReason {
+  invalidCredentials('invalid_credentials'),
+  accountDeactivated('account_deactivated'),
+  roleMismatch('role_mismatch'),
+  wrongApp('wrong_app'),
+  tooManyAttempts('too_many_attempts'),
+  other('other');
+
+  const LoginFailureReason(this.value);
+  final String value;
+  static LoginFailureReason fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}

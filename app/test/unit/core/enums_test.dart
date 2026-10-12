@@ -30,6 +30,15 @@ void main() {
     'bp_category': BpCategory.values.map((e) => e.value).toList(),
     'alert_level': AlertLevel.values.map((e) => e.value).toList(),
     'interaction_severity': InteractionSeverity.values.map((e) => e.value).toList(),
+    'gender': Gender.values.map((e) => e.value).toList(),
+    'smoking_status': SmokingStatus.values.map((e) => e.value).toList(),
+    'alcohol_use': AlcoholUse.values.map((e) => e.value).toList(),
+    'salt_intake': SaltIntake.values.map((e) => e.value).toList(),
+    'medical_condition': MedicalCondition.values.map((e) => e.value).toList(),
+    'family_history_condition': FamilyHistoryCondition.values.map((e) => e.value).toList(),
+    'client_app': ClientApp.values.map((e) => e.value).toList(),
+    'session_event': SessionEvent.values.map((e) => e.value).toList(),
+    'login_failure_reason': LoginFailureReason.values.map((e) => e.value).toList(),
   };
 
   for (final entry in cases.entries) {
