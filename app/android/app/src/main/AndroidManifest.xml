@@ -1,5 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- FR-3.2 camera PPG: rear camera + torch. Not required, so the app still installs
+         on devices without them (manual heart-rate entry is the fallback). -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
