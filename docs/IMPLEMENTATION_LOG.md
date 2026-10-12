@@ -29,8 +29,18 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Local verification: emulators + seed run; emulator sign-in as demo doctor -> FastAPI
   `/api/v1/health/auth` returns role `doctor`; heartbeat job writes `audit_logs` in the emulator.
   Staff portal web release build compiles.
-- Deployed: Firestore rules + indexes and Storage rules (2026-10-12).
-  Cloud Run / Hosting / Scheduler: pending (see below).
+- Deployed (walking skeleton, 2026-10-12):
+  - Firestore rules + indexes, Storage rules.
+  - Cloud Run `careflow-api` revision `careflow-api-00002-c5t` (asia-southeast1, min 0 / max 2,
+    1 GiB): https://careflow-api-247793990377.asia-southeast1.run.app — `/api/v1/health` 200,
+    `/api/v1/health/auth` 401 without token, `/internal/jobs/heartbeat` 401 without OIDC token.
+  - Firebase Hosting (staff portal shell): https://hypertension-dd85f.web.app —
+    `/api/v1/health` returns `ok` through the `/api/**` rewrite (exit test).
+  - Cloud Scheduler job `careflow-heartbeat` (daily 03:00 Asia/Kuala_Lumpur, OIDC as
+    `careflow-scheduler@…`, audience `careflow-internal-jobs`).
+  - Setup notes: Cloud Build on this project runs as the Compute default service account; the
+    Cloud Scheduler API had to be enabled (was not on at project creation). Hosting serves
+    `firebase/public/` (copied from `app/build/web`).
 - Deviations / additions vs Chapter 4:
   - D-23 Android application IDs `fyp.hypertension.patient` / `.family`; Dart package `hypertension`.
   - D-24 `tasks.py` replaces `make` and `.sh` scripts (make not available on Windows).
