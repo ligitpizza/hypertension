@@ -63,3 +63,47 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   VS Code/`flutter run` debugger can fail ("log reader stopped"); the installed app still runs.
   No Android emulator (AVD) configured on the dev machine; the `10.0.2.2`
   path is configured but was verified with a physical phone instead.
+
+---
+
+### 2026-10-12 — Increment 1 — Module 1: User & Access Management
+- FRs implemented: FR-1.1, FR-1.2, FR-1.3, FR-1.4, FR-1.5, FR-1.6 (Fig 4.1.1.1).
+  - Backend: `POST /auth/register-profile`, `/auth/onboarding`, `/auth/session-events`,
+    `/auth/login-failed`, `/admin/staff`; Brevo email adapter + console fake; rate limiter.
+  - Rules: `users` (self / admin / assigned doctor read; self name-only update; admin may change
+    `isActive`, `assignedDoctorId`; no client create/delete), `health_profiles` (owner, assigned
+    doctor, admin read; server-only writes).
+  - App: patient/family login with role toggle (Fig 4.3.1.1), register, forgot password, 3-step
+    onboarding with device draft, Profile Complete (Fig 4.3.1.2), staff login (Fig 4.3.14.8),
+    role-based staff shell, admin "Add staff account" (part of Fig 4.3.14.1), shared auth guard.
+- Use-case exception flows handled: UC1.1 E1/E2, UC1.1 A1, UC1.2 E1/E2, UC1.2 A1, UC1.3 E1,
+  UC1.4 E1, UC1.4 A1, UC1.5 E1.
+- Tests: 97 pytest unit + 2 emulator integration (backend), 55 Firestore/Storage rules tests
+  (27 new, all five roles), 78 Dart tests (unit: validators, redirect guard, error mapping,
+  onboarding payload; widget: every new screen incl. loading/error states). End-to-end script
+  against emulators + local FastAPI: 18/18 checks (register → claim → onboarding → rules →
+  login audit → wrong app → staff creation → duplicate → deactivated block → failed-login audit).
+- Deviations / additions vs Chapter 4:
+  - D-25 onboarding fields stored as JSON objects inside the three `health_profiles` Strings;
+    `dateOfBirth`/`gender` collected at onboarding.
+  - D-26 mobile login keeps the Patient/Family toggle; it must match the account and the app.
+  - D-27 failed logins audited with `userId = "anonymous"` and the email domain only; the
+    scheduler uses `userId = "system:scheduler"`. `audit_logs.userId` is a users reference in
+    Ch4, so these two sentinel values are an addition.
+  - D-22 Brevo chosen as the email provider; staff get a Firebase password-setup link.
+  - `health_profiles` document ID = patient UID (Ch4: auto-generated) to enforce the 1:1 rule.
+  - `users.linkCode` (D-06) generated at patient registration.
+  - Staff SSO button omitted (out of scope); biometric login deferred (no FR requires it).
+  - Added `shared_preferences` (onboarding draft, UC1.4 A1).
+- Bugs found and fixed during testing:
+  - Flutter web: `useAuthEmulator` after `initializeApp` was silently ignored by
+    firebase_auth_web, so a local staff build signed in against the live project (one failed
+    attempt for a non-existent test account; no data touched). Fixed by registering the emulator
+    before initialisation and failing closed if the JS Auth instance is not on the emulator.
+  - Onboarding page could wait forever for the uid (Riverpod 3 pauses unlistened providers).
+- Known limitations:
+  - Deactivation is enforced through `users.isActive` (server LOGIN check + app guard); disabling
+    the Firebase Auth account as well is added with the Admin "deactivate" action in Module 11.
+  - Link-code uniqueness check is not transactional (collision chance negligible at 31^6).
+  - Failed-login rate limit is per Cloud Run instance (max 2 instances).
+  - Real Brevo sending not yet exercised (needs Ping's API key); console fake used.
