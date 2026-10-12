@@ -38,6 +38,8 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
     `/api/v1/health` returns `ok` through the `/api/**` rewrite (exit test).
   - Cloud Scheduler job `careflow-heartbeat` (daily 03:00 Asia/Kuala_Lumpur, OIDC as
     `careflow-scheduler@…`, audience `careflow-internal-jobs`).
+    Forced run 2026-10-12 11:42 UTC: Cloud Run returned 200 (OIDC accepted, heartbeat
+    audit entry written).
   - Setup notes: Cloud Build on this project runs as the Compute default service account; the
     Cloud Scheduler API had to be enabled (was not on at project creation). Hosting serves
     `firebase/public/` (copied from `app/build/web`).
@@ -57,5 +59,7 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   `10.0.2.2` emulator path, docs/10 §3) shows "API status: ok" from local FastAPI. PASSED.
   - Build fixes needed on Windows: enable `buildFeatures.resValues` (per-flavor app name) and
     `kotlin.incremental=false` (project on D:, pub cache on C:).
-- Known limitations: no Android emulator (AVD) configured on the dev machine; the `10.0.2.2`
+- Known limitations: on the MTN NX1 the phone's logcat output is obfuscated, so attaching the
+  VS Code/`flutter run` debugger can fail ("log reader stopped"); the installed app still runs.
+  No Android emulator (AVD) configured on the dev machine; the `10.0.2.2`
   path is configured but was verified with a physical phone instead.
