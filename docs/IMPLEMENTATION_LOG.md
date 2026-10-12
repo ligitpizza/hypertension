@@ -52,5 +52,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   - Scheduler OIDC audience is a fixed string (`careflow-internal-jobs`) verified by FastAPI;
     `/internal/jobs/*` is not under `/api`, so Hosting never exposes it.
   - Firebase emulators require JDK 21 (installed Temurin 21).
-- Known limitations: Android exit test (patient app -> 10.0.2.2) not yet run — no Android
-  emulator (AVD) configured on the dev machine; Android SDK licenses not yet accepted.
+- Android exit test (2026-10-12): patient flavor debug build on a physical phone (MTN NX1,
+  Android 16 / API 36) over USB with `adb reverse` (the documented alternative to the
+  `10.0.2.2` emulator path, docs/10 §3) shows "API status: ok" from local FastAPI. PASSED.
+  - Build fixes needed on Windows: enable `buildFeatures.resValues` (per-flavor app name) and
+    `kotlin.incremental=false` (project on D:, pub cache on C:).
+- Known limitations: no Android emulator (AVD) configured on the dev machine; the `10.0.2.2`
+  path is configured but was verified with a physical phone instead.
