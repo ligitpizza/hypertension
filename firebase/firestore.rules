@@ -55,6 +55,44 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---- patient-owned health data (Module 2 dashboard reads) ----
+    // Family member linked to this patient (users/{family}.patientId, FR-14.2).
+    function isLinkedFamilyOf(patientId) {
+      return hasRole('family_member')
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.patientId
+           == patientId;
+    }
+
+    function canReadPatientData(patientId) {
+      return isSelf(patientId) || isAdmin() || isAssignedDoctorOf(patientId);
+    }
+
+    // vital_readings, risk_scores: also readable by linked family (docs/04).
+    // Writes go through FastAPI (logging a reading triggers risk scoring, FR-9.2).
+    match /vital_readings/{readingId} {
+      allow read: if canReadPatientData(resource.data.patientId)
+        || isLinkedFamilyOf(resource.data.patientId);
+      allow write: if false;
+    }
+
+    match /risk_scores/{scoreId} {
+      allow read: if canReadPatientData(resource.data.patientId)
+        || isLinkedFamilyOf(resource.data.patientId);
+      allow write: if false;
+    }
+
+    // medications, appointments: read-only until Modules 5 and 7 add their write paths.
+    match /medications/{medicationId} {
+      allow read: if canReadPatientData(resource.data.patientId);
+      allow write: if false;
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if canReadPatientData(resource.data.patientId)
+        || (hasRole('doctor') && resource.data.doctorId == request.auth.uid);
+      allow write: if false;
+    }
+
     // ---- symptom_catalog: static lookup, read by any signed-in user ----
     match /symptom_catalog/{symptomId} {
       allow read: if signedIn();
