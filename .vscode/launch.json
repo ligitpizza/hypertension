@@ -35,6 +35,22 @@
       ]
     },
     {
+      // Physical phone over USB. The "adb reverse" pre-step forwards the ports, so the
+      // phone reaches FastAPI and the Firebase emulators on this PC via localhost.
+      "name": "Patient app (USB phone)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/app",
+      "program": "lib/main_patient.dart",
+      "preLaunchTask": "adb reverse",
+      "args": [
+        "--flavor", "patient",
+        "--dart-define=API_BASE_URL=http://localhost:8000",
+        "--dart-define=USE_EMULATORS=true",
+        "--dart-define=EMULATOR_HOST=localhost"
+      ]
+    },
+    {
       "name": "Family app (Android emulator)",
       "type": "dart",
       "request": "launch",
@@ -63,6 +79,11 @@
     {
       "name": "CareFlow: full local stack",
       "configurations": ["Firebase emulators", "FastAPI (uvicorn)", "Patient app (Android emulator)"],
+      "stopAll": true
+    },
+    {
+      "name": "CareFlow: full local stack (USB phone)",
+      "configurations": ["Firebase emulators", "FastAPI (uvicorn)", "Patient app (USB phone)"],
       "stopAll": true
     },
     {

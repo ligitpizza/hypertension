@@ -7,6 +7,7 @@ Local tasks
                    importing/exporting firebase/seed-data
   seed             Seed the running emulators (symptom_catalog + demo accounts)
   api              Run FastAPI locally with reload (backend/.venv, backend/.env)
+  adb-reverse      Physical phone over USB: forward ports 8000/9099/8080/9199 to this PC
   test             flutter test + pytest + Firestore rules tests
   lint             flutter analyze + ruff + ruff format --check + mypy
 
@@ -341,6 +342,15 @@ def task_create_scheduler_jobs() -> None:
         run(p)
 
 
+def task_adb_reverse() -> None:
+    """Physical phone over USB: forward FastAPI + emulator ports to this PC (docs/10 §3)."""
+    sdk_adb = Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools"
+    adb = shutil.which("adb") or str(sdk_adb / "adb.exe")
+    run([adb, "devices"])
+    for port in (8000, 9099, 8080, 9199):
+        run([adb, "reverse", f"tcp:{port}", f"tcp:{port}"])
+
+
 def task_build_apk() -> None:
     url = backend_url()
     if not url:
@@ -375,6 +385,7 @@ TASKS = {
     "create-scheduler-jobs": task_create_scheduler_jobs,
     "build-apk": task_build_apk,
     "backend-url": task_backend_url,
+    "adb-reverse": task_adb_reverse,
 }
 
 
