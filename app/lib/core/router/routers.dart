@@ -15,6 +15,7 @@ import '../../features/auth/state/auth_redirect.dart';
 import '../../features/staff_shell/staff_shell.dart';
 import '../../shared/widgets/home_placeholder.dart';
 import '../constants/enums.dart';
+import 'patient_routes.dart';
 
 // One router per entrypoint; each registers only its own roles' routes
 // (docs/05 "Routes per entrypoint", NFR-3.2). Feature routes are added per module.
@@ -74,7 +75,7 @@ final patientRouterProvider = Provider<GoRouter>(
       GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
       GoRoute(path: '/onboard', builder: (_, _) => const OnboardingPage()),
       GoRoute(path: '/onboard/complete', builder: (_, _) => const OnboardingCompletePage()),
-      GoRoute(path: '/dashboard', builder: (_, _) => const HomePlaceholder()),
+      ...patientFeatureRoutes,
     ],
   ),
 );
