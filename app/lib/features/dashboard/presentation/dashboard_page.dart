@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/enums.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/bp_classifier.dart';
+import '../../../core/utils/risk_style.dart';
 import '../../../shared/models/health_models.dart';
 import '../../auth/state/auth_providers.dart';
 import '../domain/dashboard_logic.dart';
@@ -303,20 +302,6 @@ class _LatestBpCard extends ConsumerWidget {
 }
 
 // ---------- AI risk assessment (UC2.4) ----------
-
-Color riskColor(RiskLevel level) => switch (level) {
-  RiskLevel.low => BpColors.normal,
-  RiskLevel.moderate => BpColors.elevated,
-  RiskLevel.high => BpColors.stage2,
-  RiskLevel.critical => BpColors.crisis,
-};
-
-String riskLabel(RiskLevel level) => switch (level) {
-  RiskLevel.low => 'Low Risk',
-  RiskLevel.moderate => 'Moderate Risk',
-  RiskLevel.high => 'High Risk',
-  RiskLevel.critical => 'Critical Risk',
-};
 
 class _RiskCard extends ConsumerWidget {
   const _RiskCard();

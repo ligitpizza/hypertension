@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../../features/charts/presentation/trends_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/dashboard/presentation/patient_shell.dart';
 import '../../features/vitals/data/vitals_repository.dart';
@@ -38,11 +39,7 @@ final List<RouteBase> patientFeatureRoutes = [
     redirect: (_, state) => state.extra is LoggedReading ? null : '/vitals',
     builder: (_, state) => ReadingSavedPage(reading: state.extra! as LoggedReading),
   ),
-  GoRoute(
-    path: '/trends',
-    builder: (_, _) =>
-        const ComingSoonPage(title: 'Health Trends', note: 'Trend charts are coming soon.'),
-  ),
+  GoRoute(path: '/trends', builder: (_, _) => const TrendsPage()),
   GoRoute(
     path: '/symptom',
     builder: (_, _) =>

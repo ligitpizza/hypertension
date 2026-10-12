@@ -59,7 +59,7 @@ class ReadingSavedPage extends StatelessWidget {
                   width: double.infinity,
                   child: FilledButton.icon(
                     key: const Key('saved-view-trends'),
-                    onPressed: () => context.go('/trends'),
+                    onPressed: () => context.pushReplacement('/trends'),
                     icon: const Icon(Icons.trending_up),
                     label: const Text('View Trends'),
                   ),
