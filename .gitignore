@@ -60,6 +60,7 @@ app/android/gradle/wrapper/gradle-wrapper.jar
 # ---- Firebase ----
 .firebase/
 firebase/seed-data/
+firebase/public/
 firebase-debug.log
 firestore-debug.log
 storage-debug.log

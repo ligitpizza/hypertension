@@ -87,7 +87,7 @@ Day-to-day work runs **locally and free** on the Firebase Emulator Suite. The cl
 
 - `backend/Dockerfile` (python slim, non-root user, copies `ml/artifacts/` in, `uvicorn` on `$PORT`)
 - `scripts/deploy_backend.sh` (`gcloud run deploy careflow-api --source backend --region asia-southeast1 --min-instances 0 --max-instances 2 --memory 1Gi --set-secrets ...`)
-- `firebase/firebase.json`: hosting `public: app/build/web`, rewrite `{"source": "/api/**", "run": {"serviceId": "careflow-api", "region": "asia-southeast1"}}`, plus rules and indexes paths
+- `firebase/firebase.json`: hosting `public: public` (`tasks.py deploy-web` copies `app/build/web` into `firebase/public/`, because Hosting only serves files inside the directory holding `firebase.json`), rewrite `{"source": "/api/**", "run": {"serviceId": "careflow-api", "region": "asia-southeast1"}}`, plus rules and indexes paths
 - `scripts/deploy_web.sh` (`flutter build web -t lib/main_staff.dart` → `firebase deploy --only hosting`)
 - `scripts/deploy_rules.sh` (`firebase deploy --only firestore:rules,firestore:indexes,storage`)
 - `scripts/create_scheduler_jobs.sh` (idempotent; OIDC-authenticated calls to `/internal/jobs/*`)

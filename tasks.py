@@ -249,6 +249,10 @@ def task_deploy_web() -> None:
     deploy = [exe("firebase"), "deploy", "--only", "hosting", "--project", PROJECT_ID]
     confirm_cloud("build the staff portal and deploy Firebase Hosting", [build, deploy])
     run(build, cwd=APP)
+    # Hosting can only serve files inside the firebase/ project directory.
+    public = FIREBASE / "public"
+    shutil.rmtree(public, ignore_errors=True)
+    shutil.copytree(APP / "build" / "web", public)
     run(deploy, cwd=FIREBASE)
 
 
