@@ -138,3 +138,37 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   - Riverpod 3 automatic retry disabled for dashboard streams so errors surface immediately.
 - Known limitations: medication, appointment and risk cards stay in their empty states until
   Modules 5/7 (Increment 3) and Module 9 (Increment 2) write that data.
+
+---
+
+### 2026-10-13 — Increment 1 — Module 3: Vital Signs Tracking
+- FRs implemented: FR-3.1, FR-3.2 (Fig 4.1.1.3; Figs 4.3.3.1-4.3.3.3; docs/06 algorithms B, E).
+  - Backend `POST /api/v1/vitals` (patients only): plausible range, server timestamp, optional
+    note and PPG heart rate, BP category + threshold alert level in the response, audit entry.
+  - BP classifier + alert bands in Dart and Python, both driven by `docs/fixtures/bp_cases.json`.
+  - Camera PPG: live preview + torch, finger-detected hint, 15 s capture, green channel →
+    resample → zero-phase Butterworth band-pass 0.67–3.3 Hz → autocorrelation beat period →
+    peak detection → bpm; weak/irregular signals rejected; processed in an isolate.
+  - Screens: Log Vitals (note, manual HR fallback), Reading Saved (category badge, HR estimate,
+    crisis 999 banner), Vitals tab (latest, risk unlock n/3, recent readings).
+- Use-case exception flows handled: UC3.1 E1 (client and server), UC3.3 E1 (retry / skip /
+  manual entry), camera unavailable / permission denied.
+- Tests: 48 new pytest (145 total); Dart 169 total (BP fixture cases + boundaries, PPG accuracy
+  at 50–150 bpm within ±3 bpm with noise/drift/jitter, failure cases, widget tests for all
+  vitals screens). End-to-end on emulators + local FastAPI: 9/9 (log → stored with timestamp/HR/
+  note, out-of-range rejected, crisis → emergency, doctor/family can read, pharmacist cannot,
+  no direct client writes). Phone test (MTN NX1): PPG produced 56 bpm; reading saved.
+- Deviations / additions vs Chapter 4:
+  - Heart-rate plausible range 30–220 bpm (not specified in the report).
+  - Heart rate is attached to a BP reading (`vital_readings` requires systolic/diastolic), so a
+    heart rate cannot be saved on its own; manual heart-rate entry offered when the camera is
+    unavailable (docs/05).
+  - bpm uses the autocorrelation beat period to reject the dicrotic wave before peak counting
+    (refines "peak count / duration" in algorithm B).
+  - Live camera preview and finger-detected hint, and a light/dark/system theme toggle, added
+    after Ping's phone testing.
+  - Crisis readings show a 999 safety message on the Reading Saved screen; risk scoring and alert
+    delivery to doctor/family hook into `POST /vitals` in Increment 2 (Module 9).
+- Known limitations: PPG accuracy depends on torch brightness and frame rate per phone; the
+  finger-detected hint uses fixed brightness/redness thresholds; validated on synthetic signals
+  and one real phone only.
