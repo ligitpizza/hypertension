@@ -108,6 +108,7 @@ class _StaffLoginPageState extends ConsumerState<StaffLoginPage> {
                                 roles: const [UserRole.doctor, UserRole.admin, UserRole.pharmacist],
                                 selected: _role,
                                 onChanged: (r) => setState(() => _role = r),
+                                showIcons: false,
                               ),
                             ),
                             const SizedBox(height: 20),

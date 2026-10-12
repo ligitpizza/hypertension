@@ -10,7 +10,9 @@ import 'package:hypertension/features/auth/presentation/login_page.dart';
 import 'package:hypertension/features/auth/presentation/register_page.dart';
 import 'package:hypertension/features/auth/presentation/staff_login_page.dart';
 import 'package:hypertension/features/auth/presentation/status_pages.dart';
+import 'package:hypertension/features/auth/domain/app_user.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
+import 'package:hypertension/features/staff_shell/staff_shell.dart';
 import 'package:hypertension/shared/providers/api_providers.dart';
 
 import '../helpers/fakes.dart';
@@ -219,5 +221,49 @@ void main() {
       ),
     );
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  group('NFR-3.2 role-specific shells', () {
+    Widget withUser(Widget child, AppUser user, ClientApp app) => ProviderScope(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+        clientAppProvider.overrideWithValue(app),
+        currentUserProvider.overrideWith((ref) => Stream.value(user)),
+      ],
+      child: MaterialApp(home: child),
+    );
+
+    AppUser u(UserRole role) =>
+        AppUser(uid: 'u', email: 'e@x.my', name: 'Nur', role: role, isActive: true);
+
+    tallTest('D-26 wrong-app page tells a family member which app to use', (t) async {
+      await t.pumpWidget(
+        withUser(const WrongAppPage(), u(UserRole.familyMember), ClientApp.patient),
+      );
+      await t.pumpAndSettle();
+      expect(find.text(AuthMessages.useFamilyApp), findsOneWidget);
+    });
+
+    tallTest('staff shell shows the signed-in role and a sign-out action', (t) async {
+      await t.pumpWidget(
+        withUser(
+          const StaffShell(location: '/admin/users', child: Text('BODY')),
+          u(UserRole.admin),
+          ClientApp.staff,
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('Nur · Admin'), findsOneWidget);
+      expect(find.text('BODY'), findsOneWidget);
+      expect(find.byKey(const Key('staff-sign-out')), findsOneWidget);
+    });
+
+    test('FR-1.3 each staff role has its own home and menu', () {
+      expect(staffHome(UserRole.doctor), '/doctor');
+      expect(staffHome(UserRole.pharmacist), '/pharmacy');
+      expect(staffHome(UserRole.admin), '/admin/users');
+      expect(staffDestinations(UserRole.admin).map((d) => d.path), ['/admin/users']);
+      expect(staffDestinations(UserRole.patient), isEmpty);
+    });
   });
 }

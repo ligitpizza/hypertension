@@ -102,6 +102,7 @@ class _CreateStaffPageState extends ConsumerState<CreateStaffPage> {
                           roles: const [UserRole.doctor, UserRole.pharmacist, UserRole.admin],
                           selected: _role,
                           onChanged: (r) => setState(() => _role = r),
+                          showIcons: false,
                         ),
                         const SizedBox(height: 16),
                         TextFormField(

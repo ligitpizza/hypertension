@@ -9,11 +9,15 @@ class RoleToggle extends StatelessWidget {
     required this.roles,
     required this.selected,
     required this.onChanged,
+    this.showIcons = true,
   });
 
   final List<UserRole> roles;
   final UserRole selected;
   final ValueChanged<UserRole> onChanged;
+
+  /// Fig 4.3.1.1 shows icons; the staff portal (Fig 4.3.14.8) does not.
+  final bool showIcons;
 
   static String label(UserRole r) => switch (r) {
     UserRole.patient => 'Patient',
@@ -39,7 +43,11 @@ class RoleToggle extends StatelessWidget {
         showSelectedIcon: false,
         segments: [
           for (final r in roles)
-            ButtonSegment(value: r, label: Text(label(r)), icon: Icon(icon(r))),
+            ButtonSegment(
+              value: r,
+              label: Text(label(r), maxLines: 1, softWrap: false),
+              icon: showIcons ? Icon(icon(r)) : null,
+            ),
         ],
         selected: {selected},
         onSelectionChanged: (s) => onChanged(s.first),
