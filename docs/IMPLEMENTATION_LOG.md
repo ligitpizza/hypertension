@@ -204,4 +204,16 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Rules suite 90/90; backend pytest + ruff + mypy clean; Flutter 185 tests + analyze clean.
 - Real-device checks on MTN NX1 throughout Modules 1–4 (registration, onboarding, dashboard,
   BP logging, PPG 56 bpm, trends, back navigation, theme toggle).
-- Deployment: pending (end-of-increment redeploy, docs/10 §4).
+- Deployment (2026-10-13, end-of-increment redeploy, docs/10 §4):
+  - Firestore rules + indexes and Storage rules deployed.
+  - Cloud Run `careflow-api` revision `careflow-api-00003-t78` (asia-southeast1); live
+    `/api/v1/health` ok, `/api/v1/vitals` present (401 without token).
+  - Staff portal redeployed to https://hypertension-dd85f.web.app.
+  - First live admin created with `tasks.py bootstrap-admin`; admin signed in to the live portal
+    and created a doctor account (setup link shown on screen, cloud email still "fake"); doctor
+    signed in with the Doctor role.
+  - Release APK (patient flavor, debug-signed, API → Cloud Run, live Firebase) installed on the
+    MTN NX1: registration, onboarding, BP logging with camera heart rate, trends and sign-out /
+    sign-in all worked against the live project.
+  - Cloud email remains the console fake (Brevo secret to be added before the final deploy).
+- **Increment 1 complete.**
