@@ -104,8 +104,16 @@ class InMemoryVitalsRepository:
         return rid
 
 
+class DeliveringEmailClient(ConsoleEmailClient):
+    """Records like the fake but reports delivery, like Brevo."""
+
+    def send(self, message: EmailMessage) -> bool:
+        super().send(message)
+        return True
+
+
 class FailingEmailClient:
-    def send(self, message: EmailMessage) -> None:
+    def send(self, message: EmailMessage) -> bool:
         raise RuntimeError("provider down")
 
 
@@ -155,7 +163,7 @@ def repo() -> InMemoryUserRepository:
 
 @pytest.fixture
 def emails() -> ConsoleEmailClient:
-    return ConsoleEmailClient()
+    return DeliveringEmailClient()
 
 
 @pytest.fixture

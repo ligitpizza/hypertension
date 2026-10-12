@@ -76,7 +76,7 @@ def test_uc1_5_email_failure_returns_setup_link_to_admin(
     assert res.status_code == 201
     assert res.json()["emailSent"] is False
     assert res.json()["setupLink"].startswith("https://example.test/reset")
-    assert "failed" in audit.entries[0]["details"]
+    assert "not delivered" in audit.entries[0]["details"]
 
 
 def test_fr_1_6_only_admin_can_create_staff(client: TestClient) -> None:
@@ -101,3 +101,13 @@ def test_uc1_5_setup_email_escapes_html() -> None:
     assert "<script>" not in msg.html
     assert "&amp;b=2" in msg.html
     assert "Administrator" in msg.text
+
+
+def test_uc1_5_fake_email_returns_link_to_admin(make_client: object) -> None:
+    """With INTEGRATIONS_MODE=fake nothing is delivered, so the admin must get the link."""
+    client: TestClient = make_client()  # type: ignore[operator]
+    client.app.dependency_overrides[get_email_client] = lambda: ConsoleEmailClient()  # type: ignore[attr-defined]
+    res = client.post(URL, json={**DOCTOR, "email": "fake@h.my"}, headers=bearer("admin-token"))
+    assert res.status_code == 201
+    assert res.json()["emailSent"] is False
+    assert res.json()["setupLink"].startswith("https://example.test/reset")

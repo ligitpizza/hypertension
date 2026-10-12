@@ -31,7 +31,9 @@ class EmailError(Exception):
 
 
 class EmailClient(Protocol):
-    def send(self, message: EmailMessage) -> None: ...
+    def send(self, message: EmailMessage) -> bool:
+        """Send the message. Returns True only if it was handed to a real provider."""
+        ...
 
 
 class ConsoleEmailClient:
@@ -40,11 +42,12 @@ class ConsoleEmailClient:
     def __init__(self) -> None:
         self.sent: list[EmailMessage] = []
 
-    def send(self, message: EmailMessage) -> None:
+    def send(self, message: EmailMessage) -> bool:
         self.sent.append(message)
         log.info(
             "[fake email] to=%s subject=%s\n%s", message.to_email, message.subject, message.text
         )
+        return False  # nothing was actually delivered
 
 
 class BrevoEmailClient:
@@ -54,7 +57,7 @@ class BrevoEmailClient:
         self._api_key = api_key
         self._sender = {"email": sender_email, "name": sender_name}
 
-    def send(self, message: EmailMessage) -> None:
+    def send(self, message: EmailMessage) -> bool:
         payload = {
             "sender": self._sender,
             "to": [{"email": message.to_email, "name": message.to_name}],
@@ -73,6 +76,7 @@ class BrevoEmailClient:
             raise EmailError(f"Brevo request failed: {exc}") from exc
         if res.status_code >= 300:
             raise EmailError(f"Brevo rejected the email (HTTP {res.status_code}).")
+        return True
 
 
 def build_email_client(settings: Settings) -> EmailClient:

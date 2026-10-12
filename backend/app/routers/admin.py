@@ -86,9 +86,9 @@ def create_staff_account(
 
     # UC1.5 step 5: send a setup link. If email fails, return the link to the admin instead.
     link = identity.password_setup_link(body.email)
-    email_sent = True
     try:
-        email_client.send(staff_setup_email(body.name, body.email, role, link))
+        # False from the console fake: nothing was delivered, so show the link instead.
+        email_sent = email_client.send(staff_setup_email(body.name, body.email, role, link))
     except Exception:  # any provider failure must not lose the new account
         log.exception("Staff setup email failed for uid=%s", uid)
         email_sent = False
@@ -96,7 +96,8 @@ def create_staff_account(
     audit.log(
         user_id=admin.uid,
         action="CREATE_STAFF_ACCOUNT",
-        details=f"Created {role.value} account; setup email {'sent' if email_sent else 'failed'}.",
+        details=f"Created {role.value} account; setup link "
+        f"{'emailed' if email_sent else 'shown to admin (email not delivered)'}.",
         target_type=Collection.USERS.value,
         target_id=uid,
     )

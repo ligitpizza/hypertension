@@ -20,6 +20,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
   deploy-rules            Firestore rules + indexes and Storage rules
   create-scheduler-jobs   Idempotent Cloud Scheduler jobs calling /internal/jobs/*
   build-apk               Release APKs for the patient and family flavors
+  bootstrap-admin         One-time: create the first admin in the live project
+                          (python tasks.py bootstrap-admin you@example.com "Name" --yes)
   backend-url             Print the deployed Cloud Run URL
 """
 
@@ -446,6 +448,24 @@ def task_phone_install() -> None:
     run([_adb(), "shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"])
 
 
+def task_bootstrap_admin() -> None:
+    """One-time: create the first admin in the LIVE project (firebase/seed/bootstrap_admin.py)."""
+    args = [a for a in sys.argv[2:] if a != "--yes"]
+    if len(args) != 2:
+        sys.exit('Usage: python tasks.py bootstrap-admin you@example.com "Your Name" --yes')
+    email, name = args
+    cmd = [venv_python(), str(FIREBASE / "seed" / "bootstrap_admin.py"), email, name]
+    confirm_cloud(f"create the first admin account ({email}) in the LIVE project", [cmd])
+    live_env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in {"FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST"}
+    }
+    print(f"\n> {' '.join(cmd)}", flush=True)
+    result = subprocess.run(cmd, cwd=ROOT, env=live_env, check=False)  # noqa: S603
+    sys.exit(result.returncode)
+
+
 def task_build_apk() -> None:
     url = backend_url()
     if not url:
@@ -484,6 +504,7 @@ TASKS = {
     "backend-url": task_backend_url,
     "adb-reverse": task_adb_reverse,
     "phone-install": task_phone_install,
+    "bootstrap-admin": task_bootstrap_admin,
     "firebase-config": task_firebase_config,
 }
 
