@@ -9,6 +9,8 @@ Local tasks
   api              Run FastAPI locally with reload (backend/.venv, backend/.env)
   firebase-config  Generate google-services.json files from app/.env (run after cloning)
   adb-reverse      Physical phone over USB: forward ports 8000/9099/8080/9199 to this PC
+  phone-install    Build, install and open the app on a USB phone without the debugger
+                   (python tasks.py phone-install [patient|family])
   test             flutter test + pytest + Firestore rules tests
   lint             flutter analyze + ruff + ruff format --check + mypy
 
@@ -402,6 +404,48 @@ def task_adb_reverse() -> None:
         run([adb, "reverse", f"tcp:{port}", f"tcp:{port}"])
 
 
+def _adb() -> str:
+    sdk_adb = Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools"
+    return shutil.which("adb") or str(sdk_adb / "adb.exe")
+
+
+def task_phone_install() -> None:
+    """Build + install + launch an app flavor on a USB phone without the debugger.
+
+    Some phones (e.g. MTN/Transsion) obfuscate logcat, so `flutter run` never finds the
+    VM service and the app waits on the splash screen. This path skips the debugger.
+    Usage: python tasks.py phone-install [patient|family]
+    """
+    args = [a for a in sys.argv[2:] if a != "--yes"]
+    flavor = args[0] if args else "patient"
+    if flavor not in ("patient", "family"):
+        sys.exit("flavor must be patient or family")
+    task_firebase_config()
+    task_adb_reverse()
+    run(
+        [
+            exe("flutter"),
+            "build",
+            "apk",
+            "--debug",
+            "--flavor",
+            flavor,
+            "-t",
+            f"lib/main_{flavor}.dart",
+            "--dart-define=API_BASE_URL=http://localhost:8000",
+            "--dart-define=USE_EMULATORS=true",
+            "--dart-define=EMULATOR_HOST=localhost",
+            "--dart-define-from-file=.env",
+        ],
+        cwd=APP,
+    )
+    apk = APP / "build" / "app" / "outputs" / "flutter-apk" / f"app-{flavor}-debug.apk"
+    package = f"fyp.hypertension.{flavor}"
+    run([_adb(), "install", "-r", str(apk)])
+    run([_adb(), "shell", "am", "force-stop", package])
+    run([_adb(), "shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"])
+
+
 def task_build_apk() -> None:
     url = backend_url()
     if not url:
@@ -439,6 +483,7 @@ TASKS = {
     "build-apk": task_build_apk,
     "backend-url": task_backend_url,
     "adb-reverse": task_adb_reverse,
+    "phone-install": task_phone_install,
     "firebase-config": task_firebase_config,
 }
 
