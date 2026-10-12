@@ -7,7 +7,8 @@ import '../data/ppg_capture.dart';
 import '../domain/ppg.dart';
 import '../state/vitals_providers.dart';
 
-/// "Measure Heart Rate" card (Fig 4.3.3.2, UC3.3). Reports the measured or manually
+/// "Measure Heart Rate" card (Fig 4.3.3.2, UC3.3). Shows a live camera preview so the
+/// patient can place the fingertip, then measures. Reports the measured or manually
 /// entered heart rate through [onChanged]; null means none.
 class HeartRateCard extends ConsumerStatefulWidget {
   const HeartRateCard({super.key, required this.onChanged});
@@ -18,7 +19,7 @@ class HeartRateCard extends ConsumerStatefulWidget {
   ConsumerState<HeartRateCard> createState() => _HeartRateCardState();
 }
 
-enum _Phase { idle, measuring, done, failed, unavailable, manual }
+enum _Phase { idle, opening, positioning, measuring, done, failed, unavailable, manual }
 
 class _HeartRateCardState extends ConsumerState<HeartRateCard> {
   _Phase _phase = _Phase.idle;
@@ -43,40 +44,12 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
     super.dispose();
   }
 
-  Future<void> _start() async {
-    setState(() {
-      _phase = _Phase.measuring;
-      _progress = 0;
-      _trace = const [];
-    });
+  /// Step 1: camera + torch + live preview, so the patient can find the lens.
+  Future<void> _openCamera() async {
+    setState(() => _phase = _Phase.opening);
     try {
-      final result = await _capture.measure(
-        onProgress: (p, trace) {
-          if (mounted) {
-            setState(() {
-              _progress = p;
-              _trace = trace;
-            });
-          }
-        },
-      );
-      if (!mounted) return;
-      if (result.ok) {
-        setState(() {
-          _phase = _Phase.done;
-          _bpm = result.bpm;
-        });
-        widget.onChanged(result.bpm);
-      } else {
-        // UC3.3 E1: poor signal -> reposition and retry, or skip.
-        setState(() {
-          _phase = _Phase.failed;
-          _message = switch (result.failure) {
-            PpgFailure.tooShort => 'The measurement stopped too early.',
-            _ => 'We could not get a clear pulse signal.',
-          };
-        });
-      }
+      await _capture.open();
+      if (mounted) setState(() => _phase = _Phase.positioning);
     } on PpgUnavailableException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -88,6 +61,48 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
         };
       });
     }
+  }
+
+  /// Step 2: record and estimate.
+  Future<void> _measure() async {
+    setState(() {
+      _phase = _Phase.measuring;
+      _progress = 0;
+      _trace = const [];
+    });
+    final result = await _capture.measure(
+      onProgress: (p, trace) {
+        if (mounted) {
+          setState(() {
+            _progress = p;
+            _trace = trace;
+          });
+        }
+      },
+    );
+    await _capture.cancel(); // torch off as soon as the frames are in
+    if (!mounted) return;
+    if (result.ok) {
+      setState(() {
+        _phase = _Phase.done;
+        _bpm = result.bpm;
+      });
+      widget.onChanged(result.bpm);
+    } else {
+      // UC3.3 E1: poor signal -> reposition and retry, or skip.
+      setState(() {
+        _phase = _Phase.failed;
+        _message = switch (result.failure) {
+          PpgFailure.tooShort => 'The measurement stopped too early.',
+          _ => 'We could not get a clear pulse signal.',
+        };
+      });
+    }
+  }
+
+  Future<void> _stop() async {
+    await _capture.cancel();
+    if (mounted) setState(() => _phase = _Phase.idle);
   }
 
   void _skip() {
@@ -129,6 +144,44 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
     );
   }
 
+  Widget _preview(double size) {
+    return ClipRRect(
+      key: const Key('ppg-preview'),
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: FittedBox(
+          fit: BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox(width: size, height: size, child: _capture.preview()),
+        ),
+      ),
+    );
+  }
+
+  Widget _fingerHint() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _capture.fingerDetected,
+      builder: (context, covered, _) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            covered ? Icons.check_circle : Icons.touch_app_outlined,
+            color: covered ? Colors.green : null,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              covered ? 'Finger detected' : 'Cover the lens and the light with your fingertip',
+              key: const Key('ppg-finger-hint'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _body(BuildContext context) {
     switch (_phase) {
       case _Phase.idle:
@@ -136,7 +189,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
           children: [
             FilledButton.tonalIcon(
               key: const Key('ppg-start'),
-              onPressed: _start,
+              onPressed: _openCamera,
               icon: const Icon(Icons.camera_outlined),
               label: const Text('Tap to Start Camera'),
             ),
@@ -147,14 +200,51 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
             ),
           ],
         );
+      case _Phase.opening:
+        return const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator());
+      case _Phase.positioning:
+        return Column(
+          key: const Key('ppg-positioning'),
+          children: [
+            _preview(160),
+            const SizedBox(height: 8),
+            const Text(
+              'This is your rear camera. Cover the lens and the light next to it until the '
+              'picture turns evenly red, then tap Start measuring.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            _fingerHint(),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                FilledButton(
+                  key: const Key('ppg-measure'),
+                  onPressed: _measure,
+                  child: const Text('Start measuring'),
+                ),
+                TextButton(onPressed: _stop, child: const Text('Cancel')),
+              ],
+            ),
+          ],
+        );
       case _Phase.measuring:
         return Column(
           key: const Key('ppg-measuring'),
           children: [
-            SizedBox(
-              width: 72,
-              height: 72,
-              child: CircularProgressIndicator(value: _progress, strokeWidth: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _preview(90),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: CircularProgressIndicator(value: _progress, strokeWidth: 6),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             SizedBox(
@@ -164,14 +254,9 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
                 painter: _TracePainter(_trace, Theme.of(context).colorScheme.tertiary),
               ),
             ),
+            _fingerHint(),
             const Text('Measuring… keep your finger still.'),
-            TextButton(
-              onPressed: () async {
-                await _capture.cancel();
-                if (mounted) setState(() => _phase = _Phase.idle);
-              },
-              child: const Text('Cancel'),
-            ),
+            TextButton(onPressed: _stop, child: const Text('Cancel')),
           ],
         );
       case _Phase.done:
@@ -187,7 +272,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
               'Estimate from your phone camera, not a medical measurement.',
               textAlign: TextAlign.center,
             ),
-            TextButton(onPressed: _start, child: const Text('Measure again')),
+            TextButton(onPressed: _openCamera, child: const Text('Measure again')),
           ],
         );
       case _Phase.failed:
@@ -208,7 +293,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
                 if (_phase == _Phase.failed)
                   FilledButton(
                     key: const Key('ppg-retry'),
-                    onPressed: _start,
+                    onPressed: _openCamera,
                     child: const Text('Retry'),
                   ),
                 OutlinedButton(

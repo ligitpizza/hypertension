@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,19 +50,40 @@ class FakeVitalsRepository implements VitalsRepository {
 class FakePpgCapture implements PpgCapture {
   PpgResult result = const PpgResult.success(72, 0.9);
   PpgUnavailable? unavailable;
-  int calls = 0;
+  int opens = 0;
+  int measures = 0;
   bool cancelled = false;
+  final finger = ValueNotifier<bool>(false);
+
+  @override
+  Future<void> open() async {
+    opens++;
+    if (unavailable != null) throw PpgUnavailableException(unavailable!);
+  }
+
+  @override
+  Widget preview() => const ColoredBox(key: Key('fake-preview'), color: Colors.red);
+
+  @override
+  ValueListenable<bool> get fingerDetected => finger;
 
   @override
   Future<PpgResult> measure({required PpgProgress onProgress, Duration? duration}) async {
-    calls++;
-    if (unavailable != null) throw PpgUnavailableException(unavailable!);
+    measures++;
     onProgress(0.5, const [1, 2, 3, 2, 1]);
     return result;
   }
 
   @override
   Future<void> cancel() async => cancelled = true;
+}
+
+/// Open the camera, then start measuring (two-step flow with live preview).
+Future<void> measureHeartRate(WidgetTester t) async {
+  await t.tap(find.byKey(const Key('ppg-start')));
+  await t.pumpAndSettle();
+  await t.tap(find.byKey(const Key('ppg-measure')));
+  await t.pumpAndSettle();
 }
 
 Widget logApp(FakeVitalsRepository repo, FakePpgCapture ppg) {
@@ -153,7 +175,17 @@ void main() {
       await t.pumpWidget(logApp(repo, ppg));
       await t.tap(find.byKey(const Key('ppg-start')));
       await t.pumpAndSettle();
+      // Live preview + finger hint before measuring.
+      expect(find.byKey(const Key('ppg-positioning')), findsOneWidget);
+      expect(find.byKey(const Key('fake-preview')), findsOneWidget);
+      expect(find.text('Cover the lens and the light with your fingertip'), findsOneWidget);
+      ppg.finger.value = true;
+      await t.pump();
+      expect(find.text('Finger detected'), findsOneWidget);
+      await t.tap(find.byKey(const Key('ppg-measure')));
+      await t.pumpAndSettle();
       expect(find.text('72 BPM'), findsOneWidget);
+      expect(ppg.cancelled, isTrue, reason: 'torch released after measuring');
       expect(find.textContaining('Estimate'), findsOneWidget);
       expect(find.byKey(const Key('bp-hr-attached')), findsOneWidget);
       await enterBp(t, '118', '76');
@@ -165,12 +197,14 @@ void main() {
     tallTest('UC3.3 E1 poor signal offers retry and skip', (t) async {
       final ppg = FakePpgCapture()..result = const PpgResult.failed(PpgFailure.irregular);
       await t.pumpWidget(logApp(FakeVitalsRepository(), ppg));
-      await t.tap(find.byKey(const Key('ppg-start')));
-      await t.pumpAndSettle();
+      await measureHeartRate(t);
       expect(find.byKey(const Key('ppg-failed')), findsOneWidget);
       await t.tap(find.byKey(const Key('ppg-retry')));
       await t.pumpAndSettle();
-      expect(ppg.calls, 2);
+      expect(find.byKey(const Key('ppg-positioning')), findsOneWidget);
+      expect(ppg.opens, 2);
+      await t.tap(find.byKey(const Key('ppg-measure'))); // still poor signal
+      await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('ppg-skip')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('ppg-start')), findsOneWidget);
