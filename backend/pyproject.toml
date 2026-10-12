@@ -24,7 +24,7 @@ plugins = ["pydantic.mypy"]
 mypy_path = "."
 
 [[tool.mypy.overrides]]
-module = ["firebase_admin.*", "google.*"]
+module = ["firebase_admin.*", "google.*", "joblib.*", "sklearn.*", "xgboost.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

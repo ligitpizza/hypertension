@@ -1,5 +1,7 @@
 """Module 3 request/response models (FR-3.1, FR-3.2)."""
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.enums import AlertLevel, BpCategory
@@ -27,5 +29,9 @@ class LogReadingResponse(BaseModel):
     diastolic: int
     heartRate: int | None
     category: BpCategory
-    # Threshold alert band (FR-9.1). Alert delivery is wired in Increment 2 (Module 9).
+    # Threshold alert band (FR-9.1).
     alertLevel: AlertLevel | None
+    # UC9.1: risk score generated after the reading, or null with the reason.
+    risk: dict[str, Any] | None = None
+    riskStatus: str = "ok"  # ok | not_enough_readings | model_unavailable
+    readingsUntilRisk: int = 0

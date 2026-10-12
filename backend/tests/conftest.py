@@ -11,8 +11,10 @@ from app.core.enums import UserRole
 from app.core.rate_limit import RateLimiter
 from app.integrations.email import ConsoleEmailClient, EmailMessage, get_email_client
 from app.main import create_app
+from app.ml.risk_model import get_risk_model
 from app.routers.auth import get_failed_login_limiter
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
+from app.services.risk import get_risk_data_repository
 from app.services.users import get_user_repository
 from app.services.vitals import get_vitals_repository
 
@@ -112,6 +114,60 @@ class DeliveringEmailClient(ConsoleEmailClient):
         return True
 
 
+class InMemoryRiskRepository:
+    """Shares users/readings with the other in-memory repositories."""
+
+    def __init__(self, users: "InMemoryUserRepository", vitals: "InMemoryVitalsRepository") -> None:
+        self._users = users
+        self._vitals = vitals
+        self.health_profiles: dict[str, dict[str, Any]] = {}
+        self.meds: dict[str, list[dict[str, Any]]] = {}
+        self.saved: list[dict[str, Any]] = []
+
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def health_profile(self, uid: str) -> dict[str, Any] | None:
+        return self.health_profiles.get(uid) or self._users.health_profiles.get(uid)
+
+    def recent_readings(self, uid: str, limit: int) -> list[dict[str, Any]]:
+        mine = [r for r in self._vitals.readings.values() if r["patientId"] == uid]
+        return list(reversed(mine))[:limit]
+
+    def medications(self, uid: str) -> list[dict[str, Any]]:
+        return self.meds.get(uid, [])
+
+    def save_risk_score(self, data: dict[str, Any]) -> str:
+        self.saved.append(data)
+        return f"risk{len(self.saved)}"
+
+
+class FixedPredictor:
+    def __init__(self, p: float) -> None:
+        self.p = p
+        self.rows: list[Any] = []
+
+    def predict_proba(self, x: Any) -> Any:
+        import numpy as np
+
+        self.rows.append(x)
+        return np.array([[1 - self.p, self.p]])
+
+
+def fake_risk_model(p: float = 0.3) -> Any:
+    from app.core.enums import Complication
+    from app.ml.risk_model import RiskModel
+
+    feats = ["age", "systolic", "diastolic", "bmi"]
+    cuts = {"moderate": 0.1, "high": 0.25, "critical": 0.5}
+    return RiskModel(
+        models={c: FixedPredictor(p) for c in Complication},
+        features={c: feats for c in Complication},
+        thresholds={c: cuts for c in Complication},
+        model_used={c: "XGBoost v1" for c in Complication},
+    )
+
+
 class FailingEmailClient:
     def send(self, message: EmailMessage) -> bool:
         raise RuntimeError("provider down")
@@ -172,6 +228,18 @@ def vitals_repo() -> InMemoryVitalsRepository:
 
 
 @pytest.fixture
+def risk_repo(
+    repo: InMemoryUserRepository, vitals_repo: InMemoryVitalsRepository
+) -> InMemoryRiskRepository:
+    return InMemoryRiskRepository(repo, vitals_repo)
+
+
+@pytest.fixture
+def risk_model() -> Any:
+    return fake_risk_model()
+
+
+@pytest.fixture
 def limiter() -> RateLimiter:
     return RateLimiter(max_events=3)
 
@@ -184,6 +252,8 @@ def make_client(
     emails: ConsoleEmailClient,
     limiter: RateLimiter,
     vitals_repo: InMemoryVitalsRepository,
+    risk_repo: InMemoryRiskRepository,
+    risk_model: Any,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -196,6 +266,8 @@ def make_client(
         app.dependency_overrides[get_email_client] = lambda: emails
         app.dependency_overrides[get_failed_login_limiter] = lambda: limiter
         app.dependency_overrides[get_vitals_repository] = lambda: vitals_repo
+        app.dependency_overrides[get_risk_data_repository] = lambda: risk_repo
+        app.dependency_overrides[get_risk_model] = lambda: risk_model
         return TestClient(app)
 
     return _make

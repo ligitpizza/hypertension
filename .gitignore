@@ -75,3 +75,4 @@ pubsub-debug.log
 node_modules/
 ml/data/processed/
 ml/artifacts/*.joblib
+firebase/firebase-export-*/

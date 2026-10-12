@@ -2,7 +2,8 @@
 
 Validates the plausible range (UC3.1 E1), saves the reading with an optional note
 (UC3.2) and PPG heart rate (UC3.3), and returns the BP category and threshold alert
-level. Risk scoring (UC9.1) and alert delivery (UC9.2) hook in here in Increment 2.
+level. Then generates a risk score (UC9.1, docs/06 algorithm A) once the patient has
+three readings. Alert delivery and escalation (UC9.2, UC9.3) build on this.
 """
 
 from fastapi import APIRouter, Depends, status
@@ -11,8 +12,16 @@ from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
 from app.core.enums import Collection, UserRole
 from app.core.errors import ApiError
+from app.ml.risk_inputs import MIN_READINGS
+from app.ml.risk_model import RiskModel, get_risk_model
 from app.schemas.vitals import LogReadingRequest, LogReadingResponse
 from app.services.bp import alert_level, classify, plausibility_error
+from app.services.risk import (
+    NotEnoughReadingsError,
+    RiskDataRepository,
+    generate_risk_score,
+    get_risk_data_repository,
+)
 from app.services.users import UserRepository, get_user_repository
 from app.services.vitals import VitalsRepository, get_vitals_repository
 
@@ -25,6 +34,8 @@ def log_reading(
     user: CurrentUser = Depends(require_roles(UserRole.PATIENT)),
     users: UserRepository = Depends(get_user_repository),
     vitals: VitalsRepository = Depends(get_vitals_repository),
+    risk_repo: RiskDataRepository = Depends(get_risk_data_repository),
+    risk_model: RiskModel | None = Depends(get_risk_model),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> LogReadingResponse:
     reason = plausibility_error(body.systolic, body.diastolic, body.heartRate)
@@ -63,6 +74,29 @@ def log_reading(
         target_type=Collection.VITAL_READINGS.value,
         target_id=reading_id,
     )
+    risk: dict[str, object] | None = None
+    risk_status = "ok"
+    readings_until_risk = 0
+    if risk_model is None:
+        risk_status = "model_unavailable"
+    else:
+        try:
+            result = generate_risk_score(user.uid, risk_repo, risk_model)
+        except NotEnoughReadingsError:
+            risk_status = "not_enough_readings"
+            readings_until_risk = max(
+                MIN_READINGS - len(risk_repo.recent_readings(user.uid, MIN_READINGS)), 1
+            )
+        else:
+            risk = result.to_response()
+            audit.log(
+                user_id=user.uid,
+                action="GENERATE_RISK_SCORE",
+                details=f"Risk score after reading; overall {result.prediction.overall_level.value}"
+                f"{'; reduced confidence' if result.inputs.low_confidence else ''}.",
+                target_type=Collection.RISK_SCORES.value,
+                target_id=result.score_id,
+            )
     return LogReadingResponse(
         id=reading_id,
         systolic=body.systolic,
@@ -70,4 +104,7 @@ def log_reading(
         heartRate=body.heartRate,
         category=category,
         alertLevel=alert,
+        risk=risk,
+        riskStatus=risk_status,
+        readingsUntilRisk=readings_until_risk,
     )

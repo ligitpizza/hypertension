@@ -1,6 +1,7 @@
 """Application settings, read from environment variables / backend/.env (docs/10 §3)."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,6 +20,9 @@ class Settings(BaseSettings):
 
     # Third-party adapters: "fake" locally, "real" in the cloud (docs/05).
     integrations_mode: Literal["fake", "real"] = "fake"
+
+    # Trained models (ml/artifacts locally; copied into the image as /srv/ml_artifacts).
+    ml_artifacts_dir: Path = Path(__file__).resolve().parents[3] / "ml" / "artifacts"
 
     # Email (D-22: Brevo). Used for staff setup links (UC1.5) and later reminders.
     email_api_key: str = ""
