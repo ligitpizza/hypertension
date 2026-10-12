@@ -1,0 +1,9 @@
+#!/bin/sh
+# Strips AI attribution trailers/footers from commit messages (academic integrity requirement).
+MSG_FILE="$1"
+TMP="$MSG_FILE.tmp"
+grep -v -i -E '^(co-authored-by:|claude-session:)|generated with \[?claude|🤖' "$MSG_FILE" > "$TMP"
+# remove trailing blank lines
+awk 'NF{p=NR} {l[NR]=$0} END{for(i=1;i<=p;i++) print l[i]}' "$TMP" > "$MSG_FILE"
+rm -f "$TMP"
+exit 0
