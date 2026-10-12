@@ -27,6 +27,7 @@ from app.core.enums import (
 _PHONE_RE = re.compile(r"^\+?[0-9][0-9\s-]{6,18}[0-9]$")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MAX_AGE_YEARS = 120
+MIN_AGE_YEARS = 13  # D-28
 
 
 class _Strict(BaseModel):
@@ -120,8 +121,11 @@ class OnboardingRequest(_Strict):
         today = date.today()
         if v >= today:
             raise ValueError("Date of birth must be in the past.")
-        if today.year - v.year > MAX_AGE_YEARS:
+        age = today.year - v.year - ((today.month, today.day) < (v.month, v.day))
+        if age > MAX_AGE_YEARS:
             raise ValueError("Enter a valid date of birth.")
+        if age < MIN_AGE_YEARS:
+            raise ValueError(f"You must be at least {MIN_AGE_YEARS} years old to use CareFlow.")
         return v
 
 

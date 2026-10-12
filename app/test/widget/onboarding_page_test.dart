@@ -142,4 +142,17 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('DASH'), findsOneWidget);
   });
+
+  testWidgets('D-28 a date of birth under 13 blocks the next step', (t) async {
+    await setTall(t);
+    final now = DateTime.now();
+    final drafts = FakeDraftStore()
+      ..draft = (completeDraft()..dateOfBirth = DateTime(now.year - 10, 1, 1));
+    await t.pumpWidget(app(FakeAuthRepository(), drafts));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('onboarding-next')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('at least 13 years old'), findsOneWidget);
+    expect(find.text('Step 1 of 3 · Personal information'), findsOneWidget);
+  });
 }

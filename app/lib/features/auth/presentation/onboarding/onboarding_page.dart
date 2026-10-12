@@ -67,7 +67,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   bool _stepValid(int step) {
     final formOk = _forms[step].currentState?.validate() ?? false;
     final choicesOk = switch (step) {
-      0 => _data.dateOfBirth != null && _data.gender != null,
+      0 =>
+        Validators.dateOfBirth(_data.dateOfBirth, DateTime.now()) == null && _data.gender != null,
       1 => true,
       _ =>
         _data.smokingStatus != null &&
@@ -228,7 +229,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             label: Text(dob == null ? 'Select date' : _formatDate(dob)),
             onPressed: _pickDob,
           ),
-          if (_showChoiceErrors && dob == null) _ErrorText('Date of birth is required.'),
+          if (_showChoiceErrors && Validators.dateOfBirth(dob, DateTime.now()) != null)
+            _ErrorText(Validators.dateOfBirth(dob, DateTime.now())!),
           const SizedBox(height: 16),
           _Label('Gender'),
           _Choices<Gender>(
@@ -303,11 +305,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   Future<void> _pickDob() async {
     final now = DateTime.now();
+    // D-28: only dates at least 13 years ago can be picked.
+    final last = Validators.latestAllowedDob(now);
+    final current = _data.dateOfBirth;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _data.dateOfBirth ?? DateTime(now.year - 50),
+      initialDate: current != null && !current.isAfter(last) ? current : DateTime(now.year - 50),
       firstDate: DateTime(now.year - 120),
-      lastDate: now.subtract(const Duration(days: 1)),
+      lastDate: last,
       helpText: 'Date of birth',
     );
     if (picked != null) setState(() => _data.dateOfBirth = picked);

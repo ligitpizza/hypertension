@@ -57,6 +57,23 @@ void main() {
     });
   });
 
+  group('D-28 minimum age 13', () {
+    final now = DateTime(2026, 10, 13);
+    test('latest allowed date of birth is exactly 13 years ago', () {
+      expect(Validators.latestAllowedDob(now), DateTime(2013, 10, 13));
+    });
+    test('age counts whole years and respects the birthday', () {
+      expect(Validators.ageOn(DateTime(2013, 10, 13), now), 13);
+      expect(Validators.ageOn(DateTime(2013, 10, 14), now), 12);
+      expect(Validators.ageOn(DateTime(1968, 4, 12), now), 58);
+    });
+    test('under-13 and missing dates are rejected', () {
+      expect(Validators.dateOfBirth(DateTime(2013, 10, 13), now), isNull);
+      expect(Validators.dateOfBirth(DateTime(2014, 1, 1), now), contains('at least 13'));
+      expect(Validators.dateOfBirth(null, now), 'Date of birth is required.');
+    });
+  });
+
   group('FR-1.3 auth redirect guard', () {
     test('signed out users can only see public routes', () {
       expect(redirect(uid: null), '/login');

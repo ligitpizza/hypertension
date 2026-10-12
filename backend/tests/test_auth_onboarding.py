@@ -1,6 +1,6 @@
 import json
 from copy import deepcopy
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
@@ -154,3 +154,30 @@ def test_uc1_2_e2_deactivated_patient_cannot_onboard(
     res = _post(client, VALID)
     assert res.status_code == 403
     assert res.json()["error"]["code"] == "ACCOUNT_DEACTIVATED"
+
+
+def _years_ago(years: int, days: int = 0) -> str:
+    today = date.today()
+    try:
+        d = today.replace(year=today.year - years)
+    except ValueError:  # 29 Feb
+        d = today.replace(year=today.year - years, day=28)
+    return (d + timedelta(days=days)).isoformat()
+
+
+def test_d28_patient_must_be_at_least_13(
+    client: TestClient, registered_patient: InMemoryUserRepository
+) -> None:
+    body = deepcopy(VALID)
+    body["dateOfBirth"] = _years_ago(13, days=1)  # turns 13 tomorrow
+    res = _post(client, body)
+    assert res.status_code == 422
+    assert "at least 13" in res.json()["error"]["message"]
+
+
+def test_d28_exactly_13_today_is_allowed(
+    client: TestClient, registered_patient: InMemoryUserRepository
+) -> None:
+    body = deepcopy(VALID)
+    body["dateOfBirth"] = _years_ago(13)
+    assert _post(client, body).status_code == 201
