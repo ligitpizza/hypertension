@@ -70,3 +70,56 @@ def test_fr_1_4_repository_round_trip(services) -> None:  # type: ignore[no-unty
     assert user is not None
     assert user["onboardingComplete"] is True
     assert user["gender"] == "female"
+
+
+def test_fr_9_2_risk_score_end_to_end_with_trained_models(services) -> None:  # type: ignore[no-untyped-def]
+    """Real Firestore queries + real ml/artifacts models (UC9.1)."""
+    import json as _json
+    from datetime import timedelta
+
+    from firebase_admin import firestore
+
+    from app.core.config import get_settings
+    from app.core.firebase import get_firestore
+    from app.ml.risk_model import RiskModel
+    from app.services.risk import FirestoreRiskDataRepository, generate_risk_score
+
+    artifacts = get_settings().ml_artifacts_dir
+    if not (artifacts / "feature_map.json").exists():
+        pytest.skip("trained models not present")
+    db = get_firestore()
+    uid = f"risk-{uuid.uuid4().hex[:8]}"
+    db.collection("users").document(uid).set(
+        {"role": "patient", "gender": "male", "dateOfBirth": datetime(1955, 5, 5, tzinfo=UTC)}
+    )
+    db.collection("health_profiles").document(uid).set(
+        {
+            "patientId": uid,
+            "personalInfo": _json.dumps({"heightCm": 172, "weightKg": 90}),
+            "medicalHistory": _json.dumps(
+                {"hypertensionDiagnosedYear": 2010, "conditions": ["diabetes"], "familyHistory": []}
+            ),
+            "lifestyleFactors": _json.dumps({"smokingStatus": "current"}),
+        }
+    )
+    base = datetime.now(UTC)
+    for i, (s, d) in enumerate([(150, 95), (145, 92), (155, 98)]):
+        db.collection("vital_readings").add(
+            {
+                "patientId": uid,
+                "systolic": s,
+                "diastolic": d,
+                "heartRate": 82,
+                "timestamp": base - timedelta(hours=i),
+            }
+        )
+    result = generate_risk_score(uid, FirestoreRiskDataRepository(db), RiskModel.load(artifacts))
+    saved = db.collection("risk_scores").document(result.score_id).get().to_dict()
+    assert saved["patientId"] == uid
+    assert set(saved["scores"]) == {"stroke", "cad", "heartFailure", "ckd", "t2d"}
+    assert all(0 <= v["value"] <= 1 for v in saved["scores"].values())
+    assert isinstance(saved["generatedAt"], datetime)
+    assert "XGBoost v1" in saved["modelUsed"]
+    assert result.inputs.low_confidence is False
+    assert result.prediction.overall_level.value in {"moderate", "high", "critical"}
+    _ = firestore  # imported for parity with production code paths

@@ -522,6 +522,12 @@ def task_dev() -> None:
     if _port_open(9099) and _port_open(8080):
         print("Emulators already running: reusing them.")
         emu = None
+    elif _port_open(9099) or _port_open(8080):
+        sys.exit(
+            "Only part of the emulator suite is running (an orphan from an interrupted "
+            "shutdown is holding port 8080 or 9099). Stop it in Task Manager (java.exe / "
+            "node.exe) or restart the PC, then run dev again."
+        )
     else:
         print("Starting Firebase emulators...", flush=True)
         emu = subprocess.Popen(emulator_command(), cwd=FIREBASE)  # noqa: S603
