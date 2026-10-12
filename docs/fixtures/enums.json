@@ -1,0 +1,27 @@
+{
+  "_comment": "Shared enum values (docs/04-data-model.md). Source of truth for app/lib/core/constants/enums.dart and backend/app/core/enums.py; both test suites assert they match this file.",
+  "collections": [
+    "users", "health_profiles", "vital_readings", "risk_scores", "triage_outcomes",
+    "medications", "dose_logs", "health_records", "appointments", "clinical_notes",
+    "prescriptions", "care_plans", "messages", "medication_orders", "audit_logs",
+    "agent_messages", "emergency_alerts", "symptom_catalog", "payment_transactions",
+    "delivery_tracking_events", "family_link_requests"
+  ],
+  "user_role": ["patient", "doctor", "pharmacist", "admin", "family_member"],
+  "triage_severity": ["mild", "moderate", "severe"],
+  "triage_outcome": ["monitor_at_home", "contact_doctor", "seek_emergency_care"],
+  "dose_status": ["taken", "missed"],
+  "appointment_status": ["booked", "rescheduled", "cancelled", "completed"],
+  "order_method": ["self_collection", "home_delivery"],
+  "payment_status": ["pending", "paid", "failed"],
+  "order_delivery_status": ["dispatched", "in_transit", "delivered", "failed"],
+  "tracking_event_status": ["dispatched", "picked_up", "in_transit", "delivered", "failed"],
+  "payment_transaction_status": ["succeeded", "failed", "refunded"],
+  "agent_message_role": ["patient", "agent"],
+  "family_link_status": ["pending", "approved", "rejected"],
+  "complication": ["stroke", "cad", "heartFailure", "ckd", "t2d"],
+  "risk_level": ["low", "moderate", "high", "critical"],
+  "bp_category": ["normal", "elevated", "stage1", "stage2", "crisis"],
+  "alert_level": ["mild", "moderate", "emergency"],
+  "interaction_severity": ["minor", "major", "critical"]
+}

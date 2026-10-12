@@ -1,0 +1,10 @@
+# Normalise line endings in the repo; keep shell scripts/hooks LF so they run in Git Bash and Linux containers.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.gif binary
+*.jar binary
+*.joblib binary
