@@ -34,9 +34,23 @@ Future<void> bootstrap({
 
   if (AppConfig.useEmulators) {
     final host = AppConfig.emulatorHost;
-    await FirebaseAuth.instance.useAuthEmulator(host, AppConfig.authEmulatorPort);
-    FirebaseFirestore.instance.useFirestoreEmulator(host, AppConfig.firestoreEmulatorPort);
-    await FirebaseStorage.instance.useStorageEmulator(host, AppConfig.storageEmulatorPort);
+    // FlutterFire rewrites localhost to 10.0.2.2 on Android, which breaks a physical
+    // phone using `adb reverse`. AppConfig already picks the right host, so disable it.
+    await FirebaseAuth.instance.useAuthEmulator(
+      host,
+      AppConfig.authEmulatorPort,
+      automaticHostMapping: false,
+    );
+    FirebaseFirestore.instance.useFirestoreEmulator(
+      host,
+      AppConfig.firestoreEmulatorPort,
+      automaticHostMapping: false,
+    );
+    await FirebaseStorage.instance.useStorageEmulator(
+      host,
+      AppConfig.storageEmulatorPort,
+      automaticHostMapping: false,
+    );
     // Fail closed: an emulator build must never talk to production Auth.
     if (webAuthEmulatorActive() == false) {
       throw StateError(
