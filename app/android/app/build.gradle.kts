@@ -27,6 +27,11 @@ android {
         versionName = flutter.versionName
     }
 
+    // resValue (per-flavor app_name) is off by default in newer Android Gradle Plugin versions.
+    buildFeatures {
+        resValues = true
+    }
+
     // D-14 / D-23: one codebase, two Android apps.
     flavorDimensions += "app"
     productFlavors {
