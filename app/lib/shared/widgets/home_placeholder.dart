@@ -36,8 +36,8 @@ class HomePlaceholder extends ConsumerWidget {
               const SizedBox(height: 8),
               Text(
                 app == ClientApp.family
-                    ? 'Linking to a patient arrives in Increment 3.'
-                    : 'Your dashboard arrives with Module 2.',
+                    ? 'Linking to a patient is coming soon.'
+                    : 'Your dashboard is coming soon.',
                 textAlign: TextAlign.center,
               ),
               if (user?.linkCode != null) ...[

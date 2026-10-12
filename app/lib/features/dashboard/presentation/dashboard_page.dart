@@ -162,7 +162,7 @@ class _TodaysPlanCard extends ConsumerWidget {
                     icon: Icons.event_available_outlined,
                     text: 'No upcoming appointments.',
                     action: 'Book one',
-                    onTap: () => context.go('/appointments'),
+                    onTap: () => context.push('/appointments'),
                   )
                 : _PlanTile(
                     key: const Key('next-appointment'),
@@ -244,7 +244,7 @@ class _LatestBpCard extends ConsumerWidget {
               icon: Icons.monitor_heart_outlined,
               text: 'No blood pressure readings yet.',
               action: 'Log one',
-              onTap: () => context.go('/vitals/log'),
+              onTap: () => context.push('/vitals/log'),
             );
           }
           final latest = list.first;

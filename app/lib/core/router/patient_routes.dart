@@ -14,21 +14,21 @@ final List<RouteBase> patientFeatureRoutes = [
         path: '/vitals',
         builder: (_, _) => const ComingSoonPage(
           title: 'Vitals',
-          note: 'Your readings and trends arrive with Modules 3 and 4.',
+          note: 'Your blood pressure readings and trends are coming soon.',
         ),
       ),
       GoRoute(
         path: '/medications',
         builder: (_, _) => const ComingSoonPage(
           title: 'Medications',
-          note: 'Medication tracking arrives with Module 5 (Increment 3).',
+          note: 'Medication reminders and tracking are coming soon.',
         ),
       ),
       GoRoute(
         path: '/records',
         builder: (_, _) => const ComingSoonPage(
           title: 'Health records',
-          note: 'Document upload and sharing arrive with Module 6 (Increment 3).',
+          note: 'Uploading and sharing your medical documents is coming soon.',
         ),
       ),
       GoRoute(path: '/more', builder: (_, _) => const MorePage()),
@@ -36,37 +36,29 @@ final List<RouteBase> patientFeatureRoutes = [
   ),
   GoRoute(
     path: '/vitals/log',
-    builder: (_, _) => const ComingSoonPage(
-      title: 'Log vitals',
-      note: 'Blood pressure logging arrives with Module 3.',
-    ),
+    builder: (_, _) =>
+        const ComingSoonPage(title: 'Log vitals', note: 'Blood pressure logging is coming soon.'),
   ),
   GoRoute(
     path: '/symptom',
-    builder: (_, _) => const ComingSoonPage(
-      title: 'Symptom checker',
-      note: 'The symptom checker arrives in Increment 2.',
-    ),
+    builder: (_, _) =>
+        const ComingSoonPage(title: 'Symptom checker', note: 'The symptom checker is coming soon.'),
   ),
   GoRoute(
     path: '/chat',
     builder: (_, _) => const ComingSoonPage(
       title: 'Messages',
-      note: 'Secure messaging with your doctor arrives in Increment 3.',
+      note: 'Secure messaging with your doctor is coming soon.',
     ),
   ),
   GoRoute(
     path: '/ai-agent',
-    builder: (_, _) => const ComingSoonPage(
-      title: 'AI Health Agent',
-      note: 'The AI Health Agent arrives in Increment 2.',
-    ),
+    builder: (_, _) =>
+        const ComingSoonPage(title: 'AI Health Agent', note: 'The AI Health Agent is coming soon.'),
   ),
   GoRoute(
     path: '/appointments',
-    builder: (_, _) => const ComingSoonPage(
-      title: 'Appointments',
-      note: 'Appointment booking arrives with Module 7 (Increment 3).',
-    ),
+    builder: (_, _) =>
+        const ComingSoonPage(title: 'Appointments', note: 'Appointment booking is coming soon.'),
   ),
 ];

@@ -23,15 +23,23 @@ class PatientShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final index = tabs.indexWhere((t) => location.startsWith(t.$1));
-    return Scaffold(
-      body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index < 0 ? 0 : index,
-        onDestinationSelected: (i) => context.go(tabs[i].$1),
-        destinations: [
-          for (final (_, label, icon, selected) in tabs)
-            NavigationDestination(icon: Icon(icon), selectedIcon: Icon(selected), label: label),
-        ],
+    final onHome = index <= 0;
+    // Android back on another tab returns to Home; back on Home leaves the app.
+    return PopScope(
+      canPop: onHome,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go(tabs.first.$1);
+      },
+      child: Scaffold(
+        body: child,
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: index < 0 ? 0 : index,
+          onDestinationSelected: (i) => context.go(tabs[i].$1),
+          destinations: [
+            for (final (_, label, icon, selected) in tabs)
+              NavigationDestination(icon: Icon(icon), selectedIcon: Icon(selected), label: label),
+          ],
+        ),
       ),
     );
   }
@@ -86,12 +94,12 @@ class MorePage extends ConsumerWidget {
           const ListTile(
             leading: Icon(Icons.event_outlined),
             title: Text('Appointments'),
-            subtitle: Text('Coming in Increment 3'),
+            subtitle: Text('Coming soon'),
           ),
           const ListTile(
             leading: Icon(Icons.settings_outlined),
             title: Text('Settings'),
-            subtitle: Text('Coming in Increment 3'),
+            subtitle: Text('Coming soon'),
           ),
           const Divider(),
           ListTile(

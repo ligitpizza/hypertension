@@ -182,4 +182,57 @@ void main() {
     expect(bar.selectedIndex, 3);
     expect(find.text('Records'), findsOneWidget);
   });
+
+  group('Android back navigation', () {
+    Widget shellApp(String initial) {
+      final router = GoRouter(
+        initialLocation: initial,
+        routes: [
+          ShellRoute(
+            builder: (_, s, child) => PatientShell(location: s.matchedLocation, child: child),
+            routes: [
+              GoRoute(path: '/dashboard', builder: (_, _) => const Text('HOME')),
+              GoRoute(path: '/vitals', builder: (_, _) => const Text('VITALS TAB')),
+            ],
+          ),
+          GoRoute(
+            path: '/appointments',
+            builder: (_, _) => const ComingSoonPage(title: 'Appointments', note: 'soon'),
+          ),
+        ],
+      );
+      return MaterialApp.router(routerConfig: router);
+    }
+
+    tallTest('back on a non-home tab returns to Home instead of leaving', (t) async {
+      await t.pumpWidget(shellApp('/vitals'));
+      await t.pumpAndSettle();
+      expect(find.text('VITALS TAB'), findsOneWidget);
+      await t.binding.handlePopRoute();
+      await t.pumpAndSettle();
+      expect(find.text('HOME'), findsOneWidget);
+    });
+
+    tallTest('pages opened from the dashboard have a back arrow to it', (t) async {
+      await t.pumpWidget(shellApp('/dashboard'));
+      await t.pumpAndSettle();
+      GoRouter.of(t.element(find.text('HOME'))).push('/appointments');
+      await t.pumpAndSettle();
+      expect(find.byType(BackButton), findsOneWidget);
+      await t.tap(find.byType(BackButton));
+      await t.pumpAndSettle();
+      expect(find.text('HOME'), findsOneWidget);
+    });
+
+    tallTest('"Log one" opens on top of the dashboard and back returns', (t) async {
+      await t.pumpWidget(app(FakeDashboardRepository()));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Log one'));
+      await t.pumpAndSettle();
+      expect(find.text('ROUTE /vitals/log'), findsOneWidget);
+      await t.binding.handlePopRoute();
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('dashboard-greeting')), findsOneWidget);
+    });
+  });
 }

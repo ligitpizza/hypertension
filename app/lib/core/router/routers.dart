@@ -128,14 +128,14 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             path: '/doctor',
             builder: (_, _) => const ComingSoon(
               title: 'My patients',
-              note: 'The patient list by risk level arrives with Module 8 (Increment 2).',
+              note: 'Your patient list, sorted by risk level, is coming soon.',
             ),
           ),
           GoRoute(
             path: '/pharmacy',
             builder: (_, _) => const ComingSoon(
               title: 'Prescription queue',
-              note: 'The order queue arrives with Module 13 (Increment 3).',
+              note: 'The prescription and order queue is coming soon.',
             ),
           ),
           GoRoute(path: '/admin/users', builder: (_, _) => const CreateStaffPage()),
