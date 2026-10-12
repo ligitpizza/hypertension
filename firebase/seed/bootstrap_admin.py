@@ -36,6 +36,11 @@ def main(email: str, name: str) -> None:
         .get()
     )
     if existing_admins:
+        if existing_admins[0].to_dict().get("email") == email:
+            # Re-run for the same admin (e.g. the first link was lost): just issue a new link.
+            print("This admin already exists. New password-setup link:\n")
+            print(auth.generate_password_reset_link(email))
+            return
         sys.exit("An admin already exists. Create further staff in the staff portal (Users).")
 
     try:
