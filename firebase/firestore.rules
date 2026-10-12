@@ -2,28 +2,66 @@ rules_version = '2';
 
 // CareFlow Firestore Security Rules (NFR-2.2, docs/04 "Security Rules summary").
 //
-// Increment 0 baseline: deny by default; only the seeded symptom_catalog is
-// readable. Per-collection role rules are added module by module, starting with
-// users/health_profiles in Module 1 (Increment 1), each with emulator rules tests.
+// Deny by default. Each module opens only the access paths it needs, with
+// emulator rules tests per role (firebase/tests).
 //
 // The `role` custom claim (request.auth.token.role) is the source of truth.
-// Server-only collections (audit_logs, risk_scores, payment_transactions,
-// delivery_tracking_events, emergency_alerts, symptom_catalog writes) are written
-// by FastAPI through the Admin SDK, which bypasses these rules.
+// Server-only collections are written by FastAPI through the Admin SDK, which
+// bypasses these rules: audit_logs, risk_scores, payment_transactions,
+// delivery_tracking_events, emergency_alerts, symptom_catalog, health_profiles.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---- helpers (role/ownership helpers are added with Module 1) ----
+    // ---- helpers ----
     function signedIn() { return request.auth != null; }
+    function hasRole(r) { return signedIn() && request.auth.token.role == r; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+    function isAdmin() { return hasRole('admin'); }
 
-    // symptom_catalog: static lookup, read by any signed-in user; server-only writes.
+    // Doctor may access a patient's data only when assigned (FR-8.1, NFR-2.2).
+    function isAssignedDoctorOf(patientId) {
+      return hasRole('doctor')
+        && get(/databases/$(database)/documents/users/$(patientId)).data.assignedDoctorId
+           == request.auth.uid;
+    }
+
+    function onlyChanges(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // ---- users (Module 1, Table 4.2.3.1) ----
+    // Created only by FastAPI (register-profile / admin staff) so role and
+    // onboarding flags can't be forged.
+    match /users/{uid} {
+      allow read: if isSelf(uid)
+        || isAdmin()
+        || (hasRole('doctor') && resource.data.assignedDoctorId == request.auth.uid);
+
+      allow create, delete: if false;
+
+      // Self: name only (contact/profile editing grows with Module 12).
+      // Admin: account status and doctor assignment (FR-11.1, FR-11.2).
+      allow update: if (isSelf(uid) && onlyChanges(['name', 'updatedAt']))
+        || (isAdmin() && onlyChanges(['isActive', 'assignedDoctorId', 'updatedAt']));
+    }
+
+    // ---- health_profiles (Module 1, Table 4.2.3.2) ----
+    // Document ID = patient UID. Written only by FastAPI (onboarding, UC12.2 re-score).
+    match /health_profiles/{patientId} {
+      allow read: if isSelf(resource.data.patientId)
+        || isAdmin()
+        || isAssignedDoctorOf(resource.data.patientId);
+      allow write: if false;
+    }
+
+    // ---- symptom_catalog: static lookup, read by any signed-in user ----
     match /symptom_catalog/{symptomId} {
       allow read: if signedIn();
       allow write: if false;
     }
 
-    // audit_logs: server-only writes (FR-1.5); admin read is added in Module 1/11.
+    // ---- audit_logs: server-only writes (FR-1.5); admin viewer in Module 11 ----
     match /audit_logs/{logId} {
       allow read, write: if false;
     }
