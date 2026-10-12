@@ -31,6 +31,8 @@ The code must match the report, because Chapter 5 (Implementation) is assessed a
 | D-20 | Region | Not specified in the report | **asia-southeast1** for all regional services (Firestore/Storage regions are permanent) | Can mention in Ch5 |
 | D-21 | Deployment cadence | Report doesn't say when to deploy | Walking-skeleton deploy at end of Increment 0, redeploy at the end of every increment; daily dev on emulators | Ch5 describes it |
 | D-22 | Email provider | Ch1 scope names SendGrid; its free tier is reportedly discontinued | Keep an `EmailClient` adapter. Use SendGrid if a free/trial plan exists at setup, otherwise a provider with a free tier; console-fake in dev | Update the Ch1 scope wording if the provider changes |
+| D-23 | Android application IDs | docs/00 suggested `my.edu.tarumt.careflow.*` | **Agreed with Ping (2026-10-12):** patient flavor `fyp.hypertension.patient`, family flavor `fyp.hypertension.family` (Android namespace `fyp.hypertension`). Dart package name stays `careflow` | Mention in Ch5 (build config) |
+| D-24 | Task runner | docs/08 says `make test/lint/emulators`; docs/10 lists `.sh` deploy scripts. `make` is not installed on Ping's Windows machine | **Agreed with Ping (2026-10-12):** one cross-platform `tasks.py` at the repo root (`python tasks.py test|lint|emulators|deploy-backend|deploy-web|deploy-rules|create-scheduler-jobs|...`) replaces the Makefile and `.sh` scripts | None |
 
 ## Open questions for Ping (Claude Code: ask before implementing these)
 
