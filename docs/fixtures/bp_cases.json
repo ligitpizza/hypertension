@@ -1,0 +1,29 @@
+{
+  "_comment": "Shared BP classifier fixture (docs/06 §E, FR-9.1, Objective 1). Used by app/test/unit/vitals/bp_classifier_test.dart and backend/tests/test_bp.py so both sides classify identically. alert: null = no threshold alert.",
+  "plausible": { "systolicMin": 70, "systolicMax": 250, "diastolicMin": 40, "diastolicMax": 150, "heartRateMin": 30, "heartRateMax": 220 },
+  "cases": [
+    { "sys": 110, "dia": 70,  "category": "normal",   "alert": null,        "why": "both low" },
+    { "sys": 119, "dia": 79,  "category": "normal",   "alert": null,        "why": "upper normal boundary" },
+    { "sys": 120, "dia": 79,  "category": "elevated", "alert": null,        "why": "elevated starts at 120" },
+    { "sys": 129, "dia": 70,  "category": "elevated", "alert": null,        "why": "upper elevated boundary" },
+    { "sys": 125, "dia": 80,  "category": "stage1",   "alert": "mild",      "why": "dia 80 overrides elevated" },
+    { "sys": 130, "dia": 70,  "category": "stage1",   "alert": "mild",      "why": "stage 1 starts at sys 130" },
+    { "sys": 139, "dia": 89,  "category": "stage1",   "alert": "mild",      "why": "upper stage 1 boundary" },
+    { "sys": 110, "dia": 85,  "category": "stage1",   "alert": "mild",      "why": "diastolic alone" },
+    { "sys": 140, "dia": 70,  "category": "stage2",   "alert": "moderate",  "why": "stage 2 starts at sys 140" },
+    { "sys": 135, "dia": 90,  "category": "stage2",   "alert": "moderate",  "why": "dia 90 is stage 2" },
+    { "sys": 179, "dia": 119, "category": "stage2",   "alert": "moderate",  "why": "upper stage 2 boundary" },
+    { "sys": 180, "dia": 100, "category": "crisis",   "alert": "emergency", "why": "crisis starts at sys 180" },
+    { "sys": 150, "dia": 120, "category": "crisis",   "alert": "emergency", "why": "crisis starts at dia 120" },
+    { "sys": 220, "dia": 130, "category": "crisis",   "alert": "emergency", "why": "both very high" }
+  ],
+  "implausible": [
+    { "sys": 400, "dia": 80,  "why": "UC3.1 E1 example: systolic 400" },
+    { "sys": 69,  "dia": 40,  "why": "below systolic minimum" },
+    { "sys": 251, "dia": 100, "why": "above systolic maximum" },
+    { "sys": 120, "dia": 39,  "why": "below diastolic minimum" },
+    { "sys": 200, "dia": 151, "why": "above diastolic maximum" },
+    { "sys": 80,  "dia": 80,  "why": "systolic must exceed diastolic" },
+    { "sys": 90,  "dia": 100, "why": "diastolic above systolic" }
+  ]
+}

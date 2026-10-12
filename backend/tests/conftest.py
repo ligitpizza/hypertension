@@ -14,6 +14,7 @@ from app.main import create_app
 from app.routers.auth import get_failed_login_limiter
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
 from app.services.users import get_user_repository
+from app.services.vitals import get_vitals_repository
 
 
 class InMemoryAuditLogger:
@@ -93,6 +94,16 @@ class InMemoryUserRepository:
         self.users[uid].update(user_updates)
 
 
+class InMemoryVitalsRepository:
+    def __init__(self) -> None:
+        self.readings: dict[str, dict[str, Any]] = {}
+
+    def add_reading(self, data: dict[str, Any]) -> str:
+        rid = f"r{len(self.readings) + 1}"
+        self.readings[rid] = dict(data)
+        return rid
+
+
 class FailingEmailClient:
     def send(self, message: EmailMessage) -> None:
         raise RuntimeError("provider down")
@@ -148,6 +159,11 @@ def emails() -> ConsoleEmailClient:
 
 
 @pytest.fixture
+def vitals_repo() -> InMemoryVitalsRepository:
+    return InMemoryVitalsRepository()
+
+
+@pytest.fixture
 def limiter() -> RateLimiter:
     return RateLimiter(max_events=3)
 
@@ -159,6 +175,7 @@ def make_client(
     repo: InMemoryUserRepository,
     emails: ConsoleEmailClient,
     limiter: RateLimiter,
+    vitals_repo: InMemoryVitalsRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -170,6 +187,7 @@ def make_client(
         app.dependency_overrides[get_user_repository] = lambda: repo
         app.dependency_overrides[get_email_client] = lambda: emails
         app.dependency_overrides[get_failed_login_limiter] = lambda: limiter
+        app.dependency_overrides[get_vitals_repository] = lambda: vitals_repo
         return TestClient(app)
 
     return _make
