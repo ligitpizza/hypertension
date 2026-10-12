@@ -1,0 +1,14 @@
+{
+  "name": "careflow-rules-tests",
+  "private": true,
+  "type": "module",
+  "description": "Firestore/Storage Security Rules tests (NFR-2.2). Run via `python tasks.py test` (inside firebase emulators:exec).",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.0.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "_comment": "EMULATOR-ONLY demo accounts, one per role. seed.py refuses to run unless the emulator hosts are set. This password is a local test value, never used in the cloud project.",
+  "password": "CareFlowDemo!2026",
+  "accounts": [
+    { "uid": "demo-admin", "email": "admin@careflow.test", "name": "Demo Admin", "role": "admin" },
+    { "uid": "demo-doctor", "email": "doctor@careflow.test", "name": "Dr. Demo Doctor", "role": "doctor",
+      "specialty": "Cardiology" },
+    { "uid": "demo-pharmacist", "email": "pharmacist@careflow.test", "name": "Demo Pharmacist", "role": "pharmacist" },
+    { "uid": "demo-patient", "email": "patient@careflow.test", "name": "Demo Patient", "role": "patient",
+      "dateOfBirth": "1968-04-12", "gender": "male", "onboardingComplete": false,
+      "assignedDoctorId": "demo-doctor", "linkCode": "DEMO01" },
+    { "uid": "demo-family", "email": "family@careflow.test", "name": "Demo Family Member", "role": "family_member",
+      "patientId": "demo-patient" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "_comment": "symptom_catalog seed (UC14.1). 'common' matches Fig 4.3.8.1. isRedFlag per D-10 / docs/06 §D. Document IDs are stable slugs so seeding is idempotent.",
+  "symptoms": [
+    { "id": "headache", "name": "Headache", "category": "common", "isRedFlag": false },
+    { "id": "dizziness", "name": "Dizziness", "category": "common", "isRedFlag": false },
+    { "id": "blurred_vision", "name": "Blurred Vision", "category": "common", "isRedFlag": false },
+    { "id": "chest_pain", "name": "Chest Pain", "category": "common", "isRedFlag": true },
+    { "id": "shortness_of_breath", "name": "Shortness of Breath", "category": "common", "isRedFlag": true },
+    { "id": "nausea", "name": "Nausea", "category": "common", "isRedFlag": false },
+    { "id": "severe_headache", "name": "Severe Headache", "category": "warning_signs", "isRedFlag": true },
+    { "id": "sudden_weakness_numbness", "name": "Sudden Weakness or Numbness", "category": "warning_signs", "isRedFlag": true },
+    { "id": "confusion_difficulty_speaking", "name": "Confusion or Difficulty Speaking", "category": "warning_signs", "isRedFlag": true },
+    { "id": "vision_loss", "name": "Vision Loss", "category": "warning_signs", "isRedFlag": true },
+    { "id": "palpitations", "name": "Palpitations", "category": "other", "isRedFlag": false },
+    { "id": "nosebleed", "name": "Nosebleed", "category": "other", "isRedFlag": false },
+    { "id": "fatigue", "name": "Fatigue", "category": "other", "isRedFlag": false },
+    { "id": "swollen_ankles", "name": "Swollen Ankles", "category": "other", "isRedFlag": false }
+  ]
+}

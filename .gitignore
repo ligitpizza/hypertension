@@ -67,3 +67,6 @@ ui-debug.log
 database-debug.log
 pubsub-debug.log
 *-debug.log
+
+# ---- Node ----
+node_modules/

@@ -1,0 +1,36 @@
+rules_version = '2';
+
+// CareFlow Firestore Security Rules (NFR-2.2, docs/04 "Security Rules summary").
+//
+// Increment 0 baseline: deny by default; only the seeded symptom_catalog is
+// readable. Per-collection role rules are added module by module, starting with
+// users/health_profiles in Module 1 (Increment 1), each with emulator rules tests.
+//
+// The `role` custom claim (request.auth.token.role) is the source of truth.
+// Server-only collections (audit_logs, risk_scores, payment_transactions,
+// delivery_tracking_events, emergency_alerts, symptom_catalog writes) are written
+// by FastAPI through the Admin SDK, which bypasses these rules.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers (role/ownership helpers are added with Module 1) ----
+    function signedIn() { return request.auth != null; }
+
+    // symptom_catalog: static lookup, read by any signed-in user; server-only writes.
+    match /symptom_catalog/{symptomId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // audit_logs: server-only writes (FR-1.5); admin read is added in Module 1/11.
+    match /audit_logs/{logId} {
+      allow read, write: if false;
+    }
+
+    // Everything else is closed until its module defines access.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

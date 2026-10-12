@@ -1,0 +1,74 @@
+{
+  // F5 "CareFlow: full local stack" starts emulators + FastAPI + patient app (docs/00 §3).
+  // Start an Android emulator first (Flutter: Select Device). The Flutter apps reach
+  // the host via 10.0.2.2 from the Android emulator, localhost from Chrome.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Firebase emulators",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "python tasks.py emulators",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "FastAPI (uvicorn)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"],
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "justMyCode": true
+    },
+    {
+      "name": "Patient app (Android emulator)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/app",
+      "program": "lib/main_patient.dart",
+      "args": [
+        "--flavor", "patient",
+        "--dart-define=API_BASE_URL=http://10.0.2.2:8000",
+        "--dart-define=USE_EMULATORS=true"
+      ]
+    },
+    {
+      "name": "Family app (Android emulator)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/app",
+      "program": "lib/main_family.dart",
+      "args": [
+        "--flavor", "family",
+        "--dart-define=API_BASE_URL=http://10.0.2.2:8000",
+        "--dart-define=USE_EMULATORS=true"
+      ]
+    },
+    {
+      "name": "Staff portal (Chrome)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/app",
+      "program": "lib/main_staff.dart",
+      "deviceId": "chrome",
+      "args": [
+        "--dart-define=API_BASE_URL=http://localhost:8000",
+        "--dart-define=USE_EMULATORS=true"
+      ]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "CareFlow: full local stack",
+      "configurations": ["Firebase emulators", "FastAPI (uvicorn)", "Patient app (Android emulator)"],
+      "stopAll": true
+    },
+    {
+      "name": "CareFlow: staff portal stack",
+      "configurations": ["Firebase emulators", "FastAPI (uvicorn)", "Staff portal (Chrome)"],
+      "stopAll": true
+    }
+  ]
+}
