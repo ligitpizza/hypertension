@@ -172,3 +172,36 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Known limitations: PPG accuracy depends on torch brightness and frame rate per phone; the
   finger-detected hint uses fixed brightness/redness thresholds; validated on synthetic signals
   and one real phone only.
+
+---
+
+### 2026-10-13 — Increment 1 — Module 4: Health Data Visualisation
+- FRs implemented: FR-4.1, FR-4.2, FR-4.3 (Fig 4.1.1.4; Figs 4.3.4.1, 4.3.4.2).
+  - Health Trends: latest reading + category, fl_chart systolic/diastolic lines with 120/80 guide
+    lines, ranges 7D/30D/3M/1Y (3M/1Y = daily averages), avg/min/max tiles, count, average heart
+    rate, systolic change; "Compare heart rate" overlay; per-complication risk trend chart.
+  - Readings queried with `patientId` + `timestamp >=` ordered by timestamp desc (existing index);
+    chart/providers take a patient id for reuse in the doctor portal (Module 8).
+- Use-case flows handled: UC4.1 A1 (switch in place), UC4.1 E1 (empty range), UC4.2 E1 (<2
+  readings: no trend stats), UC4.3 E1 (no heart-rate data: BP only + note), UC4.4 E1 (single
+  score, no line); Fig 4.3.4.2 empty state below three readings.
+- Tests: 16 new Dart tests (185 total): range windows, daily averaging, stats, risk series, and
+  widget tests for every flow above. Verified on the phone by Ping.
+- Deviations / additions vs Chapter 4:
+  - Fig 4.3.4.1 shows 7D/30D/3M; 1Y added because FR-4.1 requires it.
+  - Fig 4.3.4.1's single "Cardiovascular Risk Score %" card is replaced by the per-complication
+    risk trend (Ch4 stores five complication scores, D-03); it stays in its empty state until
+    Module 9 writes risk scores.
+  - 3M and 1Y plot daily averages for readability.
+
+---
+
+### 2026-10-13 — Increment 1 exit test
+- Scenario (docs/08): new patient registers → onboards → logs three BP readings (two with PPG
+  heart rate) → trend data readable via the app's query with correct avg/min/max inputs; demo
+  doctor and admin sign in to the staff portal; patient refused by the staff portal.
+  Result: **10/10 PASS** on emulators + local FastAPI.
+- Rules suite 90/90; backend pytest + ruff + mypy clean; Flutter 185 tests + analyze clean.
+- Real-device checks on MTN NX1 throughout Modules 1–4 (registration, onboarding, dashboard,
+  BP logging, PPG 56 bpm, trends, back navigation, theme toggle).
+- Deployment: pending (end-of-increment redeploy, docs/10 §4).
