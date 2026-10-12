@@ -3,6 +3,8 @@
 Usage:  python tasks.py <task> [--yes]
 
 Local tasks
+  dev              ONE command: emulators + seed (if needed) + FastAPI + app on phone
+                   (or double-click dev.cmd). Ctrl+C once stops everything.
   emulators        Start the Firebase Emulator Suite (Auth, Firestore, Storage, UI),
                    importing/exporting firebase/seed-data
   seed             Seed the running emulators (symptom_catalog + demo accounts)
@@ -20,6 +22,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
   deploy-rules            Firestore rules + indexes and Storage rules
   create-scheduler-jobs   Idempotent Cloud Scheduler jobs calling /internal/jobs/*
   build-apk               Release APKs for the patient and family flavors
+  phone-live              Build release apps and install the live-cloud patient app on
+                          the phone (or double-click phone-live.cmd)
   bootstrap-admin         One-time: create the first admin in the live project
                           (python tasks.py bootstrap-admin you@example.com "Name" --yes)
   backend-url             Print the deployed Cloud Run URL
@@ -27,10 +31,14 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
+import time
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -106,8 +114,7 @@ def confirm_cloud(description: str, cmds: list[list[str]]) -> None:
 # ---------------- local ----------------
 
 
-def task_emulators() -> None:
-    seed_data = FIREBASE / "seed-data"
+def emulator_command() -> list[str]:
     cmd = [
         exe("firebase"),
         "emulators:start",
@@ -115,13 +122,17 @@ def task_emulators() -> None:
         PROJECT_ID,
         "--export-on-exit=./seed-data",
     ]
-    if seed_data.exists():
+    if (FIREBASE / "seed-data").exists():
         cmd.insert(2, "--import=./seed-data")
-    else:
+    return cmd
+
+
+def task_emulators() -> None:
+    if not (FIREBASE / "seed-data").exists():
         print(
             "No firebase/seed-data yet: starting empty. Run `python tasks.py seed` once it is up."
         )
-    run(cmd, cwd=FIREBASE)
+    run(emulator_command(), cwd=FIREBASE)
 
 
 def task_seed() -> None:
@@ -422,6 +433,11 @@ def task_phone_install() -> None:
     flavor = args[0] if args else "patient"
     if flavor not in ("patient", "family"):
         sys.exit("flavor must be patient or family")
+    install_dev_app(flavor)
+
+
+def install_dev_app(flavor: str) -> None:
+    """Debug build pointed at this PC (emulators + local API over adb reverse)."""
     task_firebase_config()
     task_adb_reverse()
     run(
@@ -446,6 +462,156 @@ def task_phone_install() -> None:
     run([_adb(), "install", "-r", str(apk)])
     run([_adb(), "shell", "am", "force-stop", package])
     run([_adb(), "shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"])
+
+
+def _port_open(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _wait_for_port(
+    port: int, name: str, proc: subprocess.Popen[bytes] | None, timeout: int
+) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _port_open(port):
+            return
+        if proc is not None and proc.poll() is not None:
+            sys.exit(f"{name} stopped while starting (exit code {proc.returncode}).")
+        time.sleep(1)
+    sys.exit(f"{name} did not start within {timeout}s (port {port}).")
+
+
+def _demo_accounts_present() -> bool:
+    """True if the Auth emulator already has the seeded demo admin."""
+    url = (
+        f"http://localhost:9099/identitytoolkit.googleapis.com/v1/projects/{PROJECT_ID}"
+        "/accounts:query"
+    )
+    req = urllib.request.Request(
+        url,
+        data=b"{}",
+        headers={"Content-Type": "application/json", "Authorization": "Bearer owner"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:  # noqa: S310
+            users = json.load(res).get("userInfo", [])
+    except OSError:
+        return False
+    return any(u.get("email") == "admin@careflow.test" for u in users)
+
+
+def _phone_connected() -> bool:
+    code, out = capture([_adb(), "devices"])
+    return code == 0 and any(line.endswith("\tdevice") for line in out.splitlines()[1:])
+
+
+def task_dev() -> None:
+    """One command for local development (double-click dev.cmd).
+
+    Starts the emulators, seeds demo accounts if they are missing, starts FastAPI,
+    installs the patient app on a plugged-in phone, then waits. Ctrl+C once stops
+    everything and lets the emulators save their data. Add --no-phone to skip the phone.
+    """
+    flags = set(sys.argv[2:])
+    started: list[tuple[str, subprocess.Popen[bytes]]] = []
+
+    if _port_open(9099) and _port_open(8080):
+        print("Emulators already running: reusing them.")
+        emu = None
+    else:
+        print("Starting Firebase emulators...", flush=True)
+        emu = subprocess.Popen(emulator_command(), cwd=FIREBASE)  # noqa: S603
+        started.append(("Emulators", emu))
+    _wait_for_port(9099, "Auth emulator", emu, 180)
+    _wait_for_port(8080, "Firestore emulator", emu, 180)
+
+    if _demo_accounts_present():
+        print("Demo accounts already loaded.")
+    else:
+        task_seed()
+
+    if _port_open(8000):
+        print("FastAPI already running on port 8000: reusing it.")
+    else:
+        print("Starting FastAPI...", flush=True)
+        api = subprocess.Popen(  # noqa: S603
+            [
+                venv_python(),
+                "-m",
+                "uvicorn",
+                "app.main:app",
+                "--reload",
+                "--host",
+                "0.0.0.0",  # noqa: S104  (phones reach the PC through adb reverse)
+                "--port",
+                "8000",
+                "--env-file",
+                ".env",
+            ],
+            cwd=BACKEND,
+        )
+        started.append(("FastAPI", api))
+        _wait_for_port(8000, "FastAPI", api, 60)
+
+    if "--no-phone" in flags:
+        print("Skipping the phone (--no-phone).")
+    elif _phone_connected():
+        print("Phone detected: installing the patient app (local-dev build)...", flush=True)
+        install_dev_app("patient")
+    else:
+        print("No phone connected: skipping app install. Plug one in and run phone-install.")
+
+    print(
+        "\n========================================================\n"
+        " CareFlow local stack is running\n"
+        "   Emulator UI (accounts, data, reset links): http://localhost:4000\n"
+        "   FastAPI docs:                              http://localhost:8000/api/docs\n"
+        "   Live staff portal (cloud):                 https://hypertension-dd85f.web.app\n"
+        " Press Ctrl+C ONCE to stop; wait for the emulators to finish saving.\n"
+        "========================================================\n",
+        flush=True,
+    )
+    try:
+        while all(proc.poll() is None for _, proc in started):
+            time.sleep(1)
+        for name, proc in started:
+            if proc.poll() is not None:
+                print(f"{name} stopped (exit code {proc.returncode}).")
+    except KeyboardInterrupt:
+        print("\nStopping... the emulators are saving data, please wait.", flush=True)
+    finally:
+        # Ctrl+C reaches every process in this console, so the emulators export on
+        # their own; give them time before forcing anything to close.
+        for name, proc in reversed(started):
+            try:
+                proc.wait(timeout=90 if name == "Emulators" else 10)
+            except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                proc.terminate()
+        print("Stopped.")
+
+
+def task_phone_live() -> None:
+    """Build the release apps (live cloud) and install the patient app on the phone."""
+    if not _phone_connected():
+        sys.exit("No phone connected. Plug it in (USB debugging on) and try again.")
+    task_build_apk()
+    apk = APP / "build" / "app" / "outputs" / "flutter-apk" / "app-patient-release.apk"
+    run([_adb(), "install", "-r", str(apk)])
+    run(
+        [
+            _adb(),
+            "shell",
+            "monkey",
+            "-p",
+            "fyp.hypertension.patient",
+            "-c",
+            "android.intent.category.LAUNCHER",
+            "1",
+        ]
+    )
+    print("Live-cloud patient app installed. It no longer needs this PC.")
 
 
 def task_bootstrap_admin() -> None:
@@ -504,6 +670,8 @@ TASKS = {
     "backend-url": task_backend_url,
     "adb-reverse": task_adb_reverse,
     "phone-install": task_phone_install,
+    "dev": task_dev,
+    "phone-live": task_phone_live,
     "bootstrap-admin": task_bootstrap_admin,
     "firebase-config": task_firebase_config,
 }
