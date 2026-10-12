@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/theme_mode.dart';
 import '../../../shared/widgets/confirm_sign_out.dart';
 import '../../auth/state/auth_providers.dart';
 
@@ -91,6 +92,11 @@ class MorePage extends ConsumerWidget {
                 'your readings.',
               ),
             ),
+          const ListTile(
+            leading: Icon(Icons.palette_outlined),
+            title: Text('Theme'),
+            subtitle: Padding(padding: EdgeInsets.only(top: 8), child: ThemeModeSelector()),
+          ),
           const ListTile(
             leading: Icon(Icons.event_outlined),
             title: Text('Appointments'),

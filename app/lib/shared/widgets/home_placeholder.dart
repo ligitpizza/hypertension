@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/enums.dart';
+import '../../core/theme/theme_mode.dart';
 import '../../features/auth/state/auth_providers.dart';
 import 'confirm_sign_out.dart';
 
@@ -18,6 +19,7 @@ class HomePlaceholder extends ConsumerWidget {
       appBar: AppBar(
         title: Text(app == ClientApp.family ? 'CareFlow Family' : 'CareFlow'),
         actions: [
+          const ThemeModeMenuButton(),
           IconButton(
             key: const Key('home-sign-out'),
             tooltip: 'Sign out',

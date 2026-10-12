@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/enums.dart';
+import '../../core/theme/theme_mode.dart';
 import '../auth/presentation/widgets/role_toggle.dart';
 import '../../shared/widgets/confirm_sign_out.dart';
 import '../auth/state/auth_providers.dart';
@@ -58,6 +59,7 @@ class StaffShell extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Center(child: Text('${user.name} · ${RoleToggle.label(user.role)}')),
           ),
+        const ThemeModeMenuButton(),
         IconButton(
           key: const Key('staff-sign-out'),
           tooltip: 'Sign out',
