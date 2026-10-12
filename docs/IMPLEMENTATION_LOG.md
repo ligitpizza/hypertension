@@ -112,3 +112,29 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   - Link-code uniqueness check is not transactional (collision chance negligible at 31^6).
   - Failed-login rate limit is per Cloud Run instance (max 2 instances).
   - Real Brevo sending not yet exercised (needs Ping's API key); console fake used.
+
+---
+
+### 2026-10-12 — Increment 1 — Module 2: Patient Health Overview
+- FRs implemented: FR-2.1, FR-2.2 (Fig 4.1.1.2, Fig 4.3.2.1).
+  - Dashboard: Today's Plan (medications + next booked/rescheduled appointment), latest BP
+    reading (time ago, change vs. previous day, PPG heart rate labelled "estimate"), AI risk card
+    (overall level = highest complication level, D-03), quick actions, patient bottom navigation.
+  - Rules: read access for `vital_readings`, `risk_scores` (patient, assigned doctor, admin,
+    linked family), `medications`, `appointments` (patient, assigned/appointment doctor, admin);
+    all client writes closed until their modules.
+- Use-case exception flows handled: UC2.1 E1 (per-card error + retry), UC2.2 E1, UC2.3 E1,
+  UC2.4 E1 (empty states with prompts).
+- Tests: 18 new Dart tests (98 total: unit for greeting, BP change, labels, model parsing,
+  overall risk; widget for empty/data/error/loading and every quick action); 35 new rules tests
+  (90 total).
+- Deviations / additions vs Chapter 4:
+  - Fig 4.1.1.2 reads today's doses from `dose_logs` (`findTodaysDoses(patientId)`), but
+    `dose_logs` has no `patientId`, so Security Rules cannot authorise a patient's query on it.
+    The dashboard lists today's medications from `medications`; dose "taken" ticks are deferred to
+    Module 5, where a fix (e.g. denormalised `patientId` on `dose_logs`) will be proposed to Ping.
+  - Dashboard reads go straight to Firestore (read/write split) rather than through a FastAPI
+    "DashboardCtrl" endpoint; the controller role is played by Riverpod providers.
+  - Riverpod 3 automatic retry disabled for dashboard streams so errors surface immediately.
+- Known limitations: medication, appointment and risk cards stay in their empty states until
+  Modules 5/7 (Increment 3) and Module 9 (Increment 2) write that data.
