@@ -13,6 +13,7 @@ import 'package:hypertension/features/auth/presentation/status_pages.dart';
 import 'package:hypertension/features/auth/domain/app_user.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/staff_shell/staff_shell.dart';
+import 'package:hypertension/shared/widgets/home_placeholder.dart';
 import 'package:hypertension/shared/providers/api_providers.dart';
 
 import '../helpers/fakes.dart';
@@ -264,6 +265,50 @@ void main() {
       expect(staffHome(UserRole.admin), '/admin/users');
       expect(staffDestinations(UserRole.admin).map((d) => d.path), ['/admin/users']);
       expect(staffDestinations(UserRole.patient), isEmpty);
+    });
+  });
+
+  group('UC1.3 sign-out confirmation', () {
+    Widget home(FakeAuthRepository repo) => ProviderScope(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(repo),
+        clientAppProvider.overrideWithValue(ClientApp.patient),
+        currentUserProvider.overrideWith(
+          (ref) => Stream.value(
+            const AppUser(
+              uid: 'u',
+              email: 'e@x.my',
+              name: 'Woo',
+              role: UserRole.patient,
+              isActive: true,
+            ),
+          ),
+        ),
+      ],
+      child: const MaterialApp(home: HomePlaceholder()),
+    );
+
+    tallTest('cancel keeps the user signed in', (t) async {
+      final repo = FakeAuthRepository();
+      await t.pumpWidget(home(repo));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('home-sign-out')));
+      await t.pumpAndSettle();
+      expect(find.text('Sign out?'), findsOneWidget);
+      await t.tap(find.byKey(const Key('sign-out-cancel')));
+      await t.pumpAndSettle();
+      expect(repo.calls, isEmpty);
+    });
+
+    tallTest('confirm signs out', (t) async {
+      final repo = FakeAuthRepository();
+      await t.pumpWidget(home(repo));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('home-sign-out')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('sign-out-confirm')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['signOut']);
     });
   });
 }

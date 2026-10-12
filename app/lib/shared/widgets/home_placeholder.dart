@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/enums.dart';
 import '../../features/auth/state/auth_providers.dart';
+import 'confirm_sign_out.dart';
 
 /// Temporary landing page after sign-in until the Module 2 dashboard (patient)
 /// and the family dashboard (Increment 3) replace it.
@@ -21,7 +22,7 @@ class HomePlaceholder extends ConsumerWidget {
             key: const Key('home-sign-out'),
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout),
-            onPressed: () => ref.read(authRepositoryProvider).signOut(app),
+            onPressed: () => confirmAndSignOut(context, ref),
           ),
         ],
       ),

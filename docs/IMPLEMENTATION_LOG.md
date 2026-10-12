@@ -95,6 +95,11 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   - `users.linkCode` (D-06) generated at patient registration.
   - Staff SSO button omitted (out of scope); biometric login deferred (no FR requires it).
   - Added `shared_preferences` (onboarding draft, UC1.4 A1).
+  - Sign-out asks for confirmation (requested by Ping during phone testing); UC1.3 has no
+    confirmation step, so this is a small UX addition.
+  - Android: FlutterFire's automatic localhost→10.0.2.2 emulator mapping disabled so a physical
+    phone works over `adb reverse`; `python tasks.py phone-install` added because this phone's
+    obfuscated logcat prevents debugger attach.
 - Bugs found and fixed during testing:
   - Flutter web: `useAuthEmulator` after `initializeApp` was silently ignored by
     firebase_auth_web, so a local staff build signed in against the live project (one failed

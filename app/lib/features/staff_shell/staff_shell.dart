@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/enums.dart';
 import '../auth/presentation/widgets/role_toggle.dart';
+import '../../shared/widgets/confirm_sign_out.dart';
 import '../auth/state/auth_providers.dart';
 
 class StaffDestination {
@@ -47,7 +48,7 @@ class StaffShell extends ConsumerWidget {
     final selected = destinations.indexWhere((d) => location.startsWith(d.path));
     final wide = MediaQuery.sizeOf(context).width >= 800;
 
-    Future<void> signOut() => ref.read(authRepositoryProvider).signOut(ClientApp.staff);
+    Future<void> signOut() => confirmAndSignOut(context, ref);
 
     final header = AppBar(
       title: const Text('CareFlow Pro'),
