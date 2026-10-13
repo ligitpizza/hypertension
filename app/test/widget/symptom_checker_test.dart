@@ -3,9 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
-import 'package:hypertension/features/auth/state/auth_providers.dart';
-import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
-import 'package:hypertension/shared/models/health_models.dart';
 import 'package:hypertension/features/symptom_checker/data/symptom_repository.dart';
 import 'package:hypertension/features/symptom_checker/presentation/symptom_checker_page.dart';
 import 'package:hypertension/features/symptom_checker/presentation/triage_result_page.dart';
@@ -14,7 +11,6 @@ import 'package:hypertension/features/vitals/state/vitals_providers.dart';
 import 'package:hypertension/shared/services/api/api_client.dart';
 
 import '../helpers/fakes.dart';
-import 'dashboard_page_test.dart' show FakeDashboardRepository;
 import 'vitals_pages_test.dart' show FakePpgCapture, FakeVitalsRepository;
 
 // FR-14.3 Symptom checker (UC14.1, UC14.2 E1, UC14.3; Figs 4.3.8.1/4.3.8.2; D-36).
@@ -69,10 +65,7 @@ class FakeSymptomRepository implements SymptomRepository {
   }
 }
 
-final checkerNow = DateTime(2026, 10, 14, 12);
-List<VitalReading> vitalsLog = const [];
-
-Widget checkerApp(FakeSymptomRepository repo, FakeVitalsRepository vitals) {
+Widget checkerApp(FakeSymptomRepository repo, FakeVitalsRepository vitals, {List<String>? dialed}) {
   final router = GoRouter(
     initialLocation: '/symptom',
     routes: [
@@ -90,11 +83,10 @@ Widget checkerApp(FakeSymptomRepository repo, FakeVitalsRepository vitals) {
       symptomRepositoryProvider.overrideWithValue(repo),
       vitalsRepositoryProvider.overrideWithValue(vitals),
       ppgCaptureProvider.overrideWithValue(FakePpgCapture()),
-      dashboardRepositoryProvider.overrideWithValue(
-        FakeDashboardRepository()..readings = Stream.value(vitalsLog),
-      ),
-      authUidProvider.overrideWith((ref) => Stream.value('p1')),
-      nowProvider.overrideWithValue(() => checkerNow),
+      dialerProvider.overrideWithValue((n) async {
+        dialed?.add(n);
+        return true;
+      }),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -116,27 +108,89 @@ void main() {
   setUp(() {
     repo = FakeSymptomRepository();
     vitals = FakeVitalsRepository();
-    vitalsLog = const [];
   });
+
+  final dialed = <String>[];
+
+  /// D-38: type the pulse (the camera path is covered by the Module 3 card tests) and a BP.
+  Future<void> fillVitals(
+    WidgetTester t, {
+    String hr = '72',
+    String sys = '118',
+    String dia = '76',
+  }) async {
+    await t.tap(find.byKey(const Key('ppg-manual')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('hr-manual-input')), hr);
+    await t.enterText(find.byKey(const Key('sc-sys')), sys);
+    await t.enterText(find.byKey(const Key('sc-dia')), dia);
+    await t.pump();
+  }
 
   Future<void> toSymptoms(WidgetTester t) async {
     await t.tap(find.byKey(const Key('sc-next')));
     await t.pumpAndSettle();
   }
 
+  Future<void> pickAndSubmit(WidgetTester t, String symptom) async {
+    await t.ensureVisible(find.byKey(Key('sym-$symptom')));
+    await t.tap(find.byKey(Key('sym-$symptom')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('sc-submit')));
+    await t.pumpAndSettle();
+  }
+
+  bool continueEnabled(WidgetTester t) =>
+      t.widget<FilledButton>(find.byKey(const Key('sc-next'))).onPressed != null;
+
   group('Fig 4.3.8.1 symptom checker', () {
-    tallTest('UC14.2 starts with the vitals step; heart rate can be skipped (E1)', (t) async {
+    tallTest('D-38 Continue stays locked until heart rate AND blood pressure are given', (t) async {
       await t.pumpWidget(checkerApp(repo, vitals));
       await t.pumpAndSettle();
-      expect(find.text('Your vitals now'), findsOneWidget);
-      expect(find.text('Skip heart rate and continue'), findsOneWidget);
+      expect(find.text('Heart rate (required)'), findsOneWidget);
+      expect(find.text('Blood pressure (required)'), findsOneWidget);
+      expect(continueEnabled(t), isFalse);
+      await t.tap(find.byKey(const Key('ppg-manual')));
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const Key('hr-manual-input')), '72');
+      await t.pump();
+      expect(continueEnabled(t), isFalse); // heart rate only
+      await t.enterText(find.byKey(const Key('sc-sys')), '118');
+      await t.pump();
+      expect(continueEnabled(t), isFalse); // diastolic missing
+      await t.enterText(find.byKey(const Key('sc-dia')), '76');
+      await t.pump();
+      expect(continueEnabled(t), isTrue);
       await toSymptoms(t);
       expect(find.text('What are you feeling today?'), findsOneWidget);
+    });
+
+    tallTest('D-38 the heart-rate card has no Skip in the checker', (t) async {
+      await t.pumpWidget(checkerApp(repo, vitals));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('ppg-skip')), findsNothing);
+    });
+
+    tallTest('D-38 implausible BP keeps Continue locked', (t) async {
+      await t.pumpWidget(checkerApp(repo, vitals));
+      await t.pumpAndSettle();
+      await fillVitals(t, sys: '80', dia: '95');
+      expect(continueEnabled(t), isFalse);
+    });
+
+    tallTest('D-38 Call 999 is always available on the vitals step', (t) async {
+      await t.pumpWidget(checkerApp(repo, vitals, dialed: dialed));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('sc-call-999')));
+      await t.pump();
+      expect(dialed, ['999']);
+      dialed.clear();
     });
 
     tallTest('symptoms are grouped by category; Continue needs a symptom', (t) async {
       await t.pumpWidget(checkerApp(repo, vitals));
       await t.pumpAndSettle();
+      await fillVitals(t);
       await toSymptoms(t);
       expect(find.text('COMMON SYMPTOMS'), findsOneWidget);
       expect(find.text('WARNING SIGNS'), findsOneWidget);
@@ -146,18 +200,10 @@ void main() {
       expect(t.widget<FilledButton>(find.byKey(const Key('sc-submit'))).onPressed, isNotNull);
     });
 
-    tallTest('an empty symptom list explains itself instead of a blank screen', (t) async {
-      repo.catalogList = const [];
-      await t.pumpWidget(checkerApp(repo, vitals));
-      await t.pumpAndSettle();
-      await toSymptoms(t);
-      expect(find.byKey(const Key('sc-empty')), findsOneWidget);
-      expect(find.textContaining('call 999'), findsOneWidget);
-    });
-
     tallTest('severity has a plain-language hint that follows the choice', (t) async {
       await t.pumpWidget(checkerApp(repo, vitals));
       await t.pumpAndSettle();
+      await fillVitals(t);
       await toSymptoms(t);
       expect(find.textContaining('Mild: noticeable'), findsOneWidget);
       await t.tap(find.text('Severe'));
@@ -165,121 +211,46 @@ void main() {
       expect(find.textContaining('Severe: very strong'), findsOneWidget);
     });
 
-    VitalReading logged(int sys, int dia, Duration ago) => VitalReading(
-      id: 'v1',
-      patientId: 'p1',
-      systolic: sys,
-      diastolic: dia,
-      timestamp: checkerNow.subtract(ago),
-    );
-
-    tallTest('D-36 a BP logged in Vitals today is reused and the patient is told', (t) async {
-      vitalsLog = [logged(135, 85, const Duration(hours: 2, minutes: 48))];
+    tallTest('an empty symptom list explains itself instead of a blank screen', (t) async {
+      repo.catalogList = const [];
       await t.pumpWidget(checkerApp(repo, vitals));
       await t.pumpAndSettle();
-      expect(find.byKey(const Key('sc-bp-from-vitals')), findsOneWidget);
-      expect(find.text('135/85 mmHg'), findsOneWidget);
-      expect(
-        find.text(
-          'The blood pressure you logged in Vitals today, 9:12 AM will be used for this check.',
-        ),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('sc-sys')), findsNothing); // not asked again
+      await fillVitals(t);
       await toSymptoms(t);
-      await t.tap(find.byKey(const Key('sym-headache')));
-      await t.pump();
-      await t.tap(find.byKey(const Key('sc-submit')));
-      await t.pumpAndSettle();
-      expect(vitals.last, isNull); // nothing logged twice
-      expect(repo.calls.single['vitalReadingId'], isNull); // server uses the latest reading
+      expect(find.byKey(const Key('sc-empty')), findsOneWidget);
+      expect(find.textContaining('call 999'), findsOneWidget);
     });
 
-    tallTest('"I have a newer reading" opens the BP boxes and can be undone', (t) async {
-      vitalsLog = [logged(135, 85, const Duration(hours: 1))];
+    tallTest('UC14.3 the BP is saved to Vitals and linked with the heart rate', (t) async {
       await t.pumpWidget(checkerApp(repo, vitals));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(const Key('sc-enter-newer')));
-      await t.pump();
-      expect(find.byKey(const Key('sc-sys')), findsOneWidget);
-      await t.enterText(find.byKey(const Key('sc-sys')), '150');
-      await t.tap(find.byKey(const Key('sc-use-earlier')));
-      await t.pump();
-      expect(find.byKey(const Key('sc-bp-from-vitals')), findsOneWidget);
+      await fillVitals(t, hr: '88', sys: '150', dia: '95');
       await toSymptoms(t);
-      await t.tap(find.byKey(const Key('sym-headache')));
-      await t.pump();
-      await t.tap(find.byKey(const Key('sc-submit')));
-      await t.pumpAndSettle();
-      expect(vitals.last, isNull); // the typed 150 was discarded
-    });
-
-    tallTest('a Vitals reading older than 24 h is not reused', (t) async {
-      vitalsLog = [logged(135, 85, const Duration(hours: 25))];
-      await t.pumpWidget(checkerApp(repo, vitals));
-      await t.pumpAndSettle();
-      expect(find.byKey(const Key('sc-bp-from-vitals')), findsNothing);
-      expect(find.textContaining('No blood pressure logged in Vitals'), findsOneWidget);
-      expect(find.byKey(const Key('sc-sys')), findsOneWidget);
-    });
-
-    tallTest('UC14.3 submits without BP: no reading logged', (t) async {
-      await t.pumpWidget(checkerApp(repo, vitals));
-      await t.pumpAndSettle();
-      await toSymptoms(t);
-      await t.tap(find.byKey(const Key('sym-headache')));
       await t.tap(find.text('Moderate'));
       await t.pump();
-      await t.tap(find.byKey(const Key('sc-submit')));
-      await t.pumpAndSettle();
-      expect(vitals.last, isNull);
+      await pickAndSubmit(t, 'headache');
+      expect(vitals.last, {
+        'systolic': 150,
+        'diastolic': 95,
+        'heartRate': 88,
+        'note': 'Symptom checker',
+      });
       expect(repo.calls.single, {
         'symptoms': ['headache'],
         'severity': TriageSeverity.moderate,
-        'heartRate': null,
-        'vitalReadingId': null,
+        'heartRate': 88,
+        'vitalReadingId': 'r1',
       });
       expect(find.byKey(const Key('triage-monitor_at_home')), findsOneWidget);
-    });
-
-    tallTest('D-36 a BP entered is logged as a reading and linked to triage', (t) async {
-      await t.pumpWidget(checkerApp(repo, vitals));
-      await t.pumpAndSettle();
-      await t.enterText(find.byKey(const Key('sc-sys')), '150');
-      await t.enterText(find.byKey(const Key('sc-dia')), '95');
-      await toSymptoms(t);
-      await t.ensureVisible(find.byKey(const Key('sym-fatigue')));
-      await t.tap(find.byKey(const Key('sym-fatigue')));
-      await t.pump();
-      await t.tap(find.byKey(const Key('sc-submit')));
-      await t.pumpAndSettle();
-      expect(vitals.last!['systolic'], 150);
-      expect(vitals.last!['note'], 'Symptom checker');
-      expect(repo.calls.single['vitalReadingId'], 'r1');
-    });
-
-    tallTest('implausible BP is caught before continuing', (t) async {
-      await t.pumpWidget(checkerApp(repo, vitals));
-      await t.pumpAndSettle();
-      await t.enterText(find.byKey(const Key('sc-sys')), '80');
-      await t.enterText(find.byKey(const Key('sc-dia')), '95');
-      await toSymptoms(t);
-      expect(find.text('Your vitals now'), findsOneWidget);
-      expect(find.textContaining('Systolic (top number) must be higher'), findsOneWidget);
     });
 
     tallTest('a failed triage retry does not log the BP twice', (t) async {
       repo.error = ApiException('NETWORK_ERROR', 'down');
       await t.pumpWidget(checkerApp(repo, vitals));
       await t.pumpAndSettle();
-      await t.enterText(find.byKey(const Key('sc-sys')), '150');
-      await t.enterText(find.byKey(const Key('sc-dia')), '95');
+      await fillVitals(t, sys: '150', dia: '95');
       await toSymptoms(t);
-      await t.ensureVisible(find.byKey(const Key('sym-fatigue')));
-      await t.tap(find.byKey(const Key('sym-fatigue')));
-      await t.pump();
-      await t.tap(find.byKey(const Key('sc-submit')));
-      await t.pumpAndSettle();
+      await pickAndSubmit(t, 'fatigue');
       expect(find.textContaining('call 999'), findsOneWidget);
       vitals.last = null;
       repo.error = null;
@@ -372,16 +343,5 @@ void main() {
       'When should I check my blood pressure again?',
       'What warning signs should I watch for?',
     ]);
-  });
-
-  test('reading time labels', () {
-    expect(
-      SymptomCheckerPage.readingTime(DateTime(2026, 10, 14, 9, 12), checkerNow),
-      'today, 9:12 AM',
-    );
-    expect(
-      SymptomCheckerPage.readingTime(DateTime(2026, 10, 13, 20, 5), checkerNow),
-      'yesterday, 8:05 PM',
-    );
   });
 }

@@ -109,8 +109,8 @@ abstract interface class SymptomRepository {
   Future<TriageResult> submit({
     required List<String> symptomIds,
     required TriageSeverity severity,
-    int? heartRate,
-    String? vitalReadingId,
+    required int heartRate,
+    required String vitalReadingId,
   });
 }
 
@@ -139,8 +139,8 @@ class ApiSymptomRepository implements SymptomRepository {
   Future<TriageResult> submit({
     required List<String> symptomIds,
     required TriageSeverity severity,
-    int? heartRate,
-    String? vitalReadingId,
+    required int heartRate,
+    required String vitalReadingId,
   }) async => TriageResult.fromApi(
     await _api.submitTriage(
       symptoms: symptomIds,

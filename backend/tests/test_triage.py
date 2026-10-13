@@ -148,7 +148,7 @@ def test_rules_apply_top_down() -> None:
     assert "Chest Pain" in decision.reason
 
 
-# ---------- POST /triage ----------
+# ---------- POST /triage (D-38: heart rate and a fresh BP are compulsory) ----------
 
 P = "u-patient"
 PATIENT = bearer("patient-token")
@@ -168,8 +168,20 @@ def add_reading(
     )
 
 
-def post(client: TestClient, **body: Any) -> Any:
-    return client.post("/api/v1/triage", json={"severity": "mild", **body}, headers=PATIENT)
+def post(
+    client: TestClient,
+    vitals: InMemoryVitalsRepository,
+    bp: tuple[int, int] = (118, 76),
+    hr: int = 72,
+    **body: Any,
+) -> Any:
+    """Like the app: log the BP entered in the checker, then submit triage with its id."""
+    rid = add_reading(vitals, *bp)
+    return client.post(
+        "/api/v1/triage",
+        json={"severity": "mild", "heartRate": hr, "vitalReadingId": rid, **body},
+        headers=PATIENT,
+    )
 
 
 def test_uc14_3_saves_outcome_and_returns_result(
@@ -179,8 +191,7 @@ def test_uc14_3_saves_outcome_and_returns_result(
     alerts_repo: InMemoryAlertRepository,
     audit: InMemoryAuditLogger,
 ) -> None:
-    rid = add_reading(vitals_repo, 118, 76)
-    res = post(client, symptoms=["headache", "nausea"], heartRate=74, vitalReadingId=rid)
+    res = post(client, vitals_repo, hr=74, symptoms=["headache", "nausea"])
     assert res.status_code == 201
     body = res.json()
     assert body["outcome"] == "monitor_at_home"
@@ -193,7 +204,7 @@ def test_uc14_3_saves_outcome_and_returns_result(
             "symptoms": ["headache", "nausea"],
             "severity": "mild",
             "outcome": "monitor_at_home",
-            "vitalReadingId": rid,
+            "vitalReadingId": "r1",
         }
     ]
     assert alerts_repo.alerts == []
@@ -205,20 +216,22 @@ def test_uc14_4_contact_doctor_alerts_the_doctor(
     vitals_repo: InMemoryVitalsRepository,
     alerts_repo: InMemoryAlertRepository,
 ) -> None:
-    add_reading(vitals_repo, 150, 92)
-    body = post(client, symptoms=["dizziness"]).json()
+    body = post(client, vitals_repo, bp=(150, 92), symptoms=["dizziness"]).json()
     assert body["outcome"] == "contact_doctor"
     assert body["doctorNotified"] is True
-    [alert] = alerts_repo.alerts
-    assert alert["type"] == "triage" and alert["severity"] == "high"
+    [alert] = [a for a in alerts_repo.alerts if a["type"] == "triage"]
+    assert alert["severity"] == "high"
     assert alert["doctorId"] == "u-doctor"
     assert "Dizziness" in alert["message"] and "150/92" in alert["message"]
+    assert "HR 72" in alert["message"]
 
 
 def test_uc14_4_emergency_is_a_critical_alert(
-    client: TestClient, alerts_repo: InMemoryAlertRepository
+    client: TestClient, vitals_repo: InMemoryVitalsRepository, alerts_repo: InMemoryAlertRepository
 ) -> None:
-    body = post(client, symptoms=["chest_pain", "dizziness"], severity="moderate").json()
+    body = post(
+        client, vitals_repo, symptoms=["chest_pain", "dizziness"], severity="moderate"
+    ).json()
     assert body["outcome"] == "seek_emergency_care"
     assert [s["isRedFlag"] for s in body["symptoms"]] == [True, False]
     [alert] = alerts_repo.alerts
@@ -226,42 +239,55 @@ def test_uc14_4_emergency_is_a_critical_alert(
     assert alert["message"].startswith("URGENT triage")
 
 
-def test_uc14_1_e1_missing_inputs_are_reported(client: TestClient) -> None:
-    body = post(client, symptoms=["fatigue"]).json()
-    assert body["missingInputs"] == ["recent_blood_pressure", "heart_rate", "risk_score"]
-    assert body["outcome"] == "monitor_at_home"
-
-
-def test_d36_reading_older_than_24h_is_not_current_bp(
+def test_crisis_bp_entered_in_the_checker_is_an_emergency(
     client: TestClient, vitals_repo: InMemoryVitalsRepository
 ) -> None:
-    add_reading(vitals_repo, 185, 125, ago=timedelta(hours=25))
-    body = post(client, symptoms=["fatigue"]).json()
-    assert body["systolic"] is None
-    assert "recent_blood_pressure" in body["missingInputs"]
-
-
-def test_d36_latest_reading_within_24h_is_used_with_its_heart_rate(
-    client: TestClient, vitals_repo: InMemoryVitalsRepository
-) -> None:
-    add_reading(vitals_repo, 185, 125, ago=timedelta(hours=3), heartRate=96)
-    body = post(client, symptoms=["fatigue"]).json()
+    body = post(client, vitals_repo, bp=(186, 122), symptoms=["fatigue"]).json()
     assert body["outcome"] == "seek_emergency_care"
-    assert body["heartRate"] == 96
 
 
 def test_high_risk_score_makes_contact_doctor(
-    client: TestClient, risk_repo: InMemoryRiskRepository
+    client: TestClient, vitals_repo: InMemoryVitalsRepository, risk_repo: InMemoryRiskRepository
 ) -> None:
     risk_repo.saved.append({"patientId": P, "scores": {"stroke": {"value": 0.3, "level": "high"}}})
-    assert post(client, symptoms=["fatigue"]).json()["outcome"] == "contact_doctor"
+    assert post(client, vitals_repo, symptoms=["fatigue"]).json()["outcome"] == "contact_doctor"
+
+
+def test_d38_heart_rate_and_reading_are_compulsory(
+    client: TestClient, vitals_repo: InMemoryVitalsRepository
+) -> None:
+    rid = add_reading(vitals_repo, 118, 76)
+    for body in (
+        {"symptoms": ["fatigue"], "severity": "mild", "vitalReadingId": rid},  # no heart rate
+        {"symptoms": ["fatigue"], "severity": "mild", "heartRate": 72},  # no BP reading
+    ):
+        res = client.post("/api/v1/triage", json=body, headers=PATIENT)
+        assert res.status_code == 422
+        assert res.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_d38_reading_must_be_fresh(
+    client: TestClient, vitals_repo: InMemoryVitalsRepository
+) -> None:
+    rid = add_reading(vitals_repo, 118, 76, ago=timedelta(hours=2))
+    res = client.post(
+        "/api/v1/triage",
+        json={"symptoms": ["fatigue"], "severity": "mild", "heartRate": 72, "vitalReadingId": rid},
+        headers=PATIENT,
+    )
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "READING_TOO_OLD"
 
 
 def test_someone_elses_reading_is_rejected(
     client: TestClient, vitals_repo: InMemoryVitalsRepository
 ) -> None:
     rid = vitals_repo.add_reading({"patientId": "u-other", "systolic": 120, "diastolic": 80})
-    res = post(client, symptoms=["fatigue"], vitalReadingId=rid)
+    res = client.post(
+        "/api/v1/triage",
+        json={"symptoms": ["fatigue"], "severity": "mild", "heartRate": 72, "vitalReadingId": rid},
+        headers=PATIENT,
+    )
     assert res.status_code == 404
 
 
@@ -274,8 +300,12 @@ def test_someone_elses_reading_is_rejected(
         ({"symptoms": ["fatigue"], "heartRate": 400}, "VALIDATION_ERROR"),
     ],
 )
-def test_invalid_submissions(client: TestClient, body: dict[str, Any], code: str) -> None:
-    res = client.post("/api/v1/triage", json={"severity": "mild", **body}, headers=PATIENT)
+def test_invalid_submissions(
+    client: TestClient, vitals_repo: InMemoryVitalsRepository, body: dict[str, Any], code: str
+) -> None:
+    rid = add_reading(vitals_repo, 118, 76)
+    payload = {"severity": "mild", "heartRate": 72, "vitalReadingId": rid, **body}
+    res = client.post("/api/v1/triage", json=payload, headers=PATIENT)
     assert res.status_code == 422
     assert res.json()["error"]["code"] == code
 
@@ -283,6 +313,8 @@ def test_invalid_submissions(client: TestClient, body: dict[str, Any], code: str
 @pytest.mark.parametrize("token", ["doctor-token", "family-token"])
 def test_only_patients_submit(client: TestClient, token: str) -> None:
     res = client.post(
-        "/api/v1/triage", json={"symptoms": ["fatigue"], "severity": "mild"}, headers=bearer(token)
+        "/api/v1/triage",
+        json={"symptoms": ["fatigue"], "severity": "mild", "heartRate": 72, "vitalReadingId": "r"},
+        headers=bearer(token),
     )
     assert res.status_code == 403

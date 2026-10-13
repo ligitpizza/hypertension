@@ -1,7 +1,7 @@
 """POST /triage: symptom checker submission (FR-14.3; UC14.1, UC14.3, UC14.4; D-36).
 
-The app sends the selected symptom ids and severity, plus the camera heart rate and the
-id of a reading logged in the same session when the patient entered a BP. The server
+The app sends the selected symptom ids and severity, the heart rate (camera or typed
+pulse) and the id of the BP reading the patient just entered in the checker (D-38). The server
 gathers the latest vitals and risk, applies the rule table, saves `triage_outcomes`
 and notifies the assigned doctor for contact_doctor / seek_emergency_care.
 """
@@ -38,7 +38,13 @@ from app.services.escalation import (
     Escalator,
     get_escalator,
 )
-from app.services.triage import TriageRepository, classify, gather_inputs, get_triage_repository
+from app.services.triage import (
+    StaleReadingError,
+    TriageRepository,
+    classify,
+    gather_inputs,
+    get_triage_repository,
+)
 from app.services.users import UserRepository, get_user_repository
 
 log = logging.getLogger("careflow.triage")
@@ -51,8 +57,10 @@ class TriageRequest(BaseModel):
 
     symptoms: list[str] = Field(min_length=1, max_length=14)
     severity: TriageSeverity
-    heartRate: int | None = Field(default=None, ge=HEART_RATE_MIN, le=HEART_RATE_MAX)  # noqa: N815
-    vitalReadingId: str | None = Field(default=None, max_length=128)  # noqa: N815
+    # D-38: both compulsory. Heart rate from the camera or typed from the BP monitor; the
+    # reading is the BP entered in the checker and saved just before (POST /vitals).
+    heartRate: int = Field(ge=HEART_RATE_MIN, le=HEART_RATE_MAX)  # noqa: N815
+    vitalReadingId: str = Field(min_length=1, max_length=128)  # noqa: N815
 
 
 _ALERT_SEVERITY = {
@@ -85,6 +93,8 @@ def submit(
         inputs = gather_inputs(repo, user.uid, body.vitalReadingId, body.heartRate, now)
     except LookupError as exc:
         raise ApiError("READING_NOT_FOUND", str(exc), status.HTTP_404_NOT_FOUND) from exc
+    except StaleReadingError as exc:
+        raise ApiError("READING_TOO_OLD", str(exc), status.HTTP_409_CONFLICT) from exc
 
     red_flags = [catalog[i].name for i in ids if catalog[i].is_red_flag]
     decision = classify(

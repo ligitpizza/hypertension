@@ -362,10 +362,6 @@ class InMemoryTriageRepository:
     def reading(self, reading_id: str) -> dict[str, Any] | None:
         return self._vitals.readings.get(reading_id)
 
-    def latest_reading(self, uid: str) -> tuple[str, dict[str, Any]] | None:
-        mine = [(k, r) for k, r in self._vitals.readings.items() if r["patientId"] == uid]
-        return mine[-1] if mine else None
-
     def latest_risk_levels(self, uid: str) -> list[RiskLevel]:
         mine = [d for d in self._risk.saved if d["patientId"] == uid]
         if not mine:

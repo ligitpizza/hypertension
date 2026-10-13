@@ -11,9 +11,13 @@ import '../state/vitals_providers.dart';
 /// patient can place the fingertip, then measures. Reports the measured or manually
 /// entered heart rate through [onChanged]; null means none.
 class HeartRateCard extends ConsumerStatefulWidget {
-  const HeartRateCard({super.key, required this.onChanged});
+  const HeartRateCard({super.key, required this.onChanged, this.allowSkip = true});
 
   final ValueChanged<int?> onChanged;
+
+  /// False in the symptom checker, where heart rate is compulsory (D-38): no Skip button;
+  /// the camera or a typed pulse must provide it.
+  final bool allowSkip;
 
   @override
   ConsumerState<HeartRateCard> createState() => _HeartRateCardState();
@@ -296,11 +300,12 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
                     onPressed: _openCamera,
                     child: const Text('Retry'),
                   ),
-                OutlinedButton(
-                  key: const Key('ppg-skip'),
-                  onPressed: _skip,
-                  child: const Text('Skip'),
-                ),
+                if (widget.allowSkip)
+                  OutlinedButton(
+                    key: const Key('ppg-skip'),
+                    onPressed: _skip,
+                    child: const Text('Skip'),
+                  ),
                 TextButton(
                   onPressed: () => setState(() => _phase = _Phase.manual),
                   child: const Text('Enter manually'),

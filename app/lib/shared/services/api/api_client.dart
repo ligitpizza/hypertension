@@ -162,18 +162,18 @@ class ApiClient {
 
   // ---- FR-14.3 Symptom checker (D-36) ----
 
-  /// UC14.1/UC14.3: symptom ids from symptom_catalog, severity, optional camera heart
-  /// rate and the id of a reading logged in the same session.
+  /// UC14.1/UC14.3: symptom ids from symptom_catalog, severity, the heart rate and the id
+  /// of the BP reading just logged in the checker (both compulsory, D-38).
   Future<Map<String, dynamic>> submitTriage({
     required List<String> symptoms,
     required String severity,
-    int? heartRate,
-    String? vitalReadingId,
+    required int heartRate,
+    required String vitalReadingId,
   }) => _post('/triage', {
     'symptoms': symptoms,
     'severity': severity,
-    'heartRate': ?heartRate,
-    'vitalReadingId': ?vitalReadingId,
+    'heartRate': heartRate,
+    'vitalReadingId': vitalReadingId,
   });
 
   // ---- FR-14.1 AI Health Agent (D-34) ----

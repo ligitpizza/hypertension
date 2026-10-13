@@ -536,4 +536,15 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   reading" opens them (and "Use my earlier reading instead" undoes it). Without a recent
   reading the boxes show with "No blood pressure logged in Vitals in the last 24 hours...".
   Same 24-hour window as the server (D-36). Flutter 258/258.
+- **D-38 (Ping, 2026-10-14): heart rate and a fresh BP are compulsory in the symptom checker**,
+  superseding the optional BP / 24-hour reuse of D-36 and the skip in UC14.1 E1 / UC14.2 E1
+  (**Needs Ch3 update**). Step 1 shows "Heart rate (required)" (camera, or the pulse typed from
+  the BP monitor; the card's Skip button is hidden here via `allowSkip: false`, still shown in
+  Log Vitals) and "Blood pressure (required)"; Continue stays disabled until both are valid. The
+  BP is always saved to Vitals and linked to the triage. A "Feeling very unwell or can't
+  measure right now? Call 999" card stays on the step so the compulsory step never blocks
+  emergency help. `POST /triage` enforces it: `heartRate` and `vitalReadingId` required (422),
+  the reading must belong to the patient (404) and be logged within the last hour (409
+  `READING_TOO_OLD`). The "use your Vitals reading" card from earlier the same day was removed.
+  Tests: backend triage endpoint tests rewritten (all passing); Flutter 255/255.
 

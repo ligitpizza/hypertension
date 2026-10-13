@@ -172,7 +172,10 @@ def test_d37_agent_notes_go_to_the_chat(
 
 
 def triage(client: TestClient, **body: Any) -> dict[str, Any]:
-    res = client.post("/api/v1/triage", json={"severity": "mild", **body}, headers=PATIENT)
+    if "vitalReadingId" not in body:  # D-38: the checker always logs a fresh BP first
+        body["vitalReadingId"] = log(client, 118, 76)["id"]
+    payload = {"severity": "mild", "heartRate": 72, **body}
+    res = client.post("/api/v1/triage", json=payload, headers=PATIENT)
     assert res.status_code == 201
     out: dict[str, Any] = res.json()
     return out

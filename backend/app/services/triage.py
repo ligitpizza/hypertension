@@ -22,8 +22,12 @@ HIGH_SYSTOLIC = 140
 HIGH_DIASTOLIC = 90
 HEART_RATE_HIGH = 120  # contact doctor above this
 HEART_RATE_LOW = 45  # ... or below this
-# D-36: without a BP entered in the checker, use the latest reading only if this recent.
-RECENT_BP = timedelta(hours=24)
+# D-38: the checker's BP is entered fresh and saved just before triage; allow this long.
+FRESH_BP = timedelta(hours=1)
+
+
+class StaleReadingError(Exception):
+    """The linked reading is older than FRESH_BP (D-38)."""
 
 
 @dataclass(frozen=True)
@@ -90,8 +94,6 @@ class TriageRepository(Protocol):
 
     def reading(self, reading_id: str) -> dict[str, Any] | None: ...
 
-    def latest_reading(self, uid: str) -> tuple[str, dict[str, Any]] | None: ...
-
     def latest_risk_levels(self, uid: str) -> list[RiskLevel]: ...
 
     def save_outcome(self, data: dict[str, Any]) -> str: ...
@@ -113,15 +115,6 @@ class FirestoreTriageRepository:
     def reading(self, reading_id: str) -> dict[str, Any] | None:
         snap = self._db.collection(Collection.VITAL_READINGS.value).document(reading_id).get()
         return dict(snap.to_dict()) if snap.exists else None
-
-    def latest_reading(self, uid: str) -> tuple[str, dict[str, Any]] | None:
-        query = (
-            self._db.collection(Collection.VITAL_READINGS.value)
-            .where(filter=firestore.FieldFilter("patientId", "==", uid))
-            .order_by("timestamp", direction=firestore.Query.DESCENDING)
-            .limit(1)
-        )
-        return next(((d.id, dict(d.to_dict())) for d in query.stream()), None)
 
     def latest_risk_levels(self, uid: str) -> list[RiskLevel]:
         query = (
@@ -161,34 +154,24 @@ class TriageInputs:
 def gather_inputs(
     repo: TriageRepository,
     uid: str,
-    reading_id: str | None,
-    heart_rate: int | None,
+    reading_id: str,
+    heart_rate: int,
     now: datetime,
 ) -> TriageInputs:
-    inputs = TriageInputs(heart_rate=heart_rate)
-    reading: dict[str, Any] | None = None
-    if reading_id is not None:
-        reading = repo.reading(reading_id)
-        if reading is None or reading.get("patientId") != uid:
-            raise LookupError("Reading not found.")
-    else:
-        latest = repo.latest_reading(uid)
-        if latest is not None:
-            measured = latest[1].get("timestamp")
-            if isinstance(measured, datetime) and now - measured <= RECENT_BP:
-                reading_id, reading = latest
-    if reading is not None:
-        inputs.reading_id = reading_id
-        inputs.systolic = int(reading["systolic"])
-        inputs.diastolic = int(reading["diastolic"])
-        ts = reading.get("timestamp")
-        inputs.measured_at = ts if isinstance(ts, datetime) else None
-        if inputs.heart_rate is None and reading.get("heartRate") is not None:
-            inputs.heart_rate = int(reading["heartRate"])
-    else:
-        inputs.missing.append("recent_blood_pressure")
-    if inputs.heart_rate is None:
-        inputs.missing.append("heart_rate")
+    """D-38: heart rate and a fresh BP (logged in the checker) are both required."""
+    reading = repo.reading(reading_id)
+    if reading is None or reading.get("patientId") != uid:
+        raise LookupError("Reading not found.")
+    ts = reading.get("timestamp")
+    if isinstance(ts, datetime) and now - ts > FRESH_BP:
+        raise StaleReadingError("Measure your blood pressure again for this check.")
+    inputs = TriageInputs(
+        reading_id=reading_id,
+        systolic=int(reading["systolic"]),
+        diastolic=int(reading["diastolic"]),
+        measured_at=ts if isinstance(ts, datetime) else None,
+        heart_rate=heart_rate,
+    )
     inputs.risk_levels = repo.latest_risk_levels(uid)
     if not inputs.risk_levels:
         inputs.missing.append("risk_score")
