@@ -553,4 +553,11 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   gets the usual triage alert. Emergency rules still win (chest pain at 85/55 -> seek
   emergency care). Not applied to ordinary Vitals readings. Boundaries 89/90 and 59/60
   unit-tested; docs/06 §D table updated. **Needs Ch4 update.**
+- Deferred ML follow-ups (Ping, 2026-10-14; raise at the related module):
+  1. **Contributing factors** per patient (Fig 4.3.12.4, UC2.6 A1): design gap; plan is
+     XGBoost `pred_contribs` (SHAP) on the doctor's patient detail and in the AI agent context.
+  2. Clinic-wide risk analytics for the admin panel (Module 11, FR-11).
+  3. Risk before/after a new medication (Module 5). Until Module 5, `bp_medication` and
+     `medication_count` are 0 for every patient.
+  4. "What if" estimates: not in the report; only with Ping's approval.
 
