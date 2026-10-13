@@ -37,13 +37,18 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isSelf(uid)
         || isAdmin()
-        || (hasRole('doctor') && resource.data.assignedDoctorId == request.auth.uid);
+        || (hasRole('doctor') && resource.data.assignedDoctorId == request.auth.uid)
+        // D-42: a patient reads their own assigned doctor (name + public key for messaging).
+        || (hasRole('patient')
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedDoctorId == uid);
 
       allow create, delete: if false;
 
-      // Self: name only (contact/profile editing grows with Module 12).
-      // Admin: account status and doctor assignment (FR-11.1, FR-11.2).
-      allow update: if (isSelf(uid) && onlyChanges(['name', 'updatedAt']))
+      // Self: name, and the E2E public key (D-07, D-42); contact/profile editing grows with
+      // Module 12. Admin: account status and doctor assignment (FR-11.1, FR-11.2).
+      allow update: if (isSelf(uid) && onlyChanges(['name', 'publicKey', 'updatedAt'])
+                        && (!('publicKey' in request.resource.data)
+                            || request.resource.data.publicKey is string))
         || (isAdmin() && onlyChanges(['isActive', 'assignedDoctorId', 'updatedAt']));
     }
 
@@ -131,6 +136,44 @@ service cloud.firestore {
     match /triage_outcomes/{outcomeId} {
       allow read: if canReadPatientData(resource.data.patientId);
       allow write: if false;
+    }
+
+    // ---- messages (Module 10, Table 4.2.3.13; NFR-2.1, D-09, D-42) ----
+    // End-to-end encrypted: written by the sender's client, never readable by the server
+    // logic. Only between a patient and their assigned doctor (FR-10.1).
+    function messageAllowedTo(recipientId) {
+      return (hasRole('patient')
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedDoctorId
+             == recipientId)
+        || (hasRole('doctor')
+          && get(/databases/$(database)/documents/users/$(recipientId)).data.assignedDoctorId
+             == request.auth.uid);
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn()
+        && (resource.data.senderId == request.auth.uid
+            || resource.data.recipientId == request.auth.uid);
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['senderId', 'recipientId', 'encryptedText',
+             'isFlagged', 'sentAt', 'senderPublicKey', 'recipientPublicKey'])
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.encryptedText is string
+        && request.resource.data.encryptedText.size() < 20000
+        && request.resource.data.isFlagged is bool
+        && request.resource.data.senderPublicKey is string
+        && request.resource.data.recipientPublicKey is string
+        && request.resource.data.sentAt == request.time
+        && messageAllowedTo(request.resource.data.recipientId);
+
+      // UC10.3 E1: the doctor who received a flagged message may clear the flag.
+      allow update: if hasRole('doctor')
+        && resource.data.recipientId == request.auth.uid
+        && onlyChanges(['isFlagged'])
+        && request.resource.data.isFlagged == false;
+
+      allow delete: if false;
     }
 
     // ---- symptom_catalog: static lookup, read by any signed-in user ----

@@ -16,8 +16,8 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'symptom_catalog/chest_pain'),
       { name: 'Chest Pain', category: 'common', isRedFlag: true });
-    await setDoc(doc(ctx.firestore(), 'messages/m1'),
-      { senderId: 'u-patient', recipientId: 'u-doctor', encryptedText: 'x', sentAt: new Date() });
+    await setDoc(doc(ctx.firestore(), 'medication_orders/o1'),
+      { patientId: 'u-patient', prescriptionId: 'rx1', method: 'home_delivery', paymentStatus: 'pending' });
   });
 });
 
@@ -44,8 +44,8 @@ describe('Inc0 baseline: audit_logs are server-only (FR-1.5)', () => {
 });
 
 describe('Inc0 baseline: deny by default until a module opens access (NFR-2.2)', () => {
-  test.each(ROLES)('%s cannot read messages yet (Module 10)', async (role) => {
-    await assertFails(getDoc(doc(as(env, role).firestore(), 'messages/m1')));
+  test.each(ROLES)('%s cannot read medication_orders yet (Module 13)', async (role) => {
+    await assertFails(getDoc(doc(as(env, role).firestore(), 'medication_orders/o1')));
   });
 
   test('unauthenticated user cannot write anywhere', async () => {

@@ -16,6 +16,7 @@ from app.main import create_app
 from app.ml.risk_model import get_risk_model
 from app.routers.agent import get_agent_limiter
 from app.routers.auth import get_failed_login_limiter
+from app.routers.messages import get_message_repository
 from app.services.agent_context import get_agent_data_repository
 from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
@@ -377,6 +378,20 @@ class InMemoryTriageRepository:
         return f"triage{len(self.saved)}"
 
 
+class InMemoryMessageRepository:
+    """Message metadata only (the text is ciphertext the server never reads)."""
+
+    def __init__(self, users: "InMemoryUserRepository") -> None:
+        self._users = users
+        self.messages: dict[str, dict[str, Any]] = {}
+
+    def message(self, message_id: str) -> dict[str, Any] | None:
+        return self.messages.get(message_id)
+
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+
 class FailingEmailClient:
     def send(self, message: EmailMessage) -> bool:
         raise RuntimeError("provider down")
@@ -502,6 +517,11 @@ def triage_repo(
 
 
 @pytest.fixture
+def message_repo(repo: InMemoryUserRepository) -> InMemoryMessageRepository:
+    return InMemoryMessageRepository(repo)
+
+
+@pytest.fixture
 def limiter() -> RateLimiter:
     return RateLimiter(max_events=3)
 
@@ -525,6 +545,7 @@ def make_client(
     llm: FakeLlmClient,
     agent_limiter: RateLimiter,
     triage_repo: InMemoryTriageRepository,
+    message_repo: InMemoryMessageRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -548,6 +569,7 @@ def make_client(
         app.dependency_overrides[get_llm_client] = lambda: llm
         app.dependency_overrides[get_agent_limiter] = lambda: agent_limiter
         app.dependency_overrides[get_triage_repository] = lambda: triage_repo
+        app.dependency_overrides[get_message_repository] = lambda: message_repo
         return TestClient(app)
 
     return _make
