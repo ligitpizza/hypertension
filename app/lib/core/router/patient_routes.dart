@@ -1,3 +1,5 @@
+import '../../features/messaging/presentation/chat_thread_page.dart';
+import '../../features/messaging/presentation/inbox_pages.dart';
 import '../../features/symptom_checker/data/symptom_repository.dart';
 import '../../features/symptom_checker/presentation/symptom_checker_page.dart';
 import '../../features/symptom_checker/presentation/triage_result_page.dart';
@@ -53,10 +55,14 @@ final List<RouteBase> patientFeatureRoutes = [
   ),
   GoRoute(
     path: '/chat',
-    builder: (_, _) => const ComingSoonPage(
-      title: 'Messages',
-      note: 'Secure messaging with your doctor is coming soon.',
-    ),
+    builder: (_, _) => const PatientInboxPage(),
+    routes: [
+      // :threadId = the other participant's uid (the assigned doctor).
+      GoRoute(
+        path: ':threadId',
+        builder: (_, s) => ChatThreadPage(otherId: s.pathParameters['threadId']!),
+      ),
+    ],
   ),
   GoRoute(
     path: '/ai-agent',

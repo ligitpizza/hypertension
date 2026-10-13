@@ -594,3 +594,45 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   complications as a safeguard. Live note: scores generated before the factors deploy (07:19
   MYT) have none; the next reading creates them.
 
+
+---
+
+### 2026-10-14 — Increment 3 — Module 10: Care Coordination & Messaging + FR-14.4
+- FRs implemented: FR-10.1 (secure patient <-> assigned doctor messaging), FR-10.2 (shared care
+  plan: dashboard card + history from earlier, plus a care plan button in every chat),
+  FR-10.3 / FR-14.4 (keyword scan and escalation of high-risk messages); NFR-2.1 (end-to-end
+  encryption).
+- Use-case flows: UC10.1 incl. E1 (offline: Firestore queues the write, the bubble shows
+  "Sending... (will send when online)", the notify call runs once the server has it), UC10.2
+  incl. E1 (empty state), UC10.3 incl. E1 (doctor dismisses a false flag).
+- Encryption (docs/06 section I, D-42): X25519 key pair per user in flutter_secure_storage
+  (Android Keystore / browser storage), public key on `users/{uid}.publicKey` (published on
+  sign-in), conversation key = X25519 -> HKDF-SHA256 (salt = sorted user ids) -> AES-256-GCM
+  with sender>recipient as associated data; `encryptedText` = base64(nonce|ciphertext|tag).
+  Each message also stores `senderPublicKey` and `recipientPublicKey` (Needs Ch4 update), so a
+  later key change never breaks other messages. Messages encrypted for a lost key show "This
+  message was encrypted for an earlier device" (accepted PoC limitation).
+- Keyword scan (docs/06 section H, D-09): shared `app/assets/high_risk_keywords.json` (English +
+  a few Malay phrases), normalises cant/cannot, a negation word within 4 words before a phrase
+  cancels it ("no longer have chest pain"). Runs on the sender's device before encryption.
+  Flagged patient messages: the sender sees the Fig 4.3.15.3 banner (999, not 911); `POST
+  /api/v1/messages/{id}/notify` (metadata only, never text) pushes "New message from ..." (urgent
+  when flagged) and raises a `flagged_message` high clinical alert for the assigned doctor;
+  the doctor's thread shows "Flagged: high-risk words" with Dismiss flag.
+- Rules: messages only between a patient and their assigned doctor, sender-bound,
+  server-timestamped, fixed field set, ciphertext <20 KB; readable only by the two
+  participants (not admin); only the receiving doctor may clear `isFlagged`. Patients may read
+  their own assigned doctor's user document (name, public key); users may publish their own
+  `publicKey`. Inbox indexes on (recipientId, sentAt desc) and (senderId, sentAt desc).
+- Screens: patient `/chat` inbox (assigned doctor + "CareFlow Assistant" = AI agent, unread
+  badge), `/chat/:threadId`; doctor portal "Messages" nav entry, `/doctor/messages` (assigned
+  patients, search, flagged icon, unread) and `/doctor/messages/:patientId`.
+- Tests: Flutter 17 scanner + 5 crypto + 10 widget (293 total); backend 6 (notify);
+  rules 14 new (150 total; the Inc0 "closed collection" sample moved to medication_orders).
+- Deviations / additions vs Chapter 4: D-42 (two message key fields; unread per device, no
+  read-receipt field; server only notified, never reads text). The keyword list is not used by
+  the Python AI agent, which keeps its own richer pattern set (self-harm etc.).
+- Known limitations: true E2E means a patient's reinstall or a doctor's cleared browser loses
+  older messages on that device; a message sent while offline that never syncs before the app
+  is closed is sent on the next launch but its push is skipped; keyword scanning has residual
+  false positives/negatives (doctor dismiss covers false positives).

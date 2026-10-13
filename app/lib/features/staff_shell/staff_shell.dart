@@ -17,7 +17,10 @@ class StaffDestination {
 
 /// Destinations per staff role (NFR-3.2: role-specific interface). Grows per module.
 List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
-  UserRole.doctor => const [StaffDestination('/doctor', 'Patients', Icons.people_outline)],
+  UserRole.doctor => const [
+    StaffDestination('/doctor', 'Patients', Icons.people_outline),
+    StaffDestination('/doctor/messages', 'Messages', Icons.chat_bubble_outline),
+  ],
   UserRole.pharmacist => const [
     StaffDestination('/pharmacy', 'Orders', Icons.local_pharmacy_outlined),
   ],
@@ -26,6 +29,19 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
   ],
   _ => const [],
 };
+
+/// The destination whose path is the longest prefix of [location] ('/doctor/messages/x'
+/// selects Messages, not Patients).
+int selectedDestination(List<StaffDestination> destinations, String location) {
+  var best = -1;
+  for (var i = 0; i < destinations.length; i++) {
+    final p = destinations[i].path;
+    if (location.startsWith(p) && (best < 0 || p.length > destinations[best].path.length)) {
+      best = i;
+    }
+  }
+  return best;
+}
 
 /// Home route for each staff role.
 String staffHome(UserRole? role) => switch (role) {
@@ -46,7 +62,7 @@ class StaffShell extends ConsumerWidget {
     final user = ref.watch(currentUserProvider).value;
     final role = user?.role ?? UserRole.doctor;
     final destinations = staffDestinations(role);
-    final selected = destinations.indexWhere((d) => location.startsWith(d.path));
+    final selected = selectedDestination(destinations, location);
     final wide = MediaQuery.sizeOf(context).width >= 800;
 
     Future<void> signOut() => confirmAndSignOut(context, ref);

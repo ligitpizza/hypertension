@@ -189,6 +189,11 @@ class ApiClient {
   /// Gemini plus one server-side retry can take ~25 s at busy times.
   static const agentTimeout = Duration(seconds: 35);
 
+  // ---- Module 10 secure messaging (D-42) ----
+
+  /// After a message is stored: push the recipient; escalate if the scan flagged it.
+  Future<void> notifyMessage(String messageId) => _post('/messages/$messageId/notify', const {});
+
   // ---- Module 9 push notifications (D-33) ----
 
   Future<void> registerFcmToken({required String token, required String platform}) =>

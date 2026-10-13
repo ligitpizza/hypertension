@@ -12,6 +12,8 @@ import '../../features/auth/presentation/staff_login_page.dart';
 import '../../features/auth/presentation/status_pages.dart';
 import '../../features/auth/state/auth_providers.dart';
 import '../../features/auth/state/auth_redirect.dart';
+import '../../features/messaging/presentation/chat_thread_page.dart';
+import '../../features/messaging/presentation/inbox_pages.dart';
 import '../../features/provider_portal/presentation/care_plan_page.dart';
 import '../../features/provider_portal/presentation/clinical_note_page.dart';
 import '../../features/provider_portal/presentation/doctor_dashboard_page.dart';
@@ -134,6 +136,20 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             path: '/doctor',
             builder: (_, _) => const DoctorDashboardPage(),
             routes: [
+              // Module 10 (Fig 4.3.15.1 / 4.3.15.2 in the portal).
+              GoRoute(
+                path: 'messages',
+                builder: (_, _) => const DoctorMessagesPage(),
+                routes: [
+                  GoRoute(
+                    path: ':patientId',
+                    builder: (_, s) => ChatThreadPage(
+                      otherId: s.pathParameters['patientId']!,
+                      backPath: '/doctor/messages',
+                    ),
+                  ),
+                ],
+              ),
               GoRoute(
                 path: 'patient/:id',
                 builder: (_, s) => PatientDetailPage(patientId: s.pathParameters['id']!),
