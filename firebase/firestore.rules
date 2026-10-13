@@ -8,7 +8,8 @@ rules_version = '2';
 // The `role` custom claim (request.auth.token.role) is the source of truth.
 // Server-only collections are written by FastAPI through the Admin SDK, which
 // bypasses these rules: audit_logs, risk_scores, payment_transactions,
-// delivery_tracking_events, emergency_alerts, symptom_catalog, health_profiles.
+// delivery_tracking_events, emergency_alerts, symptom_catalog, health_profiles,
+// clinical_alerts (D-32) and users/{uid}/fcmTokens (D-33).
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -97,6 +98,26 @@ service cloud.firestore {
     match /symptom_catalog/{symptomId} {
       allow read: if signedIn();
       allow write: if false;
+    }
+
+    // ---- clinical_alerts (D-32): doctor-facing alerts from Module 9 ----
+    // Created by FastAPI only. The addressed doctor reads them (alerts panel, FR-8.4)
+    // and may acknowledge or dismiss an open alert; admin reads for oversight.
+    match /clinical_alerts/{alertId} {
+      allow read: if isAdmin()
+        || (hasRole('doctor') && resource.data.doctorId == request.auth.uid);
+      allow update: if hasRole('doctor')
+        && resource.data.doctorId == request.auth.uid
+        && resource.data.status == 'open'
+        && onlyChanges(['status', 'acknowledgedAt'])
+        && request.resource.data.status in ['acknowledged', 'dismissed']
+        && request.resource.data.acknowledgedAt == request.time;
+      allow create, delete: if false;
+    }
+
+    // ---- users/{uid}/fcmTokens (D-33): registered through FastAPI, server-only ----
+    match /users/{uid}/fcmTokens/{token} {
+      allow read, write: if false;
     }
 
     // ---- audit_logs: server-only writes (FR-1.5); admin viewer in Module 11 ----

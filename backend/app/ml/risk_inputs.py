@@ -62,6 +62,12 @@ def _parse_json(raw: object) -> dict[str, Any]:
     return {}
 
 
+def existing_conditions(health_profile: dict[str, Any] | None) -> list[str]:
+    """Conditions the patient reported at onboarding (medicalHistory.conditions)."""
+    history = _parse_json((health_profile or {}).get("medicalHistory"))
+    return [str(c) for c in history.get("conditions") or []]
+
+
 def _age(dob: object, today: date) -> float:
     if isinstance(dob, datetime):
         dob = dob.date()

@@ -1,5 +1,11 @@
 {
   "indexes": [
+    { "collectionGroup": "clinical_alerts", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "type", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "clinical_alerts", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "doctorId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
     { "collectionGroup": "vital_readings", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "timestamp", "order": "DESCENDING" } ] },
     { "collectionGroup": "risk_scores", "queryScope": "COLLECTION", "fields": [

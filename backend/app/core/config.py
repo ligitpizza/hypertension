@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     email_from: str = ""
     email_from_name: str = "CareFlow"
 
+    # Push notifications (D-33): false logs pushes instead of sending them through FCM.
+    fcm_enabled: bool = False
+
     # Unauthenticated failed-login reporting (D-27): max reports per client IP per minute.
     failed_login_rate_per_minute: int = 10
 

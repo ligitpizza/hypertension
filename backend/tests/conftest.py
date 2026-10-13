@@ -7,13 +7,17 @@ from fastapi.testclient import TestClient
 from app.core.audit import get_audit_logger
 from app.core.auth import get_token_verifier
 from app.core.config import Settings, get_settings
-from app.core.enums import UserRole
+from app.core.enums import ClinicalAlertType, RiskLevel, UserRole
 from app.core.rate_limit import RateLimiter
 from app.integrations.email import ConsoleEmailClient, EmailMessage, get_email_client
+from app.integrations.push import LogPushClient
 from app.main import create_app
 from app.ml.risk_model import get_risk_model
 from app.routers.auth import get_failed_login_limiter
+from app.services.deterioration import get_deterioration_repository
+from app.services.escalation import get_alert_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
+from app.services.notifications import Notifier, get_notifier, get_token_repository
 from app.services.risk import get_risk_data_repository
 from app.services.users import get_user_repository
 from app.services.vitals import get_vitals_repository
@@ -168,6 +172,66 @@ def fake_risk_model(p: float = 0.3) -> Any:
     )
 
 
+class InMemoryTokenRepository:
+    def __init__(self) -> None:
+        self.by_user: dict[str, dict[str, str]] = {}
+
+    def add(self, uid: str, token: str, platform: str) -> None:
+        self.by_user.setdefault(uid, {})[token] = platform
+
+    def remove(self, uid: str, token: str) -> None:
+        self.by_user.get(uid, {}).pop(token, None)
+
+    def tokens(self, uid: str) -> list[str]:
+        return list(self.by_user.get(uid, {}))
+
+
+class InMemoryAlertRepository:
+    """Reads prior risk scores from the shared in-memory risk repository."""
+
+    def __init__(self, risk: "InMemoryRiskRepository", users: "InMemoryUserRepository") -> None:
+        self._risk = risk
+        self._users = users
+        self.alerts: list[dict[str, Any]] = []
+
+    def latest_levels(self, uid: str) -> dict[str, RiskLevel]:
+        mine = [d for d in self._risk.saved if d["patientId"] == uid]
+        if not mine:
+            return {}
+        return {k: RiskLevel(v["level"]) for k, v in mine[-1]["scores"].items()}
+
+    def family_member_ids(self, uid: str) -> list[str]:
+        return [
+            k
+            for k, u in self._users.users.items()
+            if u.get("role") == UserRole.FAMILY_MEMBER.value and u.get("patientId") == uid
+        ]
+
+    def recent_alert_exists(self, uid: str, alert_type: ClinicalAlertType, since: Any) -> bool:
+        return any(
+            a["patientId"] == uid and a["type"] == alert_type.value and a["createdAt"] >= since
+            for a in self.alerts
+        )
+
+    def create_alert(self, data: dict[str, Any]) -> str:
+        from datetime import UTC, datetime
+
+        self.alerts.append({**data, "createdAt": data.get("createdAt", datetime.now(UTC))})
+        return f"alert{len(self.alerts)}"
+
+
+class InMemoryDeteriorationRepository:
+    def __init__(self) -> None:
+        self.patients: list[tuple[str, dict[str, Any]]] = []
+        self.scores: dict[str, list[tuple[Any, dict[str, Any]]]] = {}
+
+    def active_patients(self) -> list[tuple[str, dict[str, Any]]]:
+        return self.patients
+
+    def scores_since(self, uid: str, since: Any) -> list[tuple[Any, dict[str, Any]]]:
+        return [(t, s) for t, s in self.scores.get(uid, []) if t >= since]
+
+
 class FailingEmailClient:
     def send(self, message: EmailMessage) -> bool:
         raise RuntimeError("provider down")
@@ -240,6 +304,28 @@ def risk_model() -> Any:
 
 
 @pytest.fixture
+def tokens() -> InMemoryTokenRepository:
+    return InMemoryTokenRepository()
+
+
+@pytest.fixture
+def push() -> LogPushClient:
+    return LogPushClient()
+
+
+@pytest.fixture
+def alerts_repo(
+    risk_repo: InMemoryRiskRepository, repo: InMemoryUserRepository
+) -> InMemoryAlertRepository:
+    return InMemoryAlertRepository(risk_repo, repo)
+
+
+@pytest.fixture
+def deterioration_repo() -> InMemoryDeteriorationRepository:
+    return InMemoryDeteriorationRepository()
+
+
+@pytest.fixture
 def limiter() -> RateLimiter:
     return RateLimiter(max_events=3)
 
@@ -254,6 +340,10 @@ def make_client(
     vitals_repo: InMemoryVitalsRepository,
     risk_repo: InMemoryRiskRepository,
     risk_model: Any,
+    tokens: InMemoryTokenRepository,
+    push: LogPushClient,
+    alerts_repo: InMemoryAlertRepository,
+    deterioration_repo: InMemoryDeteriorationRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -268,6 +358,10 @@ def make_client(
         app.dependency_overrides[get_vitals_repository] = lambda: vitals_repo
         app.dependency_overrides[get_risk_data_repository] = lambda: risk_repo
         app.dependency_overrides[get_risk_model] = lambda: risk_model
+        app.dependency_overrides[get_token_repository] = lambda: tokens
+        app.dependency_overrides[get_notifier] = lambda: Notifier(tokens, push)
+        app.dependency_overrides[get_alert_repository] = lambda: alerts_repo
+        app.dependency_overrides[get_deterioration_repository] = lambda: deterioration_repo
         return TestClient(app)
 
     return _make

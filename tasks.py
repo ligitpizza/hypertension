@@ -61,6 +61,8 @@ RULES_TEST_PROJECT = "demo-careflow-rules"
 # name -> (cron schedule, job path). Keep this list small (docs/10 cost controls).
 SCHEDULER_JOBS: dict[str, tuple[str, str]] = {
     "careflow-heartbeat": ("0 3 * * *", "heartbeat"),
+    # FR-9.6: daily 30-day deterioration scan.
+    "careflow-deterioration": ("0 6 * * *", "deterioration"),
 }
 
 EMULATOR_ENV = {
@@ -240,6 +242,7 @@ def task_deploy_backend() -> None:
             f"JOBS_SERVICE_ACCOUNT={SCHEDULER_SA}",
             f"FIREBASE_PROJECT_ID={PROJECT_ID}",
             "ML_ARTIFACTS_DIR=/srv/ml_artifacts",
+            "FCM_ENABLED=true",
         ]
     )
     cmd = [

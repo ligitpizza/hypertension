@@ -35,3 +35,7 @@ class LogReadingResponse(BaseModel):
     risk: dict[str, Any] | None = None
     riskStatus: str = "ok"  # ok | not_enough_readings | model_unavailable
     readingsUntilRisk: int = 0
+    # FR-9.4 rule-based tips (always end with the not-a-doctor disclaimer).
+    recommendations: list[str] = []
+    # UC9.2/UC9.3: suggest booking an appointment (FR-7.5 lands in Increment 3).
+    bookAppointmentPrompt: bool = False

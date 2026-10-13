@@ -217,3 +217,43 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
     sign-in all worked against the live project.
   - Cloud email remains the console fake (Brevo secret to be added before the final deploy).
 - **Increment 1 complete.**
+
+---
+
+### 2026-10-13 — Increment 2 — Module 9: Risk Assessment & Alerts (backend)
+- FRs implemented: FR-9.1 (threshold alerts), FR-9.2 / FR-9.3 (risk scoring, earlier commits),
+  FR-9.4 (rule-based recommendations), FR-9.5 (risk escalation), FR-9.6 (30-day deterioration),
+  FR-8.4 delivery side (doctor alerts stored for the portal).
+- Flow after `POST /api/v1/vitals`: classify → read the previous risk score → generate the new
+  score (≥3 readings) → `plan_escalation` (pure rules, docs/06 §E/§F) → `Escalator.apply`:
+  - mild: patient push; moderate: patient push + `clinical_alerts` (threshold, high) + doctor
+    push + family push + booking prompt; emergency: same with severity critical, urgent pushes
+    and 999 wording.
+  - overall risk rises to High/Critical (vs previous score, or first score) → `risk_escalation`
+    alert + patient "book an appointment" prompt; Critical also pushes family.
+  - any complication up ≥2 levels → `medication_review` flag (UC9.3 step 4).
+  - doctor alerts of the same type for the same patient are not repeated within 2 h.
+  - response adds `recommendations` (always ends with the not-a-doctor disclaimer),
+    `bookAppointmentPrompt`, and `risk.diagnosed` (conditions already diagnosed at onboarding).
+- Deterioration: `POST /internal/jobs/deterioration`, Cloud Scheduler job
+  `careflow-deterioration` daily 06:00 MYT. Least-squares slope of each complication's
+  probability over 30 days; alert when slope ≥ 0.001/day (≈3 points per 30 days), latest >
+  earliest, ≥3 scores spanning ≥7 days; one alert per patient per 7 days.
+- Push: `PushClient` adapter (FCM via Admin SDK; `LogPushClient` when `FCM_ENABLED=false`),
+  tokens via `POST`/`DELETE /api/v1/devices/fcm-token` into `users/{uid}/fcmTokens` (D-33);
+  tokens FCM rejects are deleted. A push failure never fails the reading.
+- Tests: 30 new pytest (tests/test_alerts.py, rule-by-rule + end-to-end through `/vitals` and
+  the job), 18 new rules tests (firestore.alerts.test.js) → rules 108/108.
+- Deviations / additions vs Chapter 4:
+  - New collection `clinical_alerts` (D-32) and FCM token sub-collection (D-33).
+  - Deterioration thresholds (0.001/day, 3 scores, 7-day span, 7-day dedupe) and the 2-hour
+    alert dedupe are not specified in Ch3/Ch4; chosen as the simplest values that avoid alert
+    spam.
+  - The "escalate Moderate to Emergency if the doctor hasn't responded in 2 h" rule (docs/06 §E)
+    and emergency auto-booking need Module 7 appointments → Increment 3.
+  - Family GPS emergency alerts + Twilio SMS (`emergency_alerts`, FR-14.2) → Increment 3; Module 9
+    sends family a push only.
+  - Doctor alert read access follows `doctorId` on the alert; after a reassignment the old
+    doctor still sees alerts addressed to them (new alerts go to the new doctor).
+- Known limitations: patient app does not yet register FCM tokens or show the new response
+  fields (next step).

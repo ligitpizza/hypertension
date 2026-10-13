@@ -225,7 +225,6 @@ class LoginFailureReason(StrEnum):
     OTHER = "other"
 
 
-
 class ClinicalAlertType(StrEnum):
     """clinical_alerts.type (D-32)."""
 

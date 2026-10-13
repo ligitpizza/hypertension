@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Header, status
 from app.core.audit import SYSTEM_SCHEDULER_USER, AuditLogger, get_audit_logger
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
+from app.services.deterioration import DeteriorationJob, get_deterioration_job
 
 router = APIRouter(prefix="/internal/jobs", tags=["jobs"])
 
@@ -66,6 +67,12 @@ def _heartbeat(audit: AuditLogger) -> dict[str, Any]:
 JOBS: dict[str, Callable[[AuditLogger], dict[str, Any]]] = {
     "heartbeat": _heartbeat,
 }
+
+
+@router.post("/deterioration", dependencies=[Depends(verify_scheduler)])
+def run_deterioration(job: DeteriorationJob = Depends(get_deterioration_job)) -> dict[str, Any]:
+    """FR-9.6: daily 30-day deterioration scan."""
+    return {"job": "deterioration", "status": "ok", **job.run()}
 
 
 @router.post("/{job}", dependencies=[Depends(verify_scheduler)])
