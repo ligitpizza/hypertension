@@ -269,6 +269,9 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   createdAt) index direction was corrected and deployed, and an alerting failure is now logged
   instead of failing `POST /vitals` (the reading was already saved; the app wrongly said it was
   not). Regression test added.
+- Live check (2026-10-13, revision `careflow-api-00005-2lg`, release APK on MTN NX1): device
+  token registered; 150/95 reading produced the patient push on the phone and a
+  `clinical_alerts` document (threshold, high, open) for the manually assigned doctor.
 - Known limitations: the staff web portal does not receive browser pushes (needs a VAPID key
   and service worker); the doctor portal (Module 8) reads `clinical_alerts` live instead. The
   booking prompt is informational until appointments (FR-7.5, Increment 3).
