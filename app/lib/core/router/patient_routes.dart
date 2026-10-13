@@ -1,3 +1,6 @@
+import '../../features/symptom_checker/data/symptom_repository.dart';
+import '../../features/symptom_checker/presentation/symptom_checker_page.dart';
+import '../../features/symptom_checker/presentation/triage_result_page.dart';
 import '../../features/ai_agent/presentation/agent_page.dart';
 import 'package:go_router/go_router.dart';
 
@@ -41,10 +44,12 @@ final List<RouteBase> patientFeatureRoutes = [
     builder: (_, state) => ReadingSavedPage(reading: state.extra! as LoggedReading),
   ),
   GoRoute(path: '/trends', builder: (_, _) => const TrendsPage()),
+  GoRoute(path: '/symptom', builder: (_, _) => const SymptomCheckerPage()),
   GoRoute(
-    path: '/symptom',
-    builder: (_, _) =>
-        const ComingSoonPage(title: 'Symptom checker', note: 'The symptom checker is coming soon.'),
+    path: '/symptom/result/:id',
+    // The result comes from the submission; a stale link goes back to the checker.
+    redirect: (_, state) => state.extra is TriageResult ? null : '/symptom',
+    builder: (_, state) => TriageResultPage(result: state.extra! as TriageResult),
   ),
   GoRoute(
     path: '/chat',

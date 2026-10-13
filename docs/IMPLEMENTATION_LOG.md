@@ -398,3 +398,47 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   request failed stays on screen with "Not sent. Tap to retry".
 - Known limitations: the cloud deploy needs `GEMINI_API_KEY` in Cloud Run; it should come from
   Secret Manager (to be confirmed with Ping before enabling that service).
+
+---
+
+### 2026-10-13 — Increment 2 — FR-14.3: Symptom Checker & Triage
+- FRs implemented: FR-14.3 (UC14.1 incl. E1, UC14.2 incl. E1, UC14.3, UC14.4 steps 1-2;
+  Fig 4.1.1.14).
+- Rule table (`backend/app/services/triage.py`, docs/06 §D, D-10): crisis BP (>=180 / >=120)
+  -> seek emergency care; severe + (red flag or systolic >=160) -> emergency; any red-flag
+  symptom (catalog `isRedFlag`) -> emergency; BP >=140 / >=90 -> contact doctor; moderate
+  severity or any High/Critical complication -> contact doctor; heart rate >120 or <45 ->
+  contact doctor; otherwise monitor at home. First match wins. **Every row and boundary is
+  unit-tested** (179/180, 119/120, 159/160, 139/140, 89/90, 120/121, 44/45; all six red flags;
+  top-down precedence) for Objective 1.
+- `POST /api/v1/triage` (patient only): symptom ids validated against `symptom_catalog`;
+  BP from the reading logged in the same session (`vitalReadingId`, must belong to the
+  patient) or else the latest reading within 24 h (D-36); camera heart rate from the request
+  or that reading; latest risk levels. Saves `triage_outcomes` (patientId, vitalReadingId,
+  symptoms as catalog ids, severity, outcome, generatedAt) and audits TRIAGE. UC14.4: for
+  contact_doctor (severity high) and seek_emergency_care (critical) a `triage` clinical alert
+  goes to the assigned doctor with symptoms, severity, BP, heart rate and overall risk (Module 9
+  escalator: dedupe, push, audit). The response lists missing inputs (UC14.1 E1).
+- App: `/symptom` step 1 "Your vitals now" (camera heart rate via the Module 3 card, skippable;
+  optional BP just measured, validated, saved through `POST /vitals` so it also gets a risk
+  score and alerts, and reused on retry so it is never logged twice); step 2 symptoms grouped
+  by catalog category + Mild/Moderate/Severe (Fig 4.3.8.1). `/symptom/result/:id`
+  (Fig 4.3.8.2): coloured outcome banner, reported symptoms with red flags marked, the reason,
+  BP and heart rate (estimate) used, missing inputs, three numbered immediate actions per
+  outcome, "Your doctor has been notified", **Call 999 Now** (url_launcher opens the dialer),
+  AI agent link, not-a-doctor disclaimer.
+- Rules: `triage_outcomes` readable by patient, assigned doctor, admin; never written by
+  clients. Doctor portal shows triage alerts as "Symptom triage" in Priority alerts.
+- Tests: backend 46 new (tests/test_triage.py); rules 2 new -> 133/133; Flutter 10 new ->
+  239/239.
+- Deviations / additions vs Chapter 4:
+  - D-36 (optional BP in the checker; 24-hour window for "current BP"; heart rate without a BP
+    is used but not stored, since Table 4.2.3.5 has no heart-rate field).
+  - Mockup "Call 911" is 999 (CLAUDE.md). "Share Vitals with ER" is not built (no ER
+    integration in scope).
+  - UC14.4 step 3 (emergency appointment auto-booking, family alert, doctor reassignment)
+    depends on Module 7 and FR-14.2 (Increment 3).
+  - The result screen is reached from the submission; opening `/symptom/result/:id` directly
+    returns to the checker (no stored "reason" to redisplay).
+- Known limitations: the red-flag list comes from the seeded catalog; changing it needs a
+  re-seed (local) or a console edit (live).

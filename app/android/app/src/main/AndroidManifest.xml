@@ -49,5 +49,10 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- FR-14.3 'Call 999 Now' opens the dialer via url_launcher. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
     </queries>
 </manifest>

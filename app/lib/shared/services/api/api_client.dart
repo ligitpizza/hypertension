@@ -160,6 +160,22 @@ class ApiClient {
     'acknowledgeInteractions': acknowledgeInteractions,
   });
 
+  // ---- FR-14.3 Symptom checker (D-36) ----
+
+  /// UC14.1/UC14.3: symptom ids from symptom_catalog, severity, optional camera heart
+  /// rate and the id of a reading logged in the same session.
+  Future<Map<String, dynamic>> submitTriage({
+    required List<String> symptoms,
+    required String severity,
+    int? heartRate,
+    String? vitalReadingId,
+  }) => _post('/triage', {
+    'symptoms': symptoms,
+    'severity': severity,
+    'heartRate': ?heartRate,
+    'vitalReadingId': ?vitalReadingId,
+  });
+
   // ---- FR-14.1 AI Health Agent (D-34) ----
 
   /// UC2.6: {reply, emergency, fallback}.
