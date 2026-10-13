@@ -240,20 +240,41 @@ class _VitalsAndRisk extends ConsumerWidget {
                     if (s!.scores[c] != null)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(child: Text(complicationNames[c]!)),
-                            Text(riskPercent(s.scores[c]!.value)),
-                            const SizedBox(width: 8),
-                            CircleAvatar(radius: 5, backgroundColor: riskColor(s.scores[c]!.level)),
+                            Row(
+                              children: [
+                                Expanded(child: Text(complicationNames[c]!)),
+                                Text(riskPercent(s.scores[c]!.value)),
+                                const SizedBox(width: 8),
+                                CircleAvatar(
+                                  radius: 5,
+                                  backgroundColor: riskColor(s.scores[c]!.level),
+                                ),
+                              ],
+                            ),
+                            // D-40 contributing factors (Fig 4.3.12.4).
+                            if (s.scores[c]!.factors.isNotEmpty)
+                              Text(
+                                'Raised by: ${s.scores[c]!.factors.map(factorLabel).join(', ')}',
+                                key: Key('factors-${c.value}'),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
                           ],
                         ),
                       ),
                   const SizedBox(height: 4),
+                  if (s!.scores.values.any((x) => x.factors.isNotEmpty))
+                    Text(
+                      '"Raised by" lists the inputs that most increased each estimate for this '
+                      'patient (model associations, not proven causes).',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Scored ${formatDate(s!.generatedAt)} · ${modelLabel(s.modelUsed)}',
+                      'Scored ${formatDate(s.generatedAt)} · ${modelLabel(s.modelUsed)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),

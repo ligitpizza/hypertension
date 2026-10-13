@@ -15,6 +15,9 @@ abstract interface class DashboardRepository {
   /// The patient's medication list (today's plan, UC2.2).
   Stream<List<Medication>> medications(String patientId);
 
+  /// The doctor's care plan for this patient, or null if none yet (Module 8, UC10.2 view).
+  Stream<CarePlan?> carePlan(String patientId);
+
   /// Upcoming appointments from [from], soonest first (UC2.3).
   Stream<List<Appointment>> upcomingAppointments(String patientId, DateTime from);
 }
@@ -51,6 +54,13 @@ class FirestoreDashboardRepository implements DashboardRepository {
       .where('patientId', isEqualTo: patientId)
       .snapshots()
       .map((s) => [for (final d in s.docs) Medication.fromFirestore(d.id, d.data())]);
+
+  @override
+  Stream<CarePlan?> carePlan(String patientId) => _db
+      .collection(Collections.carePlans)
+      .doc(patientId)
+      .snapshots()
+      .map((s) => s.exists ? CarePlan.fromFirestore(s.data()!) : null);
 
   @override
   Stream<List<Appointment>> upcomingAppointments(String patientId, DateTime from) => _db

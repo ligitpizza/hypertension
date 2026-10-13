@@ -43,7 +43,11 @@ RiskScore risk(String p, RiskLevel level) => RiskScore(
   scores: {
     for (final c in Complication.values)
       c: ComplicationScore(value: c == Complication.stroke ? 0.31 : 0.002, level: RiskLevel.low),
-    Complication.stroke: ComplicationScore(value: 0.31, level: level),
+    Complication.stroke: ComplicationScore(
+      value: 0.31,
+      level: level,
+      factors: const ['systolic', 'age', 'smoking'],
+    ),
   },
   generatedAt: now,
   modelUsed: 'XGBoost v1',
@@ -61,6 +65,9 @@ class FakePatientData implements DashboardRepository {
 
   @override
   Stream<RiskScore?> latestRiskScore(String patientId) => Stream.value(risks[patientId]);
+
+  @override
+  Stream<CarePlan?> carePlan(String patientId) => Stream.value(null);
 
   @override
   Stream<List<Medication>> medications(String patientId) =>
@@ -307,6 +314,10 @@ void main() {
       expect(find.text('31%'), findsOneWidget);
       expect(find.text('<1%'), findsNWidgets(4));
       expect(find.text('Clinical notes'), findsOneWidget);
+      // D-40 contributing factors (Fig 4.3.12.4).
+      expect(find.text('Raised by: Systolic BP, Age, Smoking'), findsOneWidget);
+      expect(find.byKey(const Key('factors-cad')), findsNothing);
+      expect(find.textContaining('not proven causes'), findsOneWidget);
     });
 
     tallTest('UC8.3 E1 a patient without history shows empty states', (t) async {

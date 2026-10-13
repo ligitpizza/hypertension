@@ -38,10 +38,13 @@ class VitalReading {
 
 /// One complication entry in `risk_scores.scores` (D-03).
 class ComplicationScore {
-  const ComplicationScore({required this.value, required this.level});
+  const ComplicationScore({required this.value, required this.level, this.factors = const []});
 
   final double value;
   final RiskLevel level;
+
+  /// D-40: model inputs that most raised this estimate, largest first.
+  final List<String> factors;
 }
 
 /// `risk_scores` (docs/04 Table 4.2.3.4).
@@ -75,6 +78,7 @@ class RiskScore {
       scores[c] = ComplicationScore(
         value: (m['value'] as num).toDouble(),
         level: RiskLevel.fromValue(m['level'] as String),
+        factors: [for (final f in m['factors'] as List<dynamic>? ?? const []) '$f'],
       );
     }
     return RiskScore(
@@ -141,4 +145,16 @@ class Appointment {
     dateTime: _time(d['dateTime']),
     status: AppointmentStatus.fromValue(d['status'] as String),
   );
+}
+
+/// `care_plans` (Table 4.2.3.12): one living plan per patient, written by the doctor
+/// (Module 8) and read by the patient on the dashboard.
+class CarePlan {
+  const CarePlan({required this.content, required this.updatedAt});
+
+  final String content;
+  final DateTime updatedAt;
+
+  factory CarePlan.fromFirestore(Map<String, dynamic> d) =>
+      CarePlan(content: d['content'] as String? ?? '', updatedAt: _time(d['updatedAt']));
 }

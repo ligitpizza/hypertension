@@ -36,6 +36,12 @@ final medicationsProvider = StreamProvider<List<Medication>>((ref) {
   return _forUser(ref, repo.medications, const <Medication>[]);
 }, retry: _noRetry);
 
+/// The signed-in patient's care plan from their doctor (Module 2 "active care plan").
+final carePlanProvider = StreamProvider<CarePlan?>((ref) {
+  final repo = ref.watch(dashboardRepositoryProvider);
+  return _forUser<CarePlan?>(ref, repo.carePlan, null);
+}, retry: _noRetry);
+
 final upcomingAppointmentsProvider = StreamProvider<List<Appointment>>((ref) {
   final repo = ref.watch(dashboardRepositoryProvider);
   final now = ref.watch(nowProvider)();

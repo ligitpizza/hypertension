@@ -560,4 +560,23 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   3. Risk before/after a new medication (Module 5). Until Module 5, `bp_medication` and
      `medication_count` are 0 for every patient.
   4. "What if" estimates: not in the report; only with Ping's approval.
+- Cross-check of Increments 1-2 against the module lists (Ping, 2026-10-14) found two gaps
+  buildable now; both done:
+  1. **Contributing factors (D-40)**, Fig 4.3.12.4 / UC2.6 A1 / Feature 1: per patient and
+     complication, XGBoost SHAP contributions (`pred_contribs`) averaged over the 5
+     calibration folds; the top 3 inputs that *raised* the estimate (> 0.02 log-odds) are
+     stored as `factors` in each `risk_scores.scores` entry (Needs Ch4 update). Inputs that
+     lower an estimate for population reasons (e.g. medication count) are not shown. Doctor
+     patient detail: "Raised by: Systolic BP, Age, Smoking" under each complication with a
+     "model associations, not proven causes" note; the AI agent context lists them in plain
+     language. Example with the real models (68-year-old smoker, 168/98): stroke = smoking,
+     age, systolic; CKD = systolic, age, hypertension; T2D = family history, systolic, age.
+     Older scores without `factors` still load.
+  2. **Active care plan on the patient dashboard** (Module 2 list): read-only "My care plan"
+     card from `care_plans/{uid}` (written by the doctor in Module 8), with Read more for long
+     plans and an empty state. The full shared care-plan view (UC10.2) is still Module 10.
+  - Remaining items wait for Increment 3 modules: profile editing (M12), medication and
+    appointment data (M5/M7), delivery preferences in the doctor portal (M13), family linking
+    with Call Emergency Contact / Alert Family (FR-14.2).
+  - Tests: backend factors (unit + real-model), agent context; Flutter 259/259.
 

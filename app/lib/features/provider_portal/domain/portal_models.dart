@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/constants/enums.dart';
 import '../../../shared/models/health_models.dart';
 
+export '../../../shared/models/health_models.dart' show CarePlan;
+
 DateTime _time(Object? v) =>
     v is Timestamp ? v.toDate() : (v is DateTime ? v : DateTime.fromMillisecondsSinceEpoch(0));
 
@@ -116,17 +118,6 @@ class Prescription {
     isRecurring: d['isRecurring'] as bool? ?? false,
     issuedAt: _time(d['issuedAt']),
   );
-}
-
-/// `care_plans` (Table 4.2.3.12): one living plan per patient.
-class CarePlan {
-  const CarePlan({required this.content, required this.updatedAt});
-
-  final String content;
-  final DateTime updatedAt;
-
-  factory CarePlan.fromFirestore(Map<String, dynamic> d) =>
-      CarePlan(content: d['content'] as String? ?? '', updatedAt: _time(d['updatedAt']));
 }
 
 /// A drug interaction returned with a DRUG_INTERACTION error (UC8.4 E1).

@@ -24,6 +24,10 @@ class FakeDashboardRepository implements DashboardRepository {
   Stream<RiskScore?> risk = Stream.value(null);
   Stream<List<Medication>> meds = Stream.value(const []);
   Stream<List<Appointment>> appts = Stream.value(const []);
+  Stream<CarePlan?> plan = Stream.value(null);
+
+  @override
+  Stream<CarePlan?> carePlan(String patientId) => plan;
 
   @override
   Stream<List<VitalReading>> recentReadings(String patientId, {int limit = 20}) => readings;
@@ -292,6 +296,29 @@ void main() {
       await t.pumpWidget(app(repo));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('dashboard-emergency')), findsNothing);
+    });
+  });
+
+  group('Module 2 active care plan card', () {
+    tallTest('shows an empty state before the doctor writes one', (t) async {
+      await t.pumpWidget(app(FakeDashboardRepository()));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('care-plan-empty')), findsOneWidget);
+    });
+
+    tallTest("shows the doctor's plan, with Read more for long plans", (t) async {
+      final long = List.generate(8, (i) => 'Step ${i + 1}: keep going').join('\n');
+      final repo = FakeDashboardRepository()
+        ..plan = Stream.value(
+          CarePlan(content: long, updatedAt: now.subtract(const Duration(hours: 3))),
+        );
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('care-plan-text')), findsOneWidget);
+      expect(find.textContaining('From your doctor · updated 3'), findsOneWidget);
+      await t.tap(find.byKey(const Key('care-plan-more')));
+      await t.pump();
+      expect(find.text('Show less'), findsOneWidget);
     });
   });
 }

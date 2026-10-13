@@ -23,3 +23,26 @@ String riskPercent(double value) {
   final pct = (value * 100).round();
   return pct < 1 ? '<1%' : '$pct%';
 }
+
+/// D-40: short labels for model inputs shown as contributing factors.
+const factorLabels = {
+  'age': 'Age',
+  'female': 'Sex',
+  'systolic': 'Systolic BP',
+  'diastolic': 'Diastolic BP',
+  'heart_rate': 'Heart rate',
+  'bmi': 'BMI',
+  'smoking': 'Smoking',
+  'family_history': 'Family history',
+  'hypertension': 'Hypertension',
+  'high_cholesterol': 'High cholesterol',
+  'bp_medication': 'BP medication',
+  'medication_count': 'Number of medicines',
+  'stroke': 'Previous stroke',
+  'cad': 'Coronary artery disease',
+  'heartFailure': 'Heart failure',
+  'ckd': 'Kidney disease',
+  't2d': 'Diabetes',
+};
+
+String factorLabel(String key) => factorLabels[key] ?? key;

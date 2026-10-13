@@ -29,7 +29,8 @@ class DashboardPage extends ConsumerWidget {
             ..invalidate(latestRiskProvider)
             ..invalidate(medicationsProvider)
             ..invalidate(upcomingAppointmentsProvider)
-            ..invalidate(latestTriageProvider);
+            ..invalidate(latestTriageProvider)
+            ..invalidate(carePlanProvider);
         },
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -48,6 +49,8 @@ class DashboardPage extends ConsumerWidget {
             const _LatestBpCard(),
             const SizedBox(height: 16),
             const _RiskCard(),
+            const SizedBox(height: 16),
+            const _CarePlanCard(),
             const SizedBox(height: 24),
             Text('Quick Actions', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
@@ -470,6 +473,78 @@ class _EmergencyCallCard extends ConsumerWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Module 2 "active care plan": the doctor's plan (written in Module 8), read-only here.
+class _CarePlanCard extends ConsumerStatefulWidget {
+  const _CarePlanCard();
+
+  @override
+  ConsumerState<_CarePlanCard> createState() => _CarePlanCardState();
+}
+
+class _CarePlanCardState extends ConsumerState<_CarePlanCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = ref.watch(carePlanProvider);
+    return Card(
+      key: const Key('card-care-plan'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.assignment_outlined),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('My care plan', style: Theme.of(context).textTheme.titleMedium),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            plan.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (_, _) => const Text('Could not load your care plan. Pull down to retry.'),
+              data: (p) {
+                if (p == null || p.content.trim().isEmpty) {
+                  return const Text(
+                    'Your doctor has not written a care plan yet.',
+                    key: Key('care-plan-empty'),
+                  );
+                }
+                final long = p.content.length > 220 || '\n'.allMatches(p.content).length > 4;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p.content,
+                      key: const Key('care-plan-text'),
+                      maxLines: _expanded ? null : 4,
+                      overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                    ),
+                    if (long)
+                      TextButton(
+                        key: const Key('care-plan-more'),
+                        onPressed: () => setState(() => _expanded = !_expanded),
+                        child: Text(_expanded ? 'Show less' : 'Read more'),
+                      ),
+                    Text(
+                      'From your doctor · updated ${timeAgo(p.updatedAt, ref.watch(nowProvider)())}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
