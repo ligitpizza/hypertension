@@ -23,6 +23,7 @@ from app.services.identity import EmailAlreadyRegisteredError, get_identity_prov
 from app.services.notifications import Notifier, get_notifier, get_token_repository
 from app.services.provider import get_provider_repository
 from app.services.risk import get_risk_data_repository
+from app.services.triage import Symptom, get_triage_repository
 from app.services.users import get_user_repository
 from app.services.vitals import get_vitals_repository
 
@@ -327,6 +328,43 @@ class InMemoryAgentDataRepository:
         return f"msg{len(self.messages)}"
 
 
+class InMemoryTriageRepository:
+    """Seeded symptom catalog + the shared in-memory readings and risk scores."""
+
+    def __init__(self, vitals: "InMemoryVitalsRepository", risk: "InMemoryRiskRepository") -> None:
+        import json
+        from pathlib import Path
+
+        seed = Path(__file__).resolve().parents[2] / "firebase" / "seed" / "symptom_catalog.json"
+        self.catalog = {
+            s["id"]: Symptom(s["id"], s["name"], s["isRedFlag"])
+            for s in json.loads(seed.read_text(encoding="utf-8"))["symptoms"]
+        }
+        self._vitals = vitals
+        self._risk = risk
+        self.saved: list[dict[str, Any]] = []
+
+    def symptoms(self, ids: list[str]) -> dict[str, Symptom]:
+        return {i: self.catalog[i] for i in ids if i in self.catalog}
+
+    def reading(self, reading_id: str) -> dict[str, Any] | None:
+        return self._vitals.readings.get(reading_id)
+
+    def latest_reading(self, uid: str) -> tuple[str, dict[str, Any]] | None:
+        mine = [(k, r) for k, r in self._vitals.readings.items() if r["patientId"] == uid]
+        return mine[-1] if mine else None
+
+    def latest_risk_levels(self, uid: str) -> list[RiskLevel]:
+        mine = [d for d in self._risk.saved if d["patientId"] == uid]
+        if not mine:
+            return []
+        return [RiskLevel(v["level"]) for v in mine[-1]["scores"].values()]
+
+    def save_outcome(self, data: dict[str, Any]) -> str:
+        self.saved.append(data)
+        return f"triage{len(self.saved)}"
+
+
 class FailingEmailClient:
     def send(self, message: EmailMessage) -> bool:
         raise RuntimeError("provider down")
@@ -445,6 +483,13 @@ def agent_limiter() -> RateLimiter:
 
 
 @pytest.fixture
+def triage_repo(
+    vitals_repo: InMemoryVitalsRepository, risk_repo: InMemoryRiskRepository
+) -> InMemoryTriageRepository:
+    return InMemoryTriageRepository(vitals_repo, risk_repo)
+
+
+@pytest.fixture
 def limiter() -> RateLimiter:
     return RateLimiter(max_events=3)
 
@@ -467,6 +512,7 @@ def make_client(
     agent_repo: InMemoryAgentDataRepository,
     llm: FakeLlmClient,
     agent_limiter: RateLimiter,
+    triage_repo: InMemoryTriageRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -489,6 +535,7 @@ def make_client(
         app.dependency_overrides[get_agent_data_repository] = lambda: agent_repo
         app.dependency_overrides[get_llm_client] = lambda: llm
         app.dependency_overrides[get_agent_limiter] = lambda: agent_limiter
+        app.dependency_overrides[get_triage_repository] = lambda: triage_repo
         return TestClient(app)
 
     return _make

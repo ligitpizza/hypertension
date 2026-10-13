@@ -120,6 +120,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---- triage_outcomes (FR-14.3, Table 4.2.3.5) ----
+    // Written by FastAPI (rule table + doctor notification); patient, assigned doctor, admin read.
+    match /triage_outcomes/{outcomeId} {
+      allow read: if canReadPatientData(resource.data.patientId);
+      allow write: if false;
+    }
+
     // ---- symptom_catalog: static lookup, read by any signed-in user ----
     match /symptom_catalog/{symptomId} {
       allow read: if signedIn();

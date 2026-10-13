@@ -47,3 +47,21 @@ describe('FR-14.1 agent_messages', () => {
       { patientId: P, role: 'agent', text: 'forged', sentAt: new Date() }));
   });
 });
+
+describe('FR-14.3 triage_outcomes', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'triage_outcomes/mine'),
+        { patientId: P, symptoms: ['headache'], severity: 'mild', outcome: 'monitor_at_home', generatedAt: new Date() });
+    });
+  });
+  test('patient and assigned doctor read; family cannot', async () => {
+    await assertSucceeds(getDoc(doc(patient(), 'triage_outcomes/mine')));
+    await assertSucceeds(getDoc(doc(as(env, 'doctor', 'u-doctor').firestore(), 'triage_outcomes/mine')));
+    await assertFails(getDoc(doc(as(env, 'family_member').firestore(), 'triage_outcomes/mine')));
+  });
+  test('outcomes cannot be written from the app (no forged results)', async () => {
+    await assertFails(addDoc(collection(patient(), 'triage_outcomes'),
+      { patientId: P, symptoms: [], severity: 'mild', outcome: 'monitor_at_home' }));
+  });
+});
