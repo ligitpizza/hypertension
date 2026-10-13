@@ -208,9 +208,19 @@ class InMemoryAlertRepository:
             if u.get("role") == UserRole.FAMILY_MEMBER.value and u.get("patientId") == uid
         ]
 
-    def recent_alert_exists(self, uid: str, alert_type: ClinicalAlertType, since: Any) -> bool:
+    def recent_alert_exists(
+        self,
+        uid: str,
+        alert_type: ClinicalAlertType,
+        since: Any,
+        at_least: RiskLevel = RiskLevel.LOW,
+    ) -> bool:
+        order = list(RiskLevel)
         return any(
-            a["patientId"] == uid and a["type"] == alert_type.value and a["createdAt"] >= since
+            a["patientId"] == uid
+            and a["type"] == alert_type.value
+            and a["createdAt"] >= since
+            and order.index(RiskLevel(a["severity"])) >= order.index(at_least)
             for a in self.alerts
         )
 

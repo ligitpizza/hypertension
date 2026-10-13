@@ -277,6 +277,21 @@ def test_doctor_alert_is_deduplicated_within_two_hours(
     assert [a["type"] for a in alerts_repo.alerts] == ["threshold"]
 
 
+def test_emergency_is_not_hidden_by_an_earlier_milder_alert(
+    client: TestClient,
+    repo: InMemoryUserRepository,
+    tokens: InMemoryTokenRepository,
+    alerts_repo: InMemoryAlertRepository,
+) -> None:
+    """Found in the live portal check: stage 2 then crisis within 2 h must alert twice."""
+    _seed_patient(repo, tokens)
+    _log(client, 150, 95)
+    _log(client, 186, 122)
+    _log(client, 188, 124)  # a second emergency within the window is a duplicate
+    threshold = [a["severity"] for a in alerts_repo.alerts if a["type"] == "threshold"]
+    assert threshold == ["high", "critical"]
+
+
 def test_unassigned_patient_still_records_the_alert(
     client: TestClient,
     repo: InMemoryUserRepository,
@@ -388,7 +403,13 @@ def test_fr_9_6_job_alerts_doctor_once_per_week(
 
 
 class BrokenAlertRepository(InMemoryAlertRepository):
-    def recent_alert_exists(self, uid: str, alert_type: ClinicalAlertType, since: Any) -> bool:
+    def recent_alert_exists(
+        self,
+        uid: str,
+        alert_type: ClinicalAlertType,
+        since: Any,
+        at_least: RiskLevel = RiskLevel.LOW,
+    ) -> bool:
         raise RuntimeError("The query requires an index.")
 
 

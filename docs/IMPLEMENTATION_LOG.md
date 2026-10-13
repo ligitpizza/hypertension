@@ -325,5 +325,11 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   - Doctor Schedule (4.3.12.3) and Messaging are Modules 7 and 10 (Increment 3).
   - Composite indexes added for `clinical_notes` (patientId, createdAt desc) and
     `prescriptions` (patientId, issuedAt desc); not in the docs/04 index table.
+- Local portal check (emulators + local API, demo doctor): stage 2 then crisis readings made
+  the alerts appear live without refresh; the critical banner, Review patient, risk breakdown
+  with the real models and the BP trend all rendered. This check found a Module 9 bug: the
+  2-hour alert dedupe matched on type only, so a crisis alert was suppressed by an earlier
+  stage 2 alert. Dedupe now requires a recent alert of the same type with equal or higher
+  severity (regression test added). The risk "model used" label now lists each model once.
 - Known limitations: the patient list loads each patient's latest reading and risk with one
   listener per patient, fine for a single doctor's caseload but not for hundreds of patients.

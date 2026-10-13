@@ -130,4 +130,12 @@ void main() {
   test('note templates cover the three Fig 4.3.12.5 templates', () {
     expect(noteTemplates.keys, ['SOAP Note', 'Hypertension F/U', 'Medication Adjustment']);
   });
+
+  test('model label shows each distinct model once', () {
+    expect(
+      modelLabel('stroke:XGBoost v1; cad:XGBoost v1; ckd:RandomForest v1'),
+      'XGBoost v1, RandomForest v1',
+    );
+    expect(modelLabel('XGBoost v1'), 'XGBoost v1');
+  });
 }

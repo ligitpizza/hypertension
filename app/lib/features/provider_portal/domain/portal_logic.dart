@@ -84,3 +84,13 @@ const noteTemplates = {
       'Monitoring (BP, potassium, kidney function): \n'
       'Review date: ',
 };
+
+/// `risk_scores.modelUsed` lists the model per complication ("stroke:XGBoost v1; cad:...");
+/// show each distinct model once, e.g. "XGBoost v1".
+String modelLabel(String raw) {
+  final names = <String>{
+    for (final part in raw.split(';'))
+      if (part.trim().isNotEmpty) part.contains(':') ? part.split(':').last.trim() : part.trim(),
+  };
+  return names.join(', ');
+}

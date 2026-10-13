@@ -251,7 +251,7 @@ class _VitalsAndRisk extends ConsumerWidget {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Scored ${formatDate(s!.generatedAt)} · ${s.modelUsed}',
+                      'Scored ${formatDate(s!.generatedAt)} · ${modelLabel(s.modelUsed)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),

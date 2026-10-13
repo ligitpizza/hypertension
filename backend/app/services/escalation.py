@@ -39,7 +39,8 @@ from app.ml.risk_inputs import CONDITION_COLUMNS
 from app.ml.risk_model import RiskPrediction
 from app.services.notifications import Notifier, get_notifier
 
-# Do not repeat a doctor alert of the same type for the same patient within this window.
+# Do not repeat a doctor alert of the same type and same or higher severity for the same
+# patient within this window.
 DEDUPE_WINDOW = timedelta(hours=2)
 _ORDER = list(RiskLevel)
 
@@ -191,8 +192,14 @@ class AlertRepository(Protocol):
     def family_member_ids(self, uid: str) -> list[str]: ...
 
     def recent_alert_exists(
-        self, uid: str, alert_type: ClinicalAlertType, since: datetime
-    ) -> bool: ...
+        self,
+        uid: str,
+        alert_type: ClinicalAlertType,
+        since: datetime,
+        at_least: RiskLevel = RiskLevel.LOW,
+    ) -> bool:
+        """An alert of this type and at least this severity was raised since `since`."""
+        ...
 
     def create_alert(self, data: dict[str, Any]) -> str: ...
 
@@ -222,15 +229,23 @@ class FirestoreAlertRepository:
         )
         return [d.id for d in query.stream()]
 
-    def recent_alert_exists(self, uid: str, alert_type: ClinicalAlertType, since: datetime) -> bool:
+    def recent_alert_exists(
+        self,
+        uid: str,
+        alert_type: ClinicalAlertType,
+        since: datetime,
+        at_least: RiskLevel = RiskLevel.LOW,
+    ) -> bool:
         query = (
             self._db.collection(Collection.CLINICAL_ALERTS.value)
             .where(filter=firestore.FieldFilter("patientId", "==", uid))
             .where(filter=firestore.FieldFilter("type", "==", alert_type.value))
             .where(filter=firestore.FieldFilter("createdAt", ">=", since))
-            .limit(1)
         )
-        return any(True for _ in query.stream())
+        return any(
+            _level_index(RiskLevel(d.get("severity"))) >= _level_index(at_least)
+            for d in query.stream()
+        )
 
     def create_alert(self, data: dict[str, Any]) -> str:
         _, ref = self._db.collection(Collection.CLINICAL_ALERTS.value).add(
@@ -263,7 +278,11 @@ class Escalator:
         if plan.patient_push:
             self._notifier.notify(patient_id, plan.patient_push)
         for alert in plan.doctor_alerts:
-            if self._alerts.recent_alert_exists(patient_id, alert.type, now - DEDUPE_WINDOW):
+            # A milder earlier alert must never hide a more severe one (e.g. emergency
+            # after a stage 2 alert); only an equal or more severe one is a duplicate.
+            if self._alerts.recent_alert_exists(
+                patient_id, alert.type, now - DEDUPE_WINDOW, at_least=alert.severity
+            ):
                 continue
             data: dict[str, Any] = {
                 "patientId": patient_id,
