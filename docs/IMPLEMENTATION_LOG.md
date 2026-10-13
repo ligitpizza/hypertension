@@ -389,5 +389,12 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   answer. Gemini returned a 503 and a timeout at a busy moment, so the adapter now retries once
   (429/500/503/timeouts), Gemini 3 models use a low thinking level, each attempt times out at
   12 s and the app waits up to 35 s for agent calls (other calls keep 15 s).
+- Live test fix: the first live chat returned 500 because the history query (`agent_messages`
+  patientId + sentAt descending) had no composite index (the emulator does not enforce
+  indexes; second time this class of bug appeared). Index added; every backend and app query
+  was then checked against `firestore.indexes.json` (no other gaps). The agent now degrades
+  instead of failing: a failing context section reads "temporarily unavailable" and a failing
+  history read answers without history (both logged as errors). In the app, a message whose
+  request failed stays on screen with "Not sent. Tap to retry".
 - Known limitations: the cloud deploy needs `GEMINI_API_KEY` in Cloud Run; it should come from
   Secret Manager (to be confirmed with Ping before enabling that service).

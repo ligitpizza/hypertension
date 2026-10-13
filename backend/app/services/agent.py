@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -20,6 +21,8 @@ from app.services.agent_context import HISTORY_TURNS, AgentDataRepository, build
 from app.services.bp import classify
 from app.services.escalation import DoctorAlert, EscalationPlan, Escalator
 from app.services.recommendations import DISCLAIMER
+
+log = logging.getLogger("careflow.agent")
 
 SYSTEM_PROMPT = """You are the CareFlow Health Assistant, helping an adult patient in Malaysia
 manage high blood pressure. You are not a doctor.
@@ -133,7 +136,12 @@ class HealthAgent:
 
     def chat(self, uid: str, message: str, now: datetime | None = None) -> ChatResult:
         now = now or datetime.now(UTC)
-        history = self._repo.recent_turns(uid, HISTORY_TURNS)
+        try:
+            history = self._repo.recent_turns(uid, HISTORY_TURNS)
+        except Exception:
+            # Answer without earlier turns rather than lose the patient's message.
+            log.exception("Agent history read failed")
+            history = []
         self._repo.add_message(uid, "patient", message)
 
         kind = detect_emergency(message)

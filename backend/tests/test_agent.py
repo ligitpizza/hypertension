@@ -375,3 +375,26 @@ def test_gemini_does_not_retry_a_bad_request(monkeypatch: pytest.MonkeyPatch) ->
     with pytest.raises(LlmError):
         client.generate("sys", [], "hi")
     assert len(calls) == 1
+
+
+# ---------- resilience (live check: a missing index made /agent/chat return 500) ----------
+
+
+def test_chat_still_answers_when_history_or_a_context_source_fails(
+    client: TestClient,
+    llm: FakeLlmClient,
+    agent_repo: InMemoryAgentDataRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def broken(*_: Any, **__: Any) -> Any:
+        raise RuntimeError("The query requires an index.")
+
+    monkeypatch.setattr(agent_repo, "recent_turns", broken)
+    monkeypatch.setattr(agent_repo, "latest_risk", broken)
+    res = client.post("/api/v1/agent/chat", json={"message": "hi"}, headers=PATIENT)
+    assert res.status_code == 200
+    assert res.json()["reply"] == "Your last reading was fine."
+    system, history, _ = llm.calls[0]
+    assert history == []
+    assert "RISK: temporarily unavailable." in system
+    assert "BLOOD PRESSURE" in system  # other sections still present

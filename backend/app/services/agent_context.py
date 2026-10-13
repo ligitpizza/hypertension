@@ -8,6 +8,7 @@ agent a new kind of data, add a section function to SECTIONS.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
@@ -20,6 +21,8 @@ from app.core.firebase import get_firestore
 from app.integrations.gemini import Turn
 from app.ml.risk_inputs import existing_conditions, profile_json
 from app.services.bp import classify
+
+log = logging.getLogger("careflow.agent")
 
 MYT = timezone(timedelta(hours=8), "MYT")  # Malaysia has no daylight saving
 READINGS_WINDOW = timedelta(days=7)
@@ -275,6 +278,16 @@ SECTIONS: list[Callable[[Ctx], str]] = [
 ]
 
 
+def _safe(section: Callable[[Ctx], str], ctx: Ctx) -> str:
+    """One failing source (e.g. a missing index) must not break the whole answer."""
+    try:
+        return section(ctx)
+    except Exception:
+        log.exception("Agent context section %s failed", section.__name__)
+        name = section.__name__.removeprefix("section_").upper()
+        return f"{name}: temporarily unavailable."
+
+
 def build_context(repo: AgentDataRepository, uid: str, now: datetime) -> str:
     ctx = Ctx(repo, uid, now)
-    return f"Current time: {_when(now)}\n\n" + "\n\n".join(s(ctx) for s in SECTIONS)
+    return f"Current time: {_when(now)}\n\n" + "\n\n".join(_safe(s, ctx) for s in SECTIONS)

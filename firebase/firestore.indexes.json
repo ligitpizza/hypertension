@@ -1,5 +1,7 @@
 {
   "indexes": [
+    { "collectionGroup": "agent_messages", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "sentAt", "order": "DESCENDING" } ] },
     { "collectionGroup": "clinical_notes", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
     { "collectionGroup": "prescriptions", "queryScope": "COLLECTION", "fields": [

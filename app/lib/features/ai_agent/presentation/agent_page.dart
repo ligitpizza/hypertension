@@ -28,6 +28,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   String? _pending; // patient message shown while waiting for the reply
   bool _emergency = false;
   String? _notice; // fallback / error text, not saved to the history
+  String? _unsent; // the patient's message when the request failed
 
   @override
   void dispose() {
@@ -55,6 +56,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     setState(() {
       _pending = text;
       _notice = null;
+      _unsent = null;
     });
     _scrollToEnd();
     try {
@@ -66,12 +68,13 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(
-        () => _notice = e.code == 'TOO_MANY_REQUESTS'
+      setState(() {
+        _unsent = text; // keep it on screen with a retry button
+        _notice = e.code == 'TOO_MANY_REQUESTS'
             ? e.message
             : 'Sorry, I can\'t answer right now. If you need advice, contact your doctor or '
-                  'care team directly. In an emergency, call 999.',
-      );
+                  'care team directly. In an emergency, call 999.';
+      });
     } finally {
       if (mounted) setState(() => _pending = null);
       _scrollToEnd();
@@ -120,6 +123,18 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                   for (final m in list) _Bubble(text: m.text, fromPatient: m.fromPatient),
                   if (showPending) _Bubble(text: _pending!, fromPatient: true),
                   if (_pending != null) const _Typing(),
+                  if (_unsent != null) ...[
+                    _Bubble(text: _unsent!, fromPatient: true),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        key: const Key('agent-retry'),
+                        onPressed: () => _send(_unsent),
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Not sent. Tap to retry'),
+                      ),
+                    ),
+                  ],
                   if (_notice != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),

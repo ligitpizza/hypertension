@@ -129,6 +129,14 @@ void main() {
       await t.tap(find.byKey(const Key('agent-send')));
       await t.pumpAndSettle();
       expect(find.textContaining('contact your doctor or care team'), findsOneWidget);
+      // The message is kept with a retry button instead of disappearing.
+      expect(find.text('hi'), findsOneWidget);
+      repo.sendError = null;
+      await t.tap(find.byKey(const Key('agent-retry')));
+      await t.pumpAndSettle();
+      expect(repo.sent, ['hi', 'hi']);
+      expect(find.byKey(const Key('agent-retry')), findsNothing);
+      expect(find.text('Your last reading was 128/82.'), findsOneWidget);
     });
 
     tallTest('UC-14.1.3 emergency reply shows the 999 card', (t) async {
