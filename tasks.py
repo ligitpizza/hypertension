@@ -23,6 +23,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
   deploy-web              Build the staff portal and deploy Firebase Hosting
   deploy-rules            Firestore rules + indexes and Storage rules
   create-scheduler-jobs   Idempotent Cloud Scheduler jobs calling /internal/jobs/*
+  set-gemini-secret       One-time (and when the key changes): store GEMINI_API_KEY from
+                          backend/.env in Secret Manager for the live AI agent
   build-apk               Release APKs for the patient and family flavors
   phone-live              Build release apps and install the live-cloud patient app on
                           the phone (or double-click phone-live.cmd)
@@ -57,6 +59,8 @@ SCHEDULER_SA = f"{SCHEDULER_SA_NAME}@{PROJECT_ID}.iam.gserviceaccount.com"
 # Fixed OIDC audience checked by backend/app/routers/jobs.py (no URL chicken-and-egg).
 JOBS_AUDIENCE = "careflow-internal-jobs"
 TIMEZONE = "Asia/Kuala_Lumpur"
+# Secret Manager secret holding the Gemini key (FR-14.1); created by set-gemini-secret.
+GEMINI_SECRET = "gemini-api-key"
 # demo- prefix: emulator-only project, can never reach the cloud (rules tests).
 RULES_TEST_PROJECT = "demo-careflow-rules"
 
@@ -95,7 +99,10 @@ def exe(name: str) -> str:
 
 
 def run(cmd: list[str], cwd: Path = ROOT, env: dict[str, str] | None = None) -> None:
-    print(f"\n> {' '.join(cmd)}   (in {cwd.relative_to(ROOT) if cwd != ROOT else '.'})", flush=True)
+    print(
+        f"\n> {' '.join(cmd)}   (in {cwd.relative_to(ROOT) if cwd != ROOT else '.'})",
+        flush=True,
+    )
     full_env = {**os.environ, **(env or {})}
     result = subprocess.run(cmd, cwd=cwd, env=full_env, check=False)  # noqa: S603
     if result.returncode != 0:
@@ -234,6 +241,102 @@ def task_backend_url() -> None:
     print(backend_url() or "(service not deployed yet)")
 
 
+def _local_env(key: str) -> str:
+    """A value from backend/.env (never printed)."""
+    env_file = BACKEND / ".env"
+    if not env_file.exists():
+        return ""
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        if line.startswith(f"{key}="):
+            return line.split("=", 1)[1].strip()
+    return ""
+
+
+def _secret_exists(name: str) -> bool:
+    code, _ = capture(
+        [
+            exe("gcloud"),
+            "secrets",
+            "describe",
+            name,
+            "--project",
+            PROJECT_ID,
+            "--format=value(name)",
+        ]
+    )
+    return code == 0
+
+
+def task_set_gemini_secret() -> None:
+    """Store GEMINI_API_KEY from backend/.env in Secret Manager for Cloud Run (FR-14.1)."""
+    key = _local_env("GEMINI_API_KEY")
+    if not key:
+        sys.exit("GEMINI_API_KEY is empty in backend/.env. Add the key there first.")
+    gcloud = exe("gcloud")
+    code, number = capture(
+        [gcloud, "projects", "describe", PROJECT_ID, "--format=value(projectNumber)"]
+    )
+    if code != 0 or not number:
+        sys.exit("Could not read the project number. Run `gcloud auth login` first.")
+    runtime_sa = f"{number}-compute@developer.gserviceaccount.com"  # Cloud Run default
+    enable = [
+        gcloud,
+        "services",
+        "enable",
+        "secretmanager.googleapis.com",
+        "--project",
+        PROJECT_ID,
+    ]
+    exists = _secret_exists(GEMINI_SECRET) if ASSUME_YES else False
+    create = [
+        gcloud,
+        "secrets",
+        "create",
+        GEMINI_SECRET,
+        "--project",
+        PROJECT_ID,
+        "--replication-policy=user-managed",
+        f"--locations={REGION}",
+    ]
+    add_version = [
+        gcloud,
+        "secrets",
+        "versions",
+        "add",
+        GEMINI_SECRET,
+        "--project",
+        PROJECT_ID,
+        "--data-file=-",
+    ]
+    grant = [
+        gcloud,
+        "secrets",
+        "add-iam-policy-binding",
+        GEMINI_SECRET,
+        "--project",
+        PROJECT_ID,
+        f"--member=serviceAccount:{runtime_sa}",
+        "--role=roles/secretmanager.secretAccessor",
+    ]
+    confirm_cloud(
+        "enable Secret Manager and store the Gemini key from backend/.env as secret "
+        f"'{GEMINI_SECRET}' ({REGION}), readable only by the Cloud Run service account "
+        "(the key is passed on stdin and never printed)",
+        [enable, create, add_version + ["   <- key from backend/.env on stdin"], grant],
+    )
+    run(enable)
+    if not exists and not _secret_exists(GEMINI_SECRET):
+        run(create)
+    print(f"\n> {' '.join(add_version)}   (key from backend/.env on stdin)", flush=True)
+    result = subprocess.run(add_version, input=key, text=True, check=False)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+    run(grant)
+    print(
+        "\nDone. Now run deploy-backend (or deploy-all) so Cloud Run uses the secret."
+    )
+
+
 def task_deploy_backend() -> None:
     env_vars = ",".join(
         [
@@ -245,6 +348,7 @@ def task_deploy_backend() -> None:
             f"FIREBASE_PROJECT_ID={PROJECT_ID}",
             "ML_ARTIFACTS_DIR=/srv/ml_artifacts",
             "FCM_ENABLED=true",
+            f"GEMINI_MODEL={_local_env('GEMINI_MODEL') or 'gemini-3.1-flash-lite'}",
         ]
     )
     cmd = [
@@ -272,7 +376,17 @@ def task_deploy_backend() -> None:
         "--set-env-vars",
         env_vars,
     ]
-    confirm_cloud("deploy FastAPI to Cloud Run (Cloud Build builds backend/Dockerfile)", [cmd])
+    if _secret_exists(GEMINI_SECRET):
+        # The key never appears in the command or the service settings, only a reference.
+        cmd += ["--set-secrets", f"GEMINI_API_KEY={GEMINI_SECRET}:latest"]
+    else:
+        print(
+            "Note: no Gemini secret yet, so the live AI agent uses offline replies. "
+            "Run: python tasks.py set-gemini-secret --yes"
+        )
+    confirm_cloud(
+        "deploy FastAPI to Cloud Run (Cloud Build builds backend/Dockerfile)", [cmd]
+    )
     # Ship only what FastAPI loads: selected calibrated models + JSON metadata.
     target = BACKEND / "ml_artifacts"
     if ML_ARTIFACTS.exists():
@@ -363,7 +477,15 @@ def task_create_scheduler_jobs() -> None:
             ]
         )
     code, _ = capture(
-        [gcloud, "iam", "service-accounts", "describe", SCHEDULER_SA, "--project", PROJECT_ID]
+        [
+            gcloud,
+            "iam",
+            "service-accounts",
+            "describe",
+            SCHEDULER_SA,
+            "--project",
+            PROJECT_ID,
+        ]
     )
     if code != 0:
         plans.insert(
@@ -381,7 +503,8 @@ def task_create_scheduler_jobs() -> None:
             ],
         )
     confirm_cloud(
-        "create/update Cloud Scheduler jobs (and the caller service account if missing)", plans
+        "create/update Cloud Scheduler jobs (and the caller service account if missing)",
+        plans,
     )
     for p in plans:
         run(p)
@@ -401,7 +524,9 @@ def task_firebase_config() -> None:
     """Generate android/app/src/<flavor>/google-services.json from templates + app/.env."""
     env_file = APP / ".env"
     if not env_file.exists():
-        sys.exit("app/.env missing. Copy app/.env.example to app/.env and fill in the keys.")
+        sys.exit(
+            "app/.env missing. Copy app/.env.example to app/.env and fill in the keys."
+        )
     values = read_env_file(env_file)
     key = values.get("FIREBASE_ANDROID_API_KEY", "")
     if not key:
@@ -417,7 +542,9 @@ def task_firebase_config() -> None:
 
 def task_adb_reverse() -> None:
     """Physical phone over USB: forward FastAPI + emulator ports to this PC (docs/10 §3)."""
-    sdk_adb = Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools"
+    sdk_adb = (
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools"
+    )
     adb = shutil.which("adb") or str(sdk_adb / "adb.exe")
     run([adb, "devices"])
     for port in (8000, 9099, 8080, 9199):
@@ -425,7 +552,9 @@ def task_adb_reverse() -> None:
 
 
 def _adb() -> str:
-    sdk_adb = Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools"
+    sdk_adb = (
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools"
+    )
     return shutil.which("adb") or str(sdk_adb / "adb.exe")
 
 
@@ -468,7 +597,18 @@ def install_dev_app(flavor: str) -> None:
     package = f"fyp.hypertension.{flavor}"
     run([_adb(), "install", "-r", str(apk)])
     run([_adb(), "shell", "am", "force-stop", package])
-    run([_adb(), "shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"])
+    run(
+        [
+            _adb(),
+            "shell",
+            "monkey",
+            "-p",
+            package,
+            "-c",
+            "android.intent.category.LAUNCHER",
+            "1",
+        ]
+    )
 
 
 def _port_open(port: int) -> bool:
@@ -571,10 +711,15 @@ def task_dev() -> None:
     if "--no-phone" in flags:
         print("Skipping the phone (--no-phone).")
     elif _phone_connected():
-        print("Phone detected: installing the patient app (local-dev build)...", flush=True)
+        print(
+            "Phone detected: installing the patient app (local-dev build)...",
+            flush=True,
+        )
         install_dev_app("patient")
     else:
-        print("No phone connected: skipping app install. Plug one in and run phone-install.")
+        print(
+            "No phone connected: skipping app install. Plug one in and run phone-install."
+        )
 
     print(
         "\n========================================================\n"
@@ -631,10 +776,14 @@ def task_bootstrap_admin() -> None:
     """One-time: create the first admin in the LIVE project (firebase/seed/bootstrap_admin.py)."""
     args = [a for a in sys.argv[2:] if a != "--yes"]
     if len(args) != 2:
-        sys.exit('Usage: python tasks.py bootstrap-admin you@example.com "Your Name" --yes')
+        sys.exit(
+            'Usage: python tasks.py bootstrap-admin you@example.com "Your Name" --yes'
+        )
     email, name = args
     cmd = [venv_python(), str(FIREBASE / "seed" / "bootstrap_admin.py"), email, name]
-    confirm_cloud(f"create the first admin account ({email}) in the LIVE project", [cmd])
+    confirm_cloud(
+        f"create the first admin account ({email}) in the LIVE project", [cmd]
+    )
     live_env = {
         k: v
         for k, v in os.environ.items()
@@ -676,14 +825,19 @@ def task_deploy_all() -> None:
         ("Firestore rules + indexes, Storage rules", task_deploy_rules),
         ("FastAPI backend on Cloud Run", task_deploy_backend),
         ("Staff portal on Firebase Hosting", task_deploy_web),
-        ("Cloud Scheduler jobs (only missing ones are created)", task_create_scheduler_jobs),
+        (
+            "Cloud Scheduler jobs (only missing ones are created)",
+            task_create_scheduler_jobs,
+        ),
     ]
     print(f"CLOUD ACTION: deploy everything to the LIVE project {PROJECT_ID}:")
     for i, (label, _) in enumerate(steps, 1):
         print(f"   {i}. {label}")
     if not ASSUME_YES:
         try:
-            answer = input("\nType yes to deploy (anything else cancels): ").strip().lower()
+            answer = (
+                input("\nType yes to deploy (anything else cancels): ").strip().lower()
+            )
         except EOFError:  # no keyboard (e.g. piped): never deploy by accident
             answer = ""
         if answer != "yes":
@@ -710,6 +864,7 @@ TASKS = {
     "deploy-web": task_deploy_web,
     "deploy-rules": task_deploy_rules,
     "create-scheduler-jobs": task_create_scheduler_jobs,
+    "set-gemini-secret": task_set_gemini_secret,
     "build-apk": task_build_apk,
     "backend-url": task_backend_url,
     "adb-reverse": task_adb_reverse,
