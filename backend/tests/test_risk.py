@@ -167,7 +167,7 @@ def test_uc9_1_saves_ch4_risk_score_document(
     result = generate_risk_score("u-patient", risk_repo, fake_risk_model(0.05), NOW)
     doc = risk_repo.saved[0]
     assert set(doc) == {"patientId", "modelUsed", "scores"}  # generatedAt is a server timestamp
-    assert doc["scores"]["heartFailure"] == {"value": 0.05, "level": "low"}
+    assert doc["scores"]["heartFailure"] == {"value": 0.05, "level": "low", "factors": []}
     response = result.to_response()
     assert response["overallLevel"] == "low"
     assert response["lowConfidence"] is True  # no heart rate in the seeded readings
@@ -257,3 +257,53 @@ def test_rescore_needs_three_readings(
     res = client.post("/api/v1/risk-score/u-patient", headers=bearer("patient-token"))
     assert res.status_code == 409
     assert res.json()["error"]["code"] == "NOT_ENOUGH_READINGS"
+
+
+# ---------- D-40 contributing factors ----------
+
+
+def test_d40_top_factors_keep_only_inputs_that_raised_the_estimate() -> None:
+    from app.ml.risk_model import top_factors
+
+    names = ["age", "systolic", "medication_count", "smoking", "bmi"]
+    contrib = [0.08, 0.30, -0.40, 0.01, 0.05]
+    # medication_count lowered it; smoking is below the 0.02 noise floor.
+    assert top_factors(contrib, names) == ("systolic", "age", "bmi")
+    assert top_factors([0.5, 0.4, 0.3, 0.2], ["a", "b", "c", "d"]) == ("a", "b", "c")  # top 3
+    assert top_factors([-0.1, 0.0], ["a", "b"]) == ()
+
+
+def test_d40_real_models_explain_a_hypertensive_patient() -> None:
+    """Uses the committed trained artifacts (ml/artifacts); skipped if absent."""
+    from app.core.config import get_settings
+    from app.ml.risk_model import RiskModel
+
+    directory = get_settings().ml_artifacts_dir
+    if not (directory / "stroke_model.joblib").exists():
+        pytest.skip("trained models not present")
+    model = RiskModel.load(directory)
+    inputs: dict[str, float] = {
+        "age": 68,
+        "female": 0,
+        "systolic": 168,
+        "diastolic": 98,
+        "heart_rate": 84,
+        "bmi": 31,
+        "smoking": 2,
+        "family_history": 1,
+        "hypertension": 1,
+        "high_cholesterol": 1,
+        "bp_medication": 0,
+        "medication_count": 0,
+        "stroke": 0,
+        "cad": 0,
+        "heartFailure": 0,
+        "ckd": 0,
+        "t2d": 0,
+    }
+    prediction = model.predict(inputs)
+    for c, score in prediction.scores.items():
+        assert len(score.factors) <= 3
+        assert set(score.factors) <= set(model._features[c])
+    stroke = prediction.scores[Complication.STROKE].factors
+    assert stroke and stroke[0] in {"age", "systolic", "hypertension", "smoking"}

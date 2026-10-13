@@ -3,6 +3,10 @@
 docs/06 algorithm A, steps 3-4: for each complication, run the selected calibrated
 model (higher-AUC of Random Forest / XGBoost, chosen during training), then categorise
 the probability with the fixed cut-points from thresholds.json (D-30).
+
+D-40 contributing factors: for XGBoost models, per-input SHAP contributions
+(`pred_contribs`) averaged over the calibration folds; only inputs that raised the
+estimate are kept (top FACTOR_LIMIT above FACTOR_MIN log-odds).
 """
 
 from __future__ import annotations
@@ -24,10 +28,16 @@ from app.core.enums import Complication, RiskLevel
 log = logging.getLogger("careflow.ml")
 
 
+FACTOR_LIMIT = 3
+FACTOR_MIN = 0.02  # log-odds; smaller pushes are noise
+
+
 @dataclass(frozen=True)
 class ComplicationRisk:
     value: float
     level: RiskLevel
+    # D-40: input names that most raised this estimate, largest first.
+    factors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -54,6 +64,29 @@ def categorise(value: float, cut: dict[str, float]) -> RiskLevel:
     if value >= cut["moderate"]:
         return RiskLevel.MODERATE
     return RiskLevel.LOW
+
+
+def top_factors(contributions: list[float], names: list[str]) -> tuple[str, ...]:
+    """Inputs whose contribution raised the estimate, largest first (D-40)."""
+    ranked = sorted(zip(names, contributions, strict=False), key=lambda p: -p[1])
+    return tuple(n for n, c in ranked if c > FACTOR_MIN)[:FACTOR_LIMIT]
+
+
+def contributions(model: Any, row: np.ndarray) -> list[float] | None:
+    """Mean per-input SHAP contribution over the calibration folds; None if unsupported."""
+    estimators = [
+        getattr(cc, "estimator", None) for cc in getattr(model, "calibrated_classifiers_", [])
+    ]
+    boosters = [e.get_booster() for e in estimators if e is not None and hasattr(e, "get_booster")]
+    if not boosters:
+        return None
+    import xgboost as xgb
+
+    matrix = xgb.DMatrix(row)
+    total = np.zeros(row.shape[1])
+    for booster in boosters:
+        total += booster.predict(matrix, pred_contribs=True)[0][:-1]  # drop the bias term
+    return [float(v) for v in total / len(boosters)]
 
 
 class RiskModel:
@@ -89,7 +122,15 @@ class RiskModel:
         for c, model in self._models.items():
             row = np.array([[inputs.get(f, math.nan) for f in self._features[c]]], dtype=float)
             value = float(model.predict_proba(row)[0, 1])
-            scores[c] = ComplicationRisk(round(value, 4), categorise(value, self._thresholds[c]))
+            try:
+                contrib = contributions(model, row)
+            except Exception:  # explanations must never block a risk score
+                log.exception("Contributing factors failed for %s", c.value)
+                contrib = None
+            factors = top_factors(contrib, self._features[c]) if contrib else ()
+            scores[c] = ComplicationRisk(
+                round(value, 4), categorise(value, self._thresholds[c]), factors
+            )
         used = "; ".join(f"{c.value}:{self._model_used[c]}" for c in Complication)
         return RiskPrediction(scores=scores, model_used=used)
 
@@ -116,5 +157,6 @@ def get_risk_model() -> RiskModel | None:
 def scores_document(prediction: RiskPrediction) -> dict[str, Any]:
     """risk_scores.scores map in the Ch4 shape: {stroke: {value, level}, ...}."""
     return {
-        c.value: {"value": s.value, "level": s.level.value} for c, s in prediction.scores.items()
+        c.value: {"value": s.value, "level": s.level.value, "factors": list(s.factors)}
+        for c, s in prediction.scores.items()
     }

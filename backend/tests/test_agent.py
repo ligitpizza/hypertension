@@ -133,6 +133,24 @@ def test_uc2_6_context_contains_patient_data_and_empty_sections(
     assert len(SECTIONS) == 8
 
 
+def test_d40_context_names_the_contributing_factors(
+    agent_repo: InMemoryAgentDataRepository, risk_repo: InMemoryRiskRepository
+) -> None:
+    risk_repo.saved.append(
+        {
+            "patientId": P,
+            "generatedAt": NOW,
+            "scores": {"stroke": {"value": 0.31, "level": "high", "factors": ["systolic", "age"]}},
+        }
+    )
+    ctx = build_context(agent_repo, P, NOW)
+    assert (
+        "stroke: 31% (high); factors that most raised this estimate: "
+        "systolic (top) blood pressure, age" in ctx
+    )
+    assert "not proven causes" in ctx
+
+
 def test_context_picks_up_medications_and_care_plan_when_present(
     agent_repo: InMemoryAgentDataRepository,
 ) -> None:

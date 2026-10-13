@@ -37,6 +37,28 @@ COMPLICATION_NAMES = {
 }
 
 
+# D-40: plain-language names for model inputs (contributing factors).
+FACTOR_NAMES = {
+    "age": "age",
+    "female": "sex",
+    "systolic": "systolic (top) blood pressure",
+    "diastolic": "diastolic (bottom) blood pressure",
+    "heart_rate": "heart rate",
+    "bmi": "body weight (BMI)",
+    "smoking": "smoking",
+    "family_history": "family history of heart disease or diabetes",
+    "hypertension": "high blood pressure (diagnosed or recent readings)",
+    "high_cholesterol": "high cholesterol",
+    "bp_medication": "taking blood pressure medicine",
+    "medication_count": "number of medicines",
+    "stroke": "previous stroke",
+    "cad": "existing coronary artery disease",
+    "heartFailure": "existing heart failure",
+    "ckd": "existing kidney disease",
+    "t2d": "existing diabetes",
+}
+
+
 class AgentDataRepository(Protocol):
     def user(self, uid: str) -> dict[str, Any] | None: ...
 
@@ -218,14 +240,18 @@ def section_risk(c: Ctx) -> str:
     order = ["low", "moderate", "high", "critical"]
     scores = risk.get("scores") or {}
     overall = max((s["level"] for s in scores.values()), key=order.index, default="low")
-    lines = [
-        f"- {COMPLICATION_NAMES.get(k, k)}: {round(float(v['value']) * 100)}% ({v['level']})"
-        for k, v in scores.items()
-    ]
+    lines = []
+    for k, v in scores.items():
+        line = f"- {COMPLICATION_NAMES.get(k, k)}: {round(float(v['value']) * 100)}% ({v['level']})"
+        factors = [FACTOR_NAMES.get(f, f) for f in v.get("factors") or []]
+        if factors:
+            line += f"; factors that most raised this estimate: {', '.join(factors)}"
+        lines.append(line)
     return (
         f"RISK ASSESSMENT ({_when(risk.get('generatedAt'))}), overall {overall}. "
-        "Estimated chance of each condition from a machine-learning model, not a diagnosis:\n"
-        + "\n".join(lines)
+        "Estimated chance of each condition from a machine-learning model, not a diagnosis. "
+        "The listed factors are what most raised each estimate for this patient (statistical "
+        "associations, not proven causes):\n" + "\n".join(lines)
     )
 
 
