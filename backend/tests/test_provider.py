@@ -79,6 +79,11 @@ def test_uc8_5_care_plan_is_one_living_document(
         P: {"patientId": P, "doctorId": "u-doctor", "content": "Plan v2"}
     }
     assert audit.actions().count("UPDATE_CARE_PLAN") == 2
+    # D-41: every save is kept as a version.
+    assert provider_repo.plan_versions[P] == [
+        {"content": "Plan v1", "doctorId": "u-doctor"},
+        {"content": "Plan v2", "doctorId": "u-doctor"},
+    ]
 
 
 RX = {

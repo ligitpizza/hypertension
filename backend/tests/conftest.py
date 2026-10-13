@@ -265,6 +265,7 @@ class InMemoryProviderRepository:
         self.medications: dict[str, list[str]] = {}
         self.notes: list[dict[str, Any]] = []
         self.care_plans: dict[str, dict[str, Any]] = {}
+        self.plan_versions: dict[str, list[dict[str, Any]]] = {}
         self.prescriptions: list[dict[str, Any]] = []
 
     def patient(self, uid: str) -> dict[str, Any] | None:
@@ -280,6 +281,9 @@ class InMemoryProviderRepository:
 
     def set_care_plan(self, patient_id: str, data: dict[str, Any]) -> None:
         self.care_plans[patient_id] = data
+        self.plan_versions.setdefault(patient_id, []).append(
+            {"content": data["content"], "doctorId": data["doctorId"]}
+        )
 
     def add_prescription(self, data: dict[str, Any]) -> str:
         self.prescriptions.append(data)

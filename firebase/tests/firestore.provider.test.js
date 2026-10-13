@@ -94,3 +94,27 @@ describe('FR-8.3 writes go through FastAPI only', () => {
     await assertFails(setDoc(doc(doctor(), `care_plans/${P}`), { patientId: P, doctorId: DOCTOR, content: 'x' }));
   });
 });
+
+describe('D-41 care plan version history', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, `care_plans/${P}/versions/v1`), { content: 'Plan v1', doctorId: DOCTOR, savedAt: new Date() });
+      await setDoc(doc(db, `care_plans/${OTHER}/versions/v1`), { content: 'Other', doctorId: 'd2', savedAt: new Date() });
+    });
+  });
+  test('patient lists own plan history', async () => {
+    const q = query(collection(patient(), `care_plans/${P}/versions`), orderBy('savedAt', 'desc'));
+    await assertSucceeds(getDocs(q));
+  });
+  test('assigned doctor reads; another patient and family cannot', async () => {
+    await assertSucceeds(getDoc(doc(doctor(), `care_plans/${P}/versions/v1`)));
+    await assertFails(getDoc(doc(doctor(), `care_plans/${OTHER}/versions/v1`)));
+    await assertFails(getDoc(doc(as(env, 'patient', OTHER).firestore(), `care_plans/${P}/versions/v1`)));
+    await assertFails(getDoc(doc(family(), `care_plans/${P}/versions/v1`)));
+  });
+  test('history cannot be written or rewritten from the app', async () => {
+    await assertFails(setDoc(doc(doctor(), `care_plans/${P}/versions/v2`), { content: 'x', doctorId: DOCTOR }));
+    await assertFails(setDoc(doc(patient(), `care_plans/${P}/versions/v1`), { content: 'edited' }));
+  });
+});

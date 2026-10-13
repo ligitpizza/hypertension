@@ -13,6 +13,8 @@ from firebase_admin import firestore
 from app.core.enums import Collection
 from app.core.firebase import get_firestore
 
+CARE_PLAN_VERSIONS = "versions"  # D-41: care_plans/{patientId}/versions
+
 
 class ProviderRepository(Protocol):
     def patient(self, uid: str) -> dict[str, Any] | None: ...
@@ -54,10 +56,20 @@ class FirestoreProviderRepository:
         return str(ref.id)
 
     def set_care_plan(self, patient_id: str, data: dict[str, Any]) -> None:
-        # One living plan per patient (docs/04): document id = patient uid.
-        self._db.collection(Collection.CARE_PLANS.value).document(patient_id).set(
-            {**data, "updatedAt": firestore.SERVER_TIMESTAMP}
+        # One living plan per patient (docs/04): document id = patient uid. D-41: every save
+        # also appends a version, in the same batch so the history never misses an edit.
+        plan = self._db.collection(Collection.CARE_PLANS.value).document(patient_id)
+        batch = self._db.batch()
+        batch.set(plan, {**data, "updatedAt": firestore.SERVER_TIMESTAMP})
+        batch.set(
+            plan.collection(CARE_PLAN_VERSIONS).document(),
+            {
+                "content": data["content"],
+                "doctorId": data["doctorId"],
+                "savedAt": firestore.SERVER_TIMESTAMP,
+            },
         )
+        batch.commit()
 
     def add_prescription(self, data: dict[str, Any]) -> str:
         _, ref = self._db.collection(Collection.PRESCRIPTIONS.value).add(

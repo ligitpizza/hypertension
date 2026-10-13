@@ -105,6 +105,12 @@ service cloud.firestore {
     match /care_plans/{patientId} {
       allow read: if canReadPatientData(resource.data.patientId);
       allow write: if false;
+
+      // D-41: every saved version of the plan (document id of the parent = patient uid).
+      match /versions/{versionId} {
+        allow read: if canReadPatientData(patientId);
+        allow write: if false;
+      }
     }
 
     match /prescriptions/{prescriptionId} {
