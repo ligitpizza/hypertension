@@ -12,6 +12,11 @@ import '../../features/auth/presentation/staff_login_page.dart';
 import '../../features/auth/presentation/status_pages.dart';
 import '../../features/auth/state/auth_providers.dart';
 import '../../features/auth/state/auth_redirect.dart';
+import '../../features/provider_portal/presentation/care_plan_page.dart';
+import '../../features/provider_portal/presentation/clinical_note_page.dart';
+import '../../features/provider_portal/presentation/doctor_dashboard_page.dart';
+import '../../features/provider_portal/presentation/patient_detail_page.dart';
+import '../../features/provider_portal/presentation/prescription_page.dart';
 import '../../features/staff_shell/staff_shell.dart';
 import '../../shared/widgets/home_placeholder.dart';
 import '../constants/enums.dart';
@@ -124,12 +129,30 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         builder: (_, state, child) => shell(state, child),
         routes: [
+          // Module 8 doctor portal (docs/05 routes; Figs 4.3.12.1-4.3.12.7).
           GoRoute(
             path: '/doctor',
-            builder: (_, _) => const ComingSoon(
-              title: 'My patients',
-              note: 'Your patient list, sorted by risk level, is coming soon.',
-            ),
+            builder: (_, _) => const DoctorDashboardPage(),
+            routes: [
+              GoRoute(
+                path: 'patient/:id',
+                builder: (_, s) => PatientDetailPage(patientId: s.pathParameters['id']!),
+                routes: [
+                  GoRoute(
+                    path: 'notes',
+                    builder: (_, s) => ClinicalNotePage(patientId: s.pathParameters['id']!),
+                  ),
+                  GoRoute(
+                    path: 'prescriptions',
+                    builder: (_, s) => PrescriptionPage(patientId: s.pathParameters['id']!),
+                  ),
+                  GoRoute(
+                    path: 'care-plan',
+                    builder: (_, s) => CarePlanPage(patientId: s.pathParameters['id']!),
+                  ),
+                ],
+              ),
+            ],
           ),
           GoRoute(
             path: '/pharmacy',

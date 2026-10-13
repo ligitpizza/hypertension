@@ -275,3 +275,55 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Known limitations: the staff web portal does not receive browser pushes (needs a VAPID key
   and service worker); the doctor portal (Module 8) reads `clinical_alerts` live instead. The
   booking prompt is informational until appointments (FR-7.5, Increment 3).
+
+---
+
+### 2026-10-13 — Increment 2 — Module 8: Healthcare Provider Portal
+- FRs implemented: FR-8.1 (assigned patient list, risk filter, search), FR-8.2 (patient health
+  history), FR-8.3 (clinical notes with templates, care plan editor, prescriptions with
+  interaction warning), FR-8.4 (priority alerts panel + critical banner from `clinical_alerts`).
+- Screens (staff portal, `/doctor/...` routes per docs/05): Doctor Dashboard (Figs 4.3.12.1 /
+  4.3.12.2: summary counts, multi-select risk chips with counts, name search, patients sorted by
+  risk then latest reading, live alerts panel with Review / Acknowledge / Dismiss, red banner for
+  the newest open critical alert); Patient Detail (4.3.12.4: demographics, latest BP, risk
+  breakdown per complication, BP trend chart 7D/30D/3M reusing the Module 4 chart, tabs for
+  vitals, medications + prescriptions, care plan, clinical notes); Consultation Notes + Note Saved
+  (4.3.12.5/4.3.12.6: SOAP / Hypertension F/U / Medication Adjustment templates, saved toast,
+  prior notes below); Prescription Management (4.3.12.7: current regimen, latest note, form,
+  recurring toggle); Care Plan editor (UC8.5).
+- Use-case flows handled: UC8.1 E1 (no patients), UC8.2 A1 (clear filter), UC8.3 E1 (empty
+  history per section), UC8.4 E1 (interaction warning; critical needs an explicit tick).
+- Backend: `POST /provider/patients/{id}/notes`, `PUT /provider/patients/{id}/care-plan`,
+  `POST /provider/patients/{id}/prescriptions` (docs/05). Doctor role + assignment check
+  (`NOT_ASSIGNED` 403), audit entries ADD_CLINICAL_NOTE / UPDATE_CARE_PLAN / ISSUE_PRESCRIPTION.
+  Interaction check (docs/06 §C) against the patient's `medications` and earlier
+  `prescriptions` using `backend/app/services/interactions.json` (13 drug classes, 16 pairs +
+  duplicate therapy); any interaction returns 409 `DRUG_INTERACTION` with details until the
+  doctor acknowledges. The error envelope gained an optional `details` field.
+- Reads stay direct Firestore listeners under rules: assigned patients
+  (`users` role + assignedDoctorId), latest reading/risk per patient, notes, prescriptions,
+  care plan, open alerts. Alert acknowledge/dismiss is the rules-checked direct update (D-32).
+- Tests: backend 18 new (tests/test_provider.py); rules 19 new (firestore.provider.test.js;
+  the Inc0 "closed collection" sample moved from clinical_notes to messages) → 127/127;
+  Flutter 22 new (10 unit, 12 widget) → 218/218.
+- Deviations / additions vs Chapter 4:
+  - `prescriptions.medicationDetails` stays one string (Table 4.2.3.11); the form's name,
+    dosage, frequency and duration are joined, e.g. "Losartan 50mg, Once daily, for 30 days".
+  - Issuing a prescription does not add an entry to the patient's own `medications` list
+    (Module 5); both lists are shown to the doctor and both feed the interaction check.
+  - Clinical notes are final once saved ("Sign & Lock"); `clinical_notes` has no draft field,
+    so "Save Draft" / auto-save from the mockup are not built (the text stays in the editor
+    until saved). Voice dictation and rich-text formatting are not built.
+  - Mockup items with no data in Ch4 are omitted: MRN, blood type, allergies, weight/BMI and
+    O2 sat on the header, lab results ("Vitals & Labs" tab shows vitals only), adherence column
+    (shown per medication when `adherenceRate` exists, Module 5), unread messages card
+    (Module 10), "Telehealth"/"Message" buttons, population systolic trend chart (4.3.12.2).
+  - UC8.4 step 4 "notify the pharmacy": prescriptions are readable by pharmacists (rules) and
+    audited; the pharmacist queue and notifications arrive with Module 13 (Increment 3).
+  - The prescription recurring toggle stores `isRecurring` (UC13.1); monthly orders are
+    Module 13.
+  - Doctor Schedule (4.3.12.3) and Messaging are Modules 7 and 10 (Increment 3).
+  - Composite indexes added for `clinical_notes` (patientId, createdAt desc) and
+    `prescriptions` (patientId, issuedAt desc); not in the docs/04 index table.
+- Known limitations: the patient list loads each patient's latest reading and risk with one
+  listener per patient, fine for a single doctor's caseload but not for hundreds of patients.

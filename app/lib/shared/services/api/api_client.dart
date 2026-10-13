@@ -4,11 +4,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 /// Error body returned by FastAPI: `{"error": {"code": "...", "message": "..."}}`
 /// (docs/05 "FastAPI endpoints").
 class ApiException implements Exception {
-  ApiException(this.code, this.message, {this.statusCode});
+  ApiException(this.code, this.message, {this.statusCode, this.details});
 
   final String code;
   final String message;
   final int? statusCode;
+
+  /// Optional structured context, e.g. drug interactions (UC8.4 E1).
+  final Object? details;
 
   factory ApiException.fromDio(DioException e) {
     final data = e.response?.data;
@@ -18,6 +21,7 @@ class ApiException implements Exception {
         '${err['code']}',
         '${err['message']}',
         statusCode: e.response?.statusCode,
+        details: err['details'],
       );
     }
     return ApiException(
@@ -117,6 +121,43 @@ class ApiClient {
     'diastolic': diastolic,
     'heartRate': ?heartRate,
     if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+  });
+
+  // ---- Module 8 doctor actions (FR-8.3) ----
+
+  /// UC8.4: clinical note for an assigned patient.
+  Future<Map<String, dynamic>> addClinicalNote(String patientId, String content) =>
+      _post('/provider/patients/$patientId/notes', {'content': content});
+
+  /// UC8.5: replace the patient's single living care plan.
+  Future<Map<String, dynamic>> updateCarePlan(String patientId, String content) async {
+    try {
+      final res = await _dio.put<Map<String, dynamic>>(
+        '/provider/patients/$patientId/care-plan',
+        data: {'content': content},
+      );
+      return res.data ?? const {};
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  /// UC8.4: throws ApiException('DRUG_INTERACTION') with `details` until acknowledged (E1).
+  Future<Map<String, dynamic>> issuePrescription(
+    String patientId, {
+    required String medicationName,
+    required String dosage,
+    required String frequency,
+    String? duration,
+    bool isRecurring = false,
+    bool acknowledgeInteractions = false,
+  }) => _post('/provider/patients/$patientId/prescriptions', {
+    'medicationName': medicationName,
+    'dosage': dosage,
+    'frequency': frequency,
+    if (duration != null && duration.trim().isNotEmpty) 'duration': duration.trim(),
+    'isRecurring': isRecurring,
+    'acknowledgeInteractions': acknowledgeInteractions,
   });
 
   // ---- Module 9 push notifications (D-33) ----
