@@ -547,4 +547,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   the reading must belong to the patient (404) and be logged within the last hour (409
   `READING_TOO_OLD`). The "use your Vitals reading" card from earlier the same day was removed.
   Tests: backend triage endpoint tests rewritten (all passing); Flutter 255/255.
+- **D-39 (Ping, 2026-10-14): low BP rule in triage.** After the high-BP rule: systolic < 90
+  or diastolic < 60 -> contact_doctor, reason "Your blood pressure (110/50 mmHg) is low. With
+  your symptoms, your doctor should check whether your treatment needs adjusting." The doctor
+  gets the usual triage alert. Emergency rules still win (chest pain at 85/55 -> seek
+  emergency care). Not applied to ordinary Vitals readings. Boundaries 89/90 and 59/60
+  unit-tested; docs/06 §D table updated. **Needs Ch4 update.**
 

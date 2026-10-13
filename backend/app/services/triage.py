@@ -1,7 +1,8 @@
 """Symptom checker triage (FR-14.3; UC14.1-UC14.4; Fig 4.1.1.14; docs/06 §D; D-10, D-36).
 
 `classify` is the fixed rule table, evaluated top-down, first match wins. Every row and
-boundary (179/180, 139/140, 119/120, 89/90, 45/44, 120/121) is unit-tested (Objective 1).
+boundary (179/180, 139/140, 119/120, 89/90, 45/44, 120/121; low BP 89/90 and 59/60,
+D-39) is unit-tested (Objective 1).
 """
 
 from __future__ import annotations
@@ -20,6 +21,8 @@ EMERGENCY_DIASTOLIC = 120
 SEVERE_SYSTOLIC = 160
 HIGH_SYSTOLIC = 140
 HIGH_DIASTOLIC = 90
+LOW_SYSTOLIC = 90  # D-39: below this ...
+LOW_DIASTOLIC = 60  # ... or below this = low BP
 HEART_RATE_HIGH = 120  # contact doctor above this
 HEART_RATE_LOW = 45  # ... or below this
 # D-38: the checker's BP is entered fresh and saved just before triage; allow this long.
@@ -66,6 +69,13 @@ def classify(
         return Decision(
             TriageOutcome.CONTACT_DOCTOR,
             f"Your blood pressure ({sys_}/{dia} mmHg) is high.",
+        )
+    if has_bp and (sys_ < LOW_SYSTOLIC or dia < LOW_DIASTOLIC):
+        # D-39: low BP with symptoms can mean the BP medicine is too strong.
+        return Decision(
+            TriageOutcome.CONTACT_DOCTOR,
+            f"Your blood pressure ({sys_}/{dia} mmHg) is low. With your symptoms, your doctor "
+            "should check whether your treatment needs adjusting.",
         )
     if severity is TriageSeverity.MODERATE:
         return Decision(TriageOutcome.CONTACT_DOCTOR, "Your symptoms are moderate.")

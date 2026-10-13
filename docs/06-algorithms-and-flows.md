@@ -106,6 +106,7 @@ Evaluate top-down; the first match wins.
 | Severity = severe **and** (any red-flag symptom **or** systolic ≥ 160) | `seek_emergency_care` |
 | Any red-flag symptom (chest pain, shortness of breath, sudden weakness/numbness, confusion/difficulty speaking, vision loss, severe headache) | `seek_emergency_care` |
 | Systolic 140–179 **or** diastolic 90–119 | `contact_doctor` |
+| Systolic < 90 **or** diastolic < 60 (low BP with symptoms, D-39) | `contact_doctor` |
 | Severity = moderate **or** any complication risk level ∈ {High, Critical} | `contact_doctor` |
 | Heart rate > 120 or < 45 (if captured) | `contact_doctor` |
 | Otherwise | `monitor_at_home` |
@@ -114,7 +115,7 @@ Evaluate top-down; the first match wins.
 - If PPG fails, proceed without heart rate and note it (UC14.1 E1).
 - On **Emergency**, also do the following (UC14.4 step 3): auto-book an emergency appointment, reassigning to the next available doctor if the assigned one is unavailable; send a family alert (UC15.2); and unlock one-tap call on the patient app.
 - The result screen shows the outcome, the reported critical symptoms, numbered immediate actions, and a disclaimer (Fig 4.3.8.2).
-- **Unit-test every rule row and boundary** (179/180, 139/140, 119/120). Objective 1 requires the thresholds to be verified by unit tests.
+- **Unit-test every rule row and boundary** (179/180, 139/140, 119/120; low BP 89/90, 59/60 per D-39). Objective 1 requires the thresholds to be verified by unit tests.
 
 ---
 

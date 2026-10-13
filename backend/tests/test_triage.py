@@ -104,6 +104,23 @@ def test_rule4_high_bp_boundaries(bp: tuple[int, int], expected: TriageOutcome) 
     assert outcome(bp=bp) is expected
 
 
+# ---------- D-39: low BP (boundaries 89/90 systolic, 59/60 diastolic) ----------
+
+
+@pytest.mark.parametrize(
+    "bp,expected",
+    [((89, 60), DOCTOR), ((90, 60), HOME), ((110, 59), DOCTOR), ((110, 60), HOME)],
+)
+def test_d39_low_bp_boundaries(bp: tuple[int, int], expected: TriageOutcome) -> None:
+    assert outcome(bp=bp) is expected
+
+
+def test_d39_low_bp_reason_and_emergency_rules_still_win() -> None:
+    decision = classify(MILD, [], 110, 50, 72, [])
+    assert decision.outcome is DOCTOR and "is low" in decision.reason
+    assert outcome(MILD, ["Chest Pain"], bp=(85, 55)) is ER
+
+
 # ---------- rule 5: moderate severity or High/Critical risk ----------
 
 
