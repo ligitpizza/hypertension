@@ -164,10 +164,14 @@ class ApiClient {
 
   /// UC2.6: {reply, emergency, fallback}.
   Future<Map<String, dynamic>> agentChat(String message) =>
-      _post('/agent/chat', {'message': message});
+      _post('/agent/chat', {'message': message}, receiveTimeout: agentTimeout);
 
   /// UC2.7: {text, riskLevel, actions, fallback} for the latest reading.
-  Future<Map<String, dynamic>> agentProactive() => _post('/agent/proactive', const {});
+  Future<Map<String, dynamic>> agentProactive() =>
+      _post('/agent/proactive', const {}, receiveTimeout: agentTimeout);
+
+  /// Gemini plus one server-side retry can take ~25 s at busy times.
+  static const agentTimeout = Duration(seconds: 35);
 
   // ---- Module 9 push notifications (D-33) ----
 
@@ -191,9 +195,17 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> _post(
+    String path,
+    Map<String, dynamic> body, {
+    Duration? receiveTimeout,
+  }) async {
     try {
-      final res = await _dio.post<Map<String, dynamic>>(path, data: body);
+      final res = await _dio.post<Map<String, dynamic>>(
+        path,
+        data: body,
+        options: receiveTimeout == null ? null : Options(receiveTimeout: receiveTimeout),
+      );
       return res.data ?? const {};
     } on DioException catch (e) {
       throw ApiException.fromDio(e);

@@ -383,5 +383,11 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   - UC-14.1.2 family "vitals insight" is part of FR-14.2 (Increment 3).
   - Mockup quick-reply symptom chips ("I have a slight headache") are replaced by question
     suggestions on an empty chat; voice input is not built.
+- Live Gemini check (synthetic data only, model `gemini-3.1-flash-lite` chosen by Ping):
+  answers quoted the supplied readings and dates, explained risk as an estimate, refused a dose
+  change ("ask your doctor or pharmacist") and pointed to 999 for emergency symptoms; 3-9 s per
+  answer. Gemini returned a 503 and a timeout at a busy moment, so the adapter now retries once
+  (429/500/503/timeouts), Gemini 3 models use a low thinking level, each attempt times out at
+  12 s and the app waits up to 35 s for agent calls (other calls keep 15 s).
 - Known limitations: the cloud deploy needs `GEMINI_API_KEY` in Cloud Run; it should come from
   Secret Manager (to be confirmed with Ping before enabling that service).

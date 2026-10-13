@@ -7,6 +7,7 @@ server. Without GEMINI_API_KEY (tests, offline development) a fake client answer
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
@@ -17,6 +18,21 @@ from app.core.config import get_settings
 log = logging.getLogger("careflow.gemini")
 
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+# One retry for overload / rate limit / timeout, which Gemini returns at busy times.
+RETRIES = 1
+RETRY_DELAY_SECONDS = 1.5
+
+
+def _transient(exc: Exception) -> bool:
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (429, 500, 503)
+
+
+def _describe(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"HTTP {exc.response.status_code}"
+    return type(exc).__name__
 
 
 @dataclass(frozen=True)
@@ -46,29 +62,36 @@ class GeminiClient:
         ]
         contents.append({"role": "user", "parts": [{"text": message}]})
         config: dict[str, Any] = {"temperature": 0.4, "maxOutputTokens": 1024}
+        # Short health answers need little "thinking"; it mainly adds latency.
         if "2.5-flash" in self._model:
-            # Short health answers do not need "thinking"; it only adds latency.
             config["thinkingConfig"] = {"thinkingBudget": 0}
+        elif self._model.startswith("gemini-3"):
+            config["thinkingConfig"] = {"thinkingLevel": "low"}
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": contents,
             "generationConfig": config,
         }
-        try:
-            res = httpx.post(
-                API_URL.format(model=self._model),
-                headers={"x-goog-api-key": self._key},
-                json=body,
-                timeout=self._timeout,
-            )
-            res.raise_for_status()
-            data = res.json()
-            parts = data["candidates"][0]["content"]["parts"]
-            text = "".join(p.get("text", "") for p in parts).strip()
-        except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
-            # Never log the request: it contains health data.
-            log.warning("Gemini call failed: %s", type(exc).__name__)
-            raise LlmError(str(type(exc).__name__)) from exc
+        text = ""
+        for attempt in range(1 + RETRIES):
+            try:
+                res = httpx.post(
+                    API_URL.format(model=self._model),
+                    headers={"x-goog-api-key": self._key},
+                    json=body,
+                    timeout=self._timeout,
+                )
+                res.raise_for_status()
+                parts = res.json()["candidates"][0]["content"]["parts"]
+                text = "".join(p.get("text", "") for p in parts).strip()
+                break
+            except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
+                # Never log the request: it contains health data.
+                log.warning("Gemini call failed (attempt %d): %s", attempt + 1, _describe(exc))
+                if attempt < RETRIES and _transient(exc):
+                    time.sleep(RETRY_DELAY_SECONDS)
+                    continue
+                raise LlmError(_describe(exc)) from exc
         if not text:
             raise LlmError("empty reply")
         return text

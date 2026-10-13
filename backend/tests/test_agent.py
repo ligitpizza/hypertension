@@ -310,3 +310,68 @@ def test_uc2_7_gemini_failure_falls_back_to_rule_text(
     body = proactive(client)
     assert body["fallback"] is True
     assert "call 999" in body["text"]
+
+
+# ---------- Gemini adapter retry (live check: Gemini returned 503 at a busy time) ----------
+
+
+class _Resp:
+    def __init__(self, status: int, payload: dict[str, Any] | None = None) -> None:
+        import httpx
+
+        self.status_code = status
+        self._payload = payload or {}
+        self._req = httpx.Request("POST", "https://example.test")
+
+    def raise_for_status(self) -> None:
+        import httpx
+
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError(
+                "err", request=self._req, response=httpx.Response(self.status_code)
+            )
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
+
+
+OK = {"candidates": [{"content": {"parts": [{"text": "Hello"}]}}]}
+
+
+def _client(monkeypatch: pytest.MonkeyPatch, responses: list[_Resp]) -> Any:
+    import app.integrations.gemini as g
+
+    calls: list[dict[str, Any]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> _Resp:
+        calls.append(kwargs["json"])
+        return responses.pop(0)
+
+    monkeypatch.setattr("app.integrations.gemini.httpx.post", fake_post)
+    monkeypatch.setattr(g, "RETRY_DELAY_SECONDS", 0)
+    return g.GeminiClient("key", "gemini-3.1-flash-lite", 5), calls
+
+
+def test_gemini_retries_once_on_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, calls = _client(monkeypatch, [_Resp(503), _Resp(200, OK)])
+    assert client.generate("sys", [], "hi") == "Hello"
+    assert len(calls) == 2
+    assert calls[0]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
+
+
+def test_gemini_gives_up_after_the_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.integrations.gemini import LlmError
+
+    client, calls = _client(monkeypatch, [_Resp(503), _Resp(503)])
+    with pytest.raises(LlmError):
+        client.generate("sys", [], "hi")
+    assert len(calls) == 2
+
+
+def test_gemini_does_not_retry_a_bad_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.integrations.gemini import LlmError
+
+    client, calls = _client(monkeypatch, [_Resp(400)])
+    with pytest.raises(LlmError):
+        client.generate("sys", [], "hi")
+    assert len(calls) == 1

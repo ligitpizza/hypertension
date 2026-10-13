@@ -17,6 +17,8 @@ Local tasks
   lint             flutter analyze + ruff + ruff format --check + mypy
 
 Cloud tasks (print the exact command and require --yes; project hypertension-dd85f)
+  deploy-all              Everything below in order: rules -> backend -> web -> scheduler
+                          jobs (or double-click deploy-all.cmd; asks once to confirm)
   deploy-backend          Cloud Run service careflow-api (asia-southeast1, max 2 instances)
   deploy-web              Build the staff portal and deploy Firebase Hosting
   deploy-rules            Firestore rules + indexes and Storage rules
@@ -667,7 +669,38 @@ def task_build_apk() -> None:
         run(c, cwd=APP)
 
 
+def task_deploy_all() -> None:
+    """Rules first (new collections need them), then backend, then the portal and jobs."""
+    global ASSUME_YES
+    steps = [
+        ("Firestore rules + indexes, Storage rules", task_deploy_rules),
+        ("FastAPI backend on Cloud Run", task_deploy_backend),
+        ("Staff portal on Firebase Hosting", task_deploy_web),
+        ("Cloud Scheduler jobs (only missing ones are created)", task_create_scheduler_jobs),
+    ]
+    print(f"CLOUD ACTION: deploy everything to the LIVE project {PROJECT_ID}:")
+    for i, (label, _) in enumerate(steps, 1):
+        print(f"   {i}. {label}")
+    if not ASSUME_YES:
+        try:
+            answer = input("\nType yes to deploy (anything else cancels): ").strip().lower()
+        except EOFError:  # no keyboard (e.g. piped): never deploy by accident
+            answer = ""
+        if answer != "yes":
+            sys.exit("Cancelled. Nothing was deployed.")
+        ASSUME_YES = True
+    started = time.monotonic()
+    for i, (label, step) in enumerate(steps, 1):
+        print(f"\n===== [{i}/{len(steps)}] {label} =====", flush=True)
+        step()  # run() exits on the first failure, so later steps never run half-deployed
+    minutes = (time.monotonic() - started) / 60
+    print(f"\nAll {len(steps)} deploy steps finished in {minutes:.1f} min.")
+    print("Live portal: https://hypertension-dd85f.web.app")
+    print("Phone app: run phone-live.cmd if the app code changed.")
+
+
 TASKS = {
+    "deploy-all": task_deploy_all,
     "emulators": task_emulators,
     "seed": task_seed,
     "api": task_api,
