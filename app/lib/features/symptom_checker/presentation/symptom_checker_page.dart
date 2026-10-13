@@ -17,6 +17,13 @@ import '../state/symptom_providers.dart';
 class SymptomCheckerPage extends ConsumerStatefulWidget {
   const SymptomCheckerPage({super.key});
 
+  /// Plain-language meaning of each severity level, shown under the choice.
+  static const severityHints = {
+    TriageSeverity.mild: 'Mild: noticeable, but not stopping your usual activities.',
+    TriageSeverity.moderate: 'Moderate: bothering you and making some activities harder.',
+    TriageSeverity.severe: 'Severe: very strong, or stopping you from doing normal activities.',
+  };
+
   static const categoryLabels = {
     'common': 'Common symptoms',
     'warning_signs': 'Warning signs',
@@ -243,6 +250,12 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
                 ],
                 selected: {_severity},
                 onSelectionChanged: (s) => setState(() => _severity = s.first),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                SymptomCheckerPage.severityHints[_severity]!,
+                key: const Key('sc-severity-hint'),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
               if (_error != null) ...[
                 const SizedBox(height: 8),

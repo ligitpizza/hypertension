@@ -142,6 +142,16 @@ void main() {
       expect(find.textContaining('call 999'), findsOneWidget);
     });
 
+    tallTest('severity has a plain-language hint that follows the choice', (t) async {
+      await t.pumpWidget(checkerApp(repo, vitals));
+      await t.pumpAndSettle();
+      await toSymptoms(t);
+      expect(find.textContaining('Mild: noticeable'), findsOneWidget);
+      await t.tap(find.text('Severe'));
+      await t.pump();
+      expect(find.textContaining('Severe: very strong'), findsOneWidget);
+    });
+
     tallTest('UC14.3 submits without BP: no reading logged', (t) async {
       await t.pumpWidget(checkerApp(repo, vitals));
       await t.pumpAndSettle();
@@ -274,5 +284,22 @@ void main() {
     expect(r.outcome, TriageOutcome.contactDoctor);
     expect(r.symptoms.single.name, 'Headache');
     expect(r.missingInputs, ['heart_rate']);
+  });
+
+  test('triage quick replies follow the reported symptoms', () {
+    final r = TriageResult(
+      id: 't',
+      outcome: TriageOutcome.monitorAtHome,
+      reason: '',
+      symptoms: const [
+        SymptomOption(id: 'blurred_vision', name: 'Blurred Vision', category: 'common'),
+      ],
+    );
+    expect(TriageResultPage.quickReplies(r), [
+      'Explain my symptom check result',
+      'What can I do about blurred vision?',
+      'When should I check my blood pressure again?',
+      'What warning signs should I watch for?',
+    ]);
   });
 }

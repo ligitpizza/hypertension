@@ -80,12 +80,12 @@ void main() {
   setUp(() => repo = FakeAgentRepository());
 
   group('Fig 4.3.7.1 chat', () {
-    tallTest('shows the not-a-doctor disclaimer and suggestions when empty', (t) async {
+    tallTest('shows the not-a-doctor disclaimer and quick replies', (t) async {
       await t.pumpWidget(agentApp(repo));
       await t.pumpAndSettle();
       expect(find.textContaining('not a substitute for a doctor'), findsOneWidget);
       expect(find.textContaining('call 999'), findsOneWidget);
-      expect(find.byKey(Key('suggest-${AgentPage.suggestions.first}')), findsOneWidget);
+      expect(find.byKey(Key('quick-${AgentPage.suggestions.first}')), findsOneWidget);
     });
 
     tallTest('UC2.6 sends a question and shows the saved conversation', (t) async {
@@ -103,9 +103,24 @@ void main() {
     tallTest('a suggestion chip asks that question', (t) async {
       await t.pumpWidget(agentApp(repo));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(Key('suggest-${AgentPage.suggestions[1]}')));
+      await t.tap(find.byKey(Key('quick-${AgentPage.suggestions[1]}')));
       await t.pumpAndSettle();
       expect(repo.sent, [AgentPage.suggestions[1]]);
+    });
+
+    tallTest('quick replies stay above the input after messages and can be context-specific', (
+      t,
+    ) async {
+      await t.pumpWidget(
+        agentApp(repo, home: const AgentPage(quickReplies: ['Explain my symptom check result'])),
+      );
+      await t.pumpAndSettle();
+      expect(find.byKey(Key('quick-${AgentPage.suggestions.first}')), findsNothing);
+      await t.tap(find.byKey(const Key('quick-Explain my symptom check result')));
+      await t.pumpAndSettle();
+      expect(repo.sent, ['Explain my symptom check result']);
+      // Still offered after the conversation has started.
+      expect(find.byKey(const Key('quick-Explain my symptom check result')), findsOneWidget);
     });
 
     tallTest('UC2.6 E1 fallback reply is shown but not as a saved answer', (t) async {

@@ -58,7 +58,12 @@ final List<RouteBase> patientFeatureRoutes = [
       note: 'Secure messaging with your doctor is coming soon.',
     ),
   ),
-  GoRoute(path: '/ai-agent', builder: (_, _) => const AgentPage()),
+  GoRoute(
+    path: '/ai-agent',
+    // Optional quick replies passed by the screen that opened the chat (triage, reading).
+    builder: (_, state) =>
+        AgentPage(quickReplies: state.extra is List<String> ? state.extra! as List<String> : null),
+  ),
   GoRoute(
     path: '/appointments',
     builder: (_, _) =>

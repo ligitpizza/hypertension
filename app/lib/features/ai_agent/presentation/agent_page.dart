@@ -10,7 +10,10 @@ import '../state/agent_providers.dart';
 
 /// Fig 4.3.7.1 AI Health Agent chat (FR-14.1; UC2.6, UC2.6 A1/E1; D-34).
 class AgentPage extends ConsumerStatefulWidget {
-  const AgentPage({super.key});
+  const AgentPage({super.key, this.quickReplies});
+
+  /// Context-specific quick replies (e.g. from a triage result); [suggestions] otherwise.
+  final List<String>? quickReplies;
 
   static const suggestions = [
     'What was my last blood pressure?',
@@ -119,7 +122,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                 controller: _scroll,
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (list.isEmpty && _pending == null) _Welcome(onPick: _send),
+                  if (list.isEmpty && _pending == null) const _Welcome(),
                   for (final m in list) _Bubble(text: m.text, fromPatient: m.fromPatient),
                   if (showPending) _Bubble(text: _pending!, fromPatient: true),
                   if (_pending != null) const _Typing(),
@@ -147,6 +150,26 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                   if (_emergency) const _EmergencyCard(),
                 ],
               ),
+            ),
+          ),
+          // Tap a quick reply instead of typing (mockup Fig 4.3.7.1 reply chips).
+          SizedBox(
+            height: 48,
+            child: ListView(
+              key: const Key('agent-quick-replies'),
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              children: [
+                for (final q in widget.quickReplies ?? AgentPage.suggestions)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ActionChip(
+                      key: Key('quick-$q'),
+                      label: Text(q),
+                      onPressed: _pending == null ? () => _send(q) : null,
+                    ),
+                  ),
+              ],
             ),
           ),
           SafeArea(
@@ -208,30 +231,14 @@ class _Disclaimer extends StatelessWidget {
 }
 
 class _Welcome extends StatelessWidget {
-  const _Welcome({required this.onPick});
-
-  final void Function(String) onPick;
+  const _Welcome();
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const _Bubble(
-        text:
-            'Hello! I can answer questions about your blood pressure readings, your risk '
-            'assessment and healthy habits. What would you like to know?',
-        fromPatient: false,
-      ),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final s in AgentPage.suggestions)
-            ActionChip(key: Key('suggest-$s'), label: Text(s), onPressed: () => onPick(s)),
-        ],
-      ),
-    ],
+  Widget build(BuildContext context) => const _Bubble(
+    text:
+        'Hello! I can answer questions about your blood pressure readings, your risk '
+        'assessment and healthy habits. Tap a question below or type your own.',
+    fromPatient: false,
   );
 }
 

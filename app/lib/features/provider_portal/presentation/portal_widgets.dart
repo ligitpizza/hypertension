@@ -5,6 +5,7 @@ import '../../../core/constants/enums.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../../../core/utils/risk_style.dart';
 import '../../../shared/models/health_models.dart';
+import '../domain/portal_models.dart';
 
 /// Shared bits of the doctor portal (Module 8).
 
@@ -128,3 +129,15 @@ String alertTypeLabel(ClinicalAlertType t) => switch (t) {
   ClinicalAlertType.triage => 'Symptom triage',
   ClinicalAlertType.flaggedMessage => 'Flagged message',
 };
+
+/// "Raised 14 Oct 2026, 11:32 PM · Acknowledged 14 Oct 2026, 11:40 PM" (history tab).
+String alertTimeline(ClinicalAlert a) {
+  final raised = 'Raised ${formatDate(a.createdAt)}';
+  return switch (a.status) {
+    ClinicalAlertStatus.open => '$raised · Open',
+    ClinicalAlertStatus.acknowledged =>
+      '$raised · Acknowledged${a.acknowledgedAt == null ? '' : ' ${formatDate(a.acknowledgedAt!)}'}',
+    ClinicalAlertStatus.dismissed =>
+      '$raised · Dismissed${a.acknowledgedAt == null ? '' : ' ${formatDate(a.acknowledgedAt!)}'}',
+  };
+}

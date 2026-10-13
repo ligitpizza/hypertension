@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/provider_portal/domain/portal_logic.dart';
 import 'package:hypertension/features/provider_portal/domain/portal_models.dart';
+import 'package:hypertension/features/provider_portal/presentation/portal_widgets.dart';
 import 'package:hypertension/shared/models/health_models.dart';
 
 // Module 8 dashboard logic (FR-8.1, FR-8.4; UC8.1, UC8.2, UC8.6).
@@ -145,5 +146,28 @@ void main() {
       emergency: true,
     );
     expect(filterPatients([...rows, flagged]).first.patient.name, 'Zed');
+  });
+
+  test('alert timeline shows when it was raised and acknowledged', () {
+    final raised = DateTime(2026, 10, 14, 23, 32);
+    ClinicalAlert a(ClinicalAlertStatus status, DateTime? ack) => ClinicalAlert(
+      id: 'a',
+      patientId: 'p',
+      type: ClinicalAlertType.threshold,
+      severity: RiskLevel.critical,
+      message: 'm',
+      status: status,
+      createdAt: raised,
+      acknowledgedAt: ack,
+    );
+    expect(alertTimeline(a(ClinicalAlertStatus.open, null)), 'Raised 14 Oct 2026, 11:32 PM · Open');
+    expect(
+      alertTimeline(a(ClinicalAlertStatus.acknowledged, DateTime(2026, 10, 14, 23, 40))),
+      'Raised 14 Oct 2026, 11:32 PM · Acknowledged 14 Oct 2026, 11:40 PM',
+    );
+    expect(
+      alertTimeline(a(ClinicalAlertStatus.dismissed, DateTime(2026, 10, 15, 8, 5))),
+      'Raised 14 Oct 2026, 11:32 PM · Dismissed 15 Oct 2026, 8:05 AM',
+    );
   });
 }

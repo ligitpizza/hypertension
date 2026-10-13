@@ -59,6 +59,14 @@ class TriageResultPage extends ConsumerWidget {
     ],
   };
 
+  /// Quick replies for the AI chat, tailored to this result.
+  static List<String> quickReplies(TriageResult r) => [
+    'Explain my symptom check result',
+    for (final s in r.symptoms.take(2)) 'What can I do about ${s.name.toLowerCase()}?',
+    'When should I check my blood pressure again?',
+    'What warning signs should I watch for?',
+  ];
+
   static const _missingLabels = {
     'heart_rate': 'heart rate',
     'recent_blood_pressure': 'a blood pressure reading from the last 24 hours',
@@ -193,7 +201,7 @@ class TriageResultPage extends ConsumerWidget {
           if (!emergency) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: () => context.push('/ai-agent'),
+              onPressed: () => context.push('/ai-agent', extra: quickReplies(result)),
               icon: const Icon(Icons.smart_toy_outlined),
               label: const Text('Ask the AI Health Agent'),
             ),

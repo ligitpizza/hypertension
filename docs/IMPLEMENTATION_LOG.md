@@ -516,3 +516,18 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   `deploy-all`. The checker now explains an empty list ("not available right now ... call
   999") instead of showing a blank screen (widget test added). Demo accounts stay
   emulator-only.
+- Ping's review of the live checker (2026-10-14):
+  - Doctor's Alerts & triage history now shows when each alert was raised and when it was
+    acknowledged or dismissed (`acknowledgedAt`, D-32), e.g. "Raised 14 Oct 2026, 11:32 PM ·
+    Acknowledged 14 Oct 2026, 11:40 PM".
+  - Severity stays (UC14.1 step 3, Fig 4.3.8.1, Feature 4); a one-line plain-language hint
+    under the choice explains the selected level.
+  - AI chat quick replies: a row of tappable replies above the input, always visible (Fig
+    4.3.7.1 reply chips). Opened from a triage result they follow that result ("Explain my
+    symptom check result", "What can I do about <symptom>?", ...); from the reading update
+    card they are about the reading.
+  - Noted: 110/50 with blurred vision is "monitor at home" under the rule table (blurred
+    vision is not a red flag; the table has no low-BP rule). Not changed without Ping's
+    decision.
+  - Flutter 254/254.
+

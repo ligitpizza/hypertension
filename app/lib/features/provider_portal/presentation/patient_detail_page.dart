@@ -461,7 +461,7 @@ class _AlertHistory extends StatelessWidget {
                 dense: true,
                 leading: CircleAvatar(radius: 6, backgroundColor: riskColor(x.severity)),
                 title: Text('${alertTypeLabel(x.type)} · ${x.severity.value}'),
-                subtitle: Text('${formatDate(x.createdAt)} · ${x.status.value}\n${x.message}'),
+                subtitle: Text('${alertTimeline(x)}\n${x.message}'),
                 isThreeLine: true,
               ),
           ],

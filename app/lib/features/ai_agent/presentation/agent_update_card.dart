@@ -9,6 +9,14 @@ import '../state/agent_providers.dart';
 
 /// UC2.7 Receive Proactive Health Update (D-34): requested once when Reading Saved opens,
 /// so saving the reading itself stays fast. Also saved to the agent chat history.
+/// Quick replies when the chat is opened from a reading update.
+const readingQuickReplies = [
+  'What does my latest reading mean?',
+  'Explain my risk score',
+  'What should I do next?',
+  'How can I lower my blood pressure?',
+];
+
 class AgentUpdateCard extends ConsumerStatefulWidget {
   const AgentUpdateCard({super.key});
 
@@ -116,7 +124,7 @@ class _AgentUpdateCardState extends ConsumerState<AgentUpdateCard> {
                       ),
                     OutlinedButton.icon(
                       key: const Key('agent-open-chat'),
-                      onPressed: () => context.push('/ai-agent'),
+                      onPressed: () => context.push('/ai-agent', extra: readingQuickReplies),
                       icon: const Icon(Icons.chat_bubble_outline),
                       label: const Text('Ask the assistant'),
                     ),
