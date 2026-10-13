@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
+import 'package:hypertension/features/auth/state/auth_providers.dart';
+import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
+import 'package:hypertension/shared/models/health_models.dart';
 import 'package:hypertension/features/symptom_checker/data/symptom_repository.dart';
 import 'package:hypertension/features/symptom_checker/presentation/symptom_checker_page.dart';
 import 'package:hypertension/features/symptom_checker/presentation/triage_result_page.dart';
@@ -11,6 +14,7 @@ import 'package:hypertension/features/vitals/state/vitals_providers.dart';
 import 'package:hypertension/shared/services/api/api_client.dart';
 
 import '../helpers/fakes.dart';
+import 'dashboard_page_test.dart' show FakeDashboardRepository;
 import 'vitals_pages_test.dart' show FakePpgCapture, FakeVitalsRepository;
 
 // FR-14.3 Symptom checker (UC14.1, UC14.2 E1, UC14.3; Figs 4.3.8.1/4.3.8.2; D-36).
@@ -65,6 +69,9 @@ class FakeSymptomRepository implements SymptomRepository {
   }
 }
 
+final checkerNow = DateTime(2026, 10, 14, 12);
+List<VitalReading> vitalsLog = const [];
+
 Widget checkerApp(FakeSymptomRepository repo, FakeVitalsRepository vitals) {
   final router = GoRouter(
     initialLocation: '/symptom',
@@ -83,6 +90,11 @@ Widget checkerApp(FakeSymptomRepository repo, FakeVitalsRepository vitals) {
       symptomRepositoryProvider.overrideWithValue(repo),
       vitalsRepositoryProvider.overrideWithValue(vitals),
       ppgCaptureProvider.overrideWithValue(FakePpgCapture()),
+      dashboardRepositoryProvider.overrideWithValue(
+        FakeDashboardRepository()..readings = Stream.value(vitalsLog),
+      ),
+      authUidProvider.overrideWith((ref) => Stream.value('p1')),
+      nowProvider.overrideWithValue(() => checkerNow),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -104,6 +116,7 @@ void main() {
   setUp(() {
     repo = FakeSymptomRepository();
     vitals = FakeVitalsRepository();
+    vitalsLog = const [];
   });
 
   Future<void> toSymptoms(WidgetTester t) async {
@@ -150,6 +163,64 @@ void main() {
       await t.tap(find.text('Severe'));
       await t.pump();
       expect(find.textContaining('Severe: very strong'), findsOneWidget);
+    });
+
+    VitalReading logged(int sys, int dia, Duration ago) => VitalReading(
+      id: 'v1',
+      patientId: 'p1',
+      systolic: sys,
+      diastolic: dia,
+      timestamp: checkerNow.subtract(ago),
+    );
+
+    tallTest('D-36 a BP logged in Vitals today is reused and the patient is told', (t) async {
+      vitalsLog = [logged(135, 85, const Duration(hours: 2, minutes: 48))];
+      await t.pumpWidget(checkerApp(repo, vitals));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('sc-bp-from-vitals')), findsOneWidget);
+      expect(find.text('135/85 mmHg'), findsOneWidget);
+      expect(
+        find.text(
+          'The blood pressure you logged in Vitals today, 9:12 AM will be used for this check.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('sc-sys')), findsNothing); // not asked again
+      await toSymptoms(t);
+      await t.tap(find.byKey(const Key('sym-headache')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('sc-submit')));
+      await t.pumpAndSettle();
+      expect(vitals.last, isNull); // nothing logged twice
+      expect(repo.calls.single['vitalReadingId'], isNull); // server uses the latest reading
+    });
+
+    tallTest('"I have a newer reading" opens the BP boxes and can be undone', (t) async {
+      vitalsLog = [logged(135, 85, const Duration(hours: 1))];
+      await t.pumpWidget(checkerApp(repo, vitals));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('sc-enter-newer')));
+      await t.pump();
+      expect(find.byKey(const Key('sc-sys')), findsOneWidget);
+      await t.enterText(find.byKey(const Key('sc-sys')), '150');
+      await t.tap(find.byKey(const Key('sc-use-earlier')));
+      await t.pump();
+      expect(find.byKey(const Key('sc-bp-from-vitals')), findsOneWidget);
+      await toSymptoms(t);
+      await t.tap(find.byKey(const Key('sym-headache')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('sc-submit')));
+      await t.pumpAndSettle();
+      expect(vitals.last, isNull); // the typed 150 was discarded
+    });
+
+    tallTest('a Vitals reading older than 24 h is not reused', (t) async {
+      vitalsLog = [logged(135, 85, const Duration(hours: 25))];
+      await t.pumpWidget(checkerApp(repo, vitals));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('sc-bp-from-vitals')), findsNothing);
+      expect(find.textContaining('No blood pressure logged in Vitals'), findsOneWidget);
+      expect(find.byKey(const Key('sc-sys')), findsOneWidget);
     });
 
     tallTest('UC14.3 submits without BP: no reading logged', (t) async {
@@ -301,5 +372,16 @@ void main() {
       'When should I check my blood pressure again?',
       'What warning signs should I watch for?',
     ]);
+  });
+
+  test('reading time labels', () {
+    expect(
+      SymptomCheckerPage.readingTime(DateTime(2026, 10, 14, 9, 12), checkerNow),
+      'today, 9:12 AM',
+    );
+    expect(
+      SymptomCheckerPage.readingTime(DateTime(2026, 10, 13, 20, 5), checkerNow),
+      'yesterday, 8:05 PM',
+    );
   });
 }

@@ -530,4 +530,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
     vision is not a red flag; the table has no low-BP rule). Not changed without Ping's
     decision.
   - Flutter 254/254.
+- Symptom checker step 1 now says which BP it will use (Ping, 2026-10-14): with a Vitals
+  reading in the last 24 h it shows "135/85 mmHg — The blood pressure you logged in Vitals
+  today, 9:12 AM will be used for this check." and hides the BP boxes; "I have a newer
+  reading" opens them (and "Use my earlier reading instead" undoes it). Without a recent
+  reading the boxes show with "No blood pressure logged in Vitals in the last 24 hours...".
+  Same 24-hour window as the server (D-36). Flutter 258/258.
 

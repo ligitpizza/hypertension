@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/enums.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../../../shared/services/api/api_client.dart';
+import '../../dashboard/state/dashboard_providers.dart';
 import '../../vitals/presentation/heart_rate_card.dart';
 import '../../vitals/state/vitals_providers.dart';
 import '../state/symptom_providers.dart';
@@ -14,6 +15,9 @@ import '../state/symptom_providers.dart';
 ///
 /// Step 1 "Your vitals now": camera heart rate (mandatory step, skippable on poor
 /// signal) and an optional BP the patient just measured. Step 2: symptoms + severity.
+/// D-36: same window the server uses for "current BP" (backend services/triage.py).
+const recentBpWindow = Duration(hours: 24);
+
 class SymptomCheckerPage extends ConsumerStatefulWidget {
   const SymptomCheckerPage({super.key});
 
@@ -23,6 +27,20 @@ class SymptomCheckerPage extends ConsumerStatefulWidget {
     TriageSeverity.moderate: 'Moderate: bothering you and making some activities harder.',
     TriageSeverity.severe: 'Severe: very strong, or stopping you from doing normal activities.',
   };
+
+  /// "today, 9:12 AM" / "yesterday, 8:05 PM" for the Vitals reading being reused.
+  static String readingTime(DateTime t, DateTime now) {
+    final day = DateTime(t.year, t.month, t.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    final clock = '$h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'AM' : 'PM'}';
+    final label = day == today
+        ? 'today'
+        : day == today.subtract(const Duration(days: 1))
+        ? 'yesterday'
+        : '${t.day}/${t.month}';
+    return '$label, $clock';
+  }
 
   static const categoryLabels = {
     'common': 'Common symptoms',
@@ -42,6 +60,8 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
   final Set<String> _selected = {};
   TriageSeverity _severity = TriageSeverity.mild;
   bool _submitting = false;
+  // The patient chose to type a newer BP instead of the one from Vitals.
+  bool _enterNew = false;
   // A reading saved by an earlier attempt, reused on retry so it is not logged twice.
   String? _savedReadingId;
   String? _error;
@@ -122,59 +142,115 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
     );
   }
 
-  Widget _vitalsStep(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
-    children: [
-      Text('Step 1 of 2', style: Theme.of(context).textTheme.labelMedium),
-      const SizedBox(height: 4),
-      Text(
-        'First, let\'s check your heart rate with the camera. It helps us give better '
-        'advice. If it doesn\'t work, you can skip it.',
-        style: Theme.of(context).textTheme.bodyMedium,
-      ),
-      const SizedBox(height: 12),
-      HeartRateCard(onChanged: (bpm) => setState(() => _heartRate = bpm)),
-      const SizedBox(height: 16),
-      Text('Blood pressure (optional)', style: Theme.of(context).textTheme.titleMedium),
-      const Text('If you have just measured it, enter it here. It will be saved as a reading.'),
-      const SizedBox(height: 8),
-      Row(
-        children: [
-          Expanded(
-            child: TextField(
-              key: const Key('sc-sys'),
-              onChanged: (_) => _savedReadingId = null, // edited: save the new values
-              controller: _sys,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Systolic', suffixText: 'mmHg'),
+  Widget _vitalsStep(BuildContext context) {
+    final now = ref.watch(nowProvider)();
+    final latest = ref.watch(recentReadingsProvider).value?.firstOrNull;
+    final recent = latest != null && now.difference(latest.timestamp) <= recentBpWindow
+        ? latest
+        : null;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Step 1 of 2', style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 4),
+        Text(
+          'First, let\'s check your heart rate with the camera. It helps us give better '
+          'advice. If it doesn\'t work, you can skip it.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        HeartRateCard(onChanged: (bpm) => setState(() => _heartRate = bpm)),
+        const SizedBox(height: 16),
+        Text('Blood pressure', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        // D-36: the server uses the latest reading from the last 24 h unless a new one is
+        // entered here; say so, so the patient is not asked for the same BP twice.
+        if (recent != null && !_enterNew) ...[
+          Card(
+            key: const Key('sc-bp-from-vitals'),
+            child: ListTile(
+              leading: const Icon(Icons.monitor_heart_outlined),
+              title: Text('${recent.systolic}/${recent.diastolic} mmHg'),
+              subtitle: Text(
+                'The blood pressure you logged in Vitals '
+                '${SymptomCheckerPage.readingTime(recent.timestamp, now)} will be used for '
+                'this check.',
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              key: const Key('sc-dia'),
-              onChanged: (_) => _savedReadingId = null, // edited: save the new values
-              controller: _dia,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Diastolic', suffixText: 'mmHg'),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const Key('sc-enter-newer'),
+              onPressed: () => setState(() => _enterNew = true),
+              child: const Text('I have a newer reading'),
             ),
           ),
+        ] else ...[
+          Text(
+            recent == null
+                ? 'No blood pressure logged in Vitals in the last 24 hours. If you have just '
+                      'measured it, enter it here (it will be saved to Vitals). Otherwise you can '
+                      'continue without it.'
+                : 'Enter the reading you have just measured. It will be saved to Vitals and '
+                      'used for this check.',
+            key: const Key('sc-bp-hint'),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const Key('sc-sys'),
+                  onChanged: (_) => _savedReadingId = null, // edited: save the new values
+                  controller: _sys,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(labelText: 'Systolic', suffixText: 'mmHg'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  key: const Key('sc-dia'),
+                  onChanged: (_) => _savedReadingId = null, // edited: save the new values
+                  controller: _dia,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(labelText: 'Diastolic', suffixText: 'mmHg'),
+                ),
+              ),
+            ],
+          ),
+          if (recent != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                key: const Key('sc-use-earlier'),
+                onPressed: () => setState(() {
+                  _enterNew = false;
+                  _sys.clear();
+                  _dia.clear();
+                  _error = null;
+                  _savedReadingId = null;
+                }),
+                child: const Text('Use my earlier reading instead'),
+              ),
+            ),
         ],
-      ),
-      if (_error != null) ...[
-        const SizedBox(height: 8),
-        Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ],
+        const SizedBox(height: 24),
+        FilledButton(
+          key: const Key('sc-next'),
+          onPressed: _toSymptoms,
+          child: Text(_heartRate == null ? 'Skip heart rate and continue' : 'Continue'),
+        ),
       ],
-      const SizedBox(height: 24),
-      FilledButton(
-        key: const Key('sc-next'),
-        onPressed: _toSymptoms,
-        child: Text(_heartRate == null ? 'Skip heart rate and continue' : 'Continue'),
-      ),
-    ],
-  );
+    );
+  }
 
   Widget _symptomStep(BuildContext context) {
     final catalog = ref.watch(symptomCatalogProvider);
