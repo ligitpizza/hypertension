@@ -69,6 +69,8 @@ SCHEDULER_JOBS: dict[str, tuple[str, str]] = {
     "careflow-heartbeat": ("0 3 * * *", "heartbeat"),
     # FR-9.6: daily 30-day deterioration scan.
     "careflow-deterioration": ("0 6 * * *", "deterioration"),
+    # D-37: escalate high alerts unanswered for 2 h (Cloud Scheduler free tier: 3 jobs).
+    "careflow-escalation": ("*/15 * * * *", "escalation"),
 }
 
 EMULATOR_ENV = {

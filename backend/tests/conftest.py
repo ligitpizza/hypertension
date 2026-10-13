@@ -234,6 +234,18 @@ class InMemoryAlertRepository:
         self.alerts.append({**data, "createdAt": data.get("createdAt", datetime.now(UTC))})
         return f"alert{len(self.alerts)}"
 
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def stale_open_alerts(self, severity: RiskLevel, before: Any) -> list[dict[str, Any]]:
+        return [
+            {**a, "id": f"alert{i + 1}"}
+            for i, a in enumerate(self.alerts)
+            if a["status"] == "open"
+            and a["severity"] == severity.value
+            and a["createdAt"] <= before
+        ]
+
 
 class InMemoryDeteriorationRepository:
     def __init__(self) -> None:

@@ -19,6 +19,7 @@ from app.core.errors import ApiError
 from app.ml.risk_inputs import MIN_READINGS, existing_conditions
 from app.ml.risk_model import RiskModel, RiskPrediction, get_risk_model
 from app.schemas.vitals import LogReadingRequest, LogReadingResponse
+from app.services.agent_context import AgentDataRepository, get_agent_data_repository
 from app.services.bp import alert_level, classify, plausibility_error
 from app.services.escalation import (
     AlertRepository,
@@ -54,6 +55,7 @@ def log_reading(
     audit: AuditLogger = Depends(get_audit_logger),
     alerts: AlertRepository = Depends(get_alert_repository),
     escalator: Escalator = Depends(get_escalator),
+    agent: AgentDataRepository = Depends(get_agent_data_repository),
 ) -> LogReadingResponse:
     reason = plausibility_error(body.systolic, body.diastolic, body.heartRate)
     if reason is not None:
@@ -124,6 +126,14 @@ def log_reading(
     if risk is not None:
         risk["diagnosed"] = sorted(c.value for c in diagnosed)
 
+    # D-37: the reading before this one decides the Mild follow-up rule; the recent ones
+    # go into the doctor's emailed BP report.
+    recent = risk_repo.recent_readings(user.uid, 7)
+    previous_category = (
+        classify(int(recent[1]["systolic"]), int(recent[1]["diastolic"]))
+        if len(recent) > 1
+        else None
+    )
     plan = plan_escalation(
         str(profile.get("name") or "Your patient"),
         body.systolic,
@@ -131,6 +141,9 @@ def log_reading(
         alert,
         prediction,
         previous,
+        heart_rate=body.heartRate,
+        previous_category=previous_category,
+        recent=recent,
     )
     try:
         escalator.apply(
@@ -145,13 +158,19 @@ def log_reading(
         # The reading and risk score are already saved; an alerting failure must not
         # make the patient think the reading was lost (and log it twice).
         log.exception("Escalation failed for reading %s", reading_id)
+    if plan.agent_note:
+        # D-37: the AI Health Agent's fixed advice (avoid exertion / stay calm) in the chat.
+        try:
+            agent.add_message(user.uid, "agent", plan.agent_note)
+        except Exception:
+            log.exception("Agent note failed for reading %s", reading_id)
     return LogReadingResponse(
         id=reading_id,
         systolic=body.systolic,
         diastolic=body.diastolic,
         heartRate=body.heartRate,
         category=category,
-        alertLevel=alert,
+        alertLevel=plan.alert_level,
         risk=risk,
         riskStatus=risk_status,
         readingsUntilRisk=readings_until_risk,

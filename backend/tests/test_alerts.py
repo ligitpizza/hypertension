@@ -50,9 +50,9 @@ def test_fr_9_1_normal_reading_notifies_nobody() -> None:
     assert not plan.book_appointment_prompt
 
 
-def test_fr_9_1_mild_notifies_patient_only() -> None:
+def test_fr_9_1_mild_notifies_patient_and_reports_to_doctor() -> None:
     plan = plan_escalation("Ali", 135, 85, AlertLevel.MILD, None, None)
-    assert plan.summary() == ["patient_push"]
+    assert plan.summary() == ["doctor:threshold:low", "patient_push"]  # D-37
 
 
 def test_fr_9_1_moderate_alerts_doctor_and_family() -> None:

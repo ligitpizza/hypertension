@@ -179,12 +179,12 @@ def test_uc14_3_saves_outcome_and_returns_result(
     alerts_repo: InMemoryAlertRepository,
     audit: InMemoryAuditLogger,
 ) -> None:
-    rid = add_reading(vitals_repo, 122, 80)
+    rid = add_reading(vitals_repo, 118, 76)
     res = post(client, symptoms=["headache", "nausea"], heartRate=74, vitalReadingId=rid)
     assert res.status_code == 201
     body = res.json()
     assert body["outcome"] == "monitor_at_home"
-    assert body["systolic"] == 122 and body["heartRate"] == 74
+    assert body["systolic"] == 118 and body["heartRate"] == 74
     assert body["missingInputs"] == ["risk_score"]
     assert body["doctorNotified"] is False
     assert triage_repo.saved == [

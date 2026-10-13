@@ -1,5 +1,8 @@
 {
   "indexes": [
+    { "collectionGroup": "clinical_alerts", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "severity", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "ASCENDING" } ] },
     { "collectionGroup": "agent_messages", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "sentAt", "order": "DESCENDING" } ] },
     { "collectionGroup": "clinical_notes", "queryScope": "COLLECTION", "fields": [

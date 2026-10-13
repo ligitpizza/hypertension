@@ -14,6 +14,7 @@ from app.core.audit import SYSTEM_SCHEDULER_USER, AuditLogger, get_audit_logger
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.services.deterioration import DeteriorationJob, get_deterioration_job
+from app.services.unanswered import UnansweredAlertJob, get_unanswered_alert_job
 
 router = APIRouter(prefix="/internal/jobs", tags=["jobs"])
 
@@ -73,6 +74,12 @@ JOBS: dict[str, Callable[[AuditLogger], dict[str, Any]]] = {
 def run_deterioration(job: DeteriorationJob = Depends(get_deterioration_job)) -> dict[str, Any]:
     """FR-9.6: daily 30-day deterioration scan."""
     return {"job": "deterioration", "status": "ok", **job.run()}
+
+
+@router.post("/escalation", dependencies=[Depends(verify_scheduler)])
+def run_escalation(job: UnansweredAlertJob = Depends(get_unanswered_alert_job)) -> dict[str, Any]:
+    """D-37: escalate high alerts the doctor has not answered within 2 hours."""
+    return {"job": "escalation", "status": "ok", **job.run()}
 
 
 @router.post("/{job}", dependencies=[Depends(verify_scheduler)])

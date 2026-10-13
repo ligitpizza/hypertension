@@ -6,6 +6,7 @@ gathers the latest vitals and risk, applies the rule table, saves `triage_outcom
 and notifies the assigned doctor for contact_doctor / seek_emergency_care.
 """
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
 from app.core.enums import (
+    BpCategory,
     ClinicalAlertType,
     Collection,
     RiskLevel,
@@ -23,10 +25,23 @@ from app.core.enums import (
     UserRole,
 )
 from app.core.errors import ApiError
+from app.integrations.push import PushMessage
+from app.services.agent_context import AgentDataRepository, get_agent_data_repository
 from app.services.bp import HEART_RATE_MAX, HEART_RATE_MIN
-from app.services.escalation import DoctorAlert, EscalationPlan, Escalator, get_escalator
+from app.services.bp import classify as classify_bp
+from app.services.escalation import (
+    AVOID_EXERTION_NOTE,
+    CALM_NOTE,
+    MILD_DEDUPE_WINDOW,
+    DoctorAlert,
+    EscalationPlan,
+    Escalator,
+    get_escalator,
+)
 from app.services.triage import TriageRepository, classify, gather_inputs, get_triage_repository
 from app.services.users import UserRepository, get_user_repository
+
+log = logging.getLogger("careflow.triage")
 
 router = APIRouter(prefix="/triage", tags=["triage"])
 
@@ -54,6 +69,7 @@ def submit(
     users: UserRepository = Depends(get_user_repository),
     escalator: Escalator = Depends(get_escalator),
     audit: AuditLogger = Depends(get_audit_logger),
+    agent: AgentDataRepository = Depends(get_agent_data_repository),
 ) -> dict[str, Any]:
     ids = list(dict.fromkeys(body.symptoms))
     catalog = repo.symptoms(ids)
@@ -96,36 +112,59 @@ def submit(
         target_id=outcome_id,
     )
 
+    profile = users.get_user(user.uid) or {}
+    name = str(profile.get("name") or "Patient")
+    names = ", ".join(catalog[i].name for i in ids)
+    bp = (
+        f"BP {inputs.systolic}/{inputs.diastolic} mmHg"
+        if inputs.systolic is not None
+        else "no recent BP"
+    )
+    hr = f", HR {inputs.heart_rate} bpm (estimate)" if inputs.heart_rate else ""
+    risk = (
+        max(inputs.risk_levels, key=list(RiskLevel).index).value if inputs.risk_levels else "none"
+    )
+    plan = EscalationPlan()
+    emergency = decision.outcome is TriageOutcome.SEEK_EMERGENCY_CARE
     # UC14.4: notify the assigned doctor for Moderate (contact) and Emergency outcomes.
     if decision.outcome in _ALERT_SEVERITY:
-        profile = users.get_user(user.uid) or {}
-        names = ", ".join(catalog[i].name for i in ids)
-        bp = (
-            f"BP {inputs.systolic}/{inputs.diastolic} mmHg"
-            if inputs.systolic is not None
-            else "no recent BP"
+        label = "URGENT triage: seek emergency care" if emergency else "Triage: contact doctor"
+        plan.doctor_alerts.append(
+            DoctorAlert(
+                ClinicalAlertType.TRIAGE,
+                _ALERT_SEVERITY[decision.outcome],
+                f"{label}. {name} reported {names} ({body.severity.value}); {bp}{hr}; "
+                f"overall risk {risk}.",
+            )
         )
-        hr = f", HR {inputs.heart_rate} bpm (estimate)" if inputs.heart_rate else ""
-        risk = (
-            max(inputs.risk_levels, key=list(RiskLevel).index).value
-            if inputs.risk_levels
-            else "none"
+        # D-37: family members are told about moderate and emergency symptom reports.
+        plan.family_push = PushMessage(
+            f"{name}: {'emergency' if emergency else 'symptom'} report",
+            f"{name} reported {names} in the symptom checker"
+            + (". Please contact them now; call 999 if they are unwell." if emergency else "."),
+            {"type": "triage", "outcome": decision.outcome.value},
+            urgent=emergency,
         )
-        label = (
-            "URGENT triage: seek emergency care"
-            if decision.outcome is TriageOutcome.SEEK_EMERGENCY_CARE
-            else "Triage: contact doctor"
-        )
-        plan = EscalationPlan(
-            doctor_alerts=[
+        plan.agent_note = CALM_NOTE if emergency else AVOID_EXERTION_NOTE
+    elif inputs.systolic is not None and inputs.diastolic is not None:
+        # D-37 Mild band (130-139 / 80-89): doctor gets the daily BP report by email.
+        if classify_bp(inputs.systolic, inputs.diastolic) is BpCategory.STAGE1:
+            plan.doctor_alerts.append(
                 DoctorAlert(
-                    ClinicalAlertType.TRIAGE,
-                    _ALERT_SEVERITY[decision.outcome],
-                    f"{label}. {profile.get('name') or 'Patient'} reported {names} "
-                    f"({body.severity.value}); {bp}{hr}; overall risk {risk}.",
+                    ClinicalAlertType.THRESHOLD,
+                    RiskLevel.LOW,
+                    f"{name} is in the mild (stage 1) range: {bp}{hr}; overall risk {risk}; "
+                    f"symptom check: {names} ({body.severity.value}).",
+                    dedupe=MILD_DEDUPE_WINDOW,
+                    email_report=(
+                        f"Symptom checker report for {name} (CareFlow).\n\n"
+                        f"Symptoms: {names} ({body.severity.value})\n{bp}{hr}\n"
+                        f"Overall risk: {risk}\nOutcome: monitor at home (mild range).\n\n"
+                        "Open the CareFlow staff portal to review the patient's record."
+                    ),
                 )
-            ]
-        )
+            )
+    if plan.doctor_alerts or plan.family_push:
         escalator.apply(
             plan,
             user.uid,
@@ -133,6 +172,11 @@ def submit(
             now,
             reading_id=inputs.reading_id,
         )
+    if plan.agent_note:
+        try:  # the outcome is saved; a chat note failure must not hide the result
+            agent.add_message(user.uid, "agent", plan.agent_note)
+        except Exception:
+            log.exception("Agent note failed for triage %s", outcome_id)
 
     return {
         "id": outcome_id,

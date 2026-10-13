@@ -44,9 +44,9 @@ class ConsoleEmailClient:
 
     def send(self, message: EmailMessage) -> bool:
         self.sent.append(message)
-        log.info(
-            "[fake email] to=%s subject=%s\n%s", message.to_email, message.subject, message.text
-        )
+        # Body at DEBUG only: it can contain health data (e.g. BP reports, D-37).
+        log.info("[fake email] to=%s subject=%s", message.to_email, message.subject)
+        log.debug("[fake email] body:\n%s", message.text)
         return False  # nothing was actually delivered
 
 
