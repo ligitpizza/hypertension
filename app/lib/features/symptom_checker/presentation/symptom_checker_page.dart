@@ -187,35 +187,41 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
                   'Could not load the symptom list. Check your connection and try again. '
                   'If you feel very unwell, call 999.',
                 ),
-                data: (list) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final cat in SymptomCheckerPage.categoryLabels.keys)
-                      if (list.any((s) => s.category == cat)) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          SymptomCheckerPage.categoryLabels[cat]!.toUpperCase(),
-                          style: Theme.of(context).textTheme.labelMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final s in list.where((s) => s.category == cat))
-                              FilterChip(
-                                key: Key('sym-${s.id}'),
-                                label: Text(s.name),
-                                selected: _selected.contains(s.id),
-                                onSelected: (on) => setState(
-                                  () => on ? _selected.add(s.id) : _selected.remove(s.id),
-                                ),
+                data: (list) => list.isEmpty
+                    ? const Text(
+                        'The symptom list is not available right now. Please try again later. '
+                        'If you feel very unwell, call 999.',
+                        key: Key('sc-empty'),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final cat in SymptomCheckerPage.categoryLabels.keys)
+                            if (list.any((s) => s.category == cat)) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                SymptomCheckerPage.categoryLabels[cat]!.toUpperCase(),
+                                style: Theme.of(context).textTheme.labelMedium,
                               ),
-                          ],
-                        ),
-                      ],
-                  ],
-                ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final s in list.where((s) => s.category == cat))
+                                    FilterChip(
+                                      key: Key('sym-${s.id}'),
+                                      label: Text(s.name),
+                                      selected: _selected.contains(s.id),
+                                      onSelected: (on) => setState(
+                                        () => on ? _selected.add(s.id) : _selected.remove(s.id),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                        ],
+                      ),
               ),
             ],
           ),

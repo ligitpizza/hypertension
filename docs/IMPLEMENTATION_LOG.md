@@ -509,3 +509,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Tests: backend 23 new (tests/test_band_actions.py) and two existing expectations updated
   (Mild now also reports to the doctor; 122/80 is stage 1, so the "no alert" triage fixture
   uses 118/76); Flutter 10 new -> 249/249.
+- Live check fix: the live symptom checker showed no symptoms, so Continue stayed disabled.
+  `symptom_catalog` had only ever been seeded into the emulators. Added
+  `firebase/seed/catalog_live.py` + `python tasks.py seed-catalog-live --yes` (reference data
+  only, same stable ids, idempotent, refuses to run against emulators) and made it step 2 of
+  `deploy-all`. The checker now explains an empty list ("not available right now ... call
+  999") instead of showing a blank screen (widget test added). Demo accounts stay
+  emulator-only.

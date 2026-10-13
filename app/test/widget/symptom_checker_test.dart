@@ -133,6 +133,15 @@ void main() {
       expect(t.widget<FilledButton>(find.byKey(const Key('sc-submit'))).onPressed, isNotNull);
     });
 
+    tallTest('an empty symptom list explains itself instead of a blank screen', (t) async {
+      repo.catalogList = const [];
+      await t.pumpWidget(checkerApp(repo, vitals));
+      await t.pumpAndSettle();
+      await toSymptoms(t);
+      expect(find.byKey(const Key('sc-empty')), findsOneWidget);
+      expect(find.textContaining('call 999'), findsOneWidget);
+    });
+
     tallTest('UC14.3 submits without BP: no reading logged', (t) async {
       await t.pumpWidget(checkerApp(repo, vitals));
       await t.pumpAndSettle();

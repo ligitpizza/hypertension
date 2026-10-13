@@ -23,6 +23,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
   deploy-web              Build the staff portal and deploy Firebase Hosting
   deploy-rules            Firestore rules + indexes and Storage rules
   create-scheduler-jobs   Idempotent Cloud Scheduler jobs calling /internal/jobs/*
+  seed-catalog-live       Write the symptom_catalog reference list to the live project
+                          (idempotent; also run by deploy-all)
   set-gemini-secret       One-time (and when the key changes): store GEMINI_API_KEY from
                           backend/.env in Secret Manager for the live AI agent
   build-apk               Release APKs for the patient and family flavors
@@ -796,6 +798,21 @@ def task_bootstrap_admin() -> None:
     sys.exit(result.returncode)
 
 
+def task_seed_catalog_live() -> None:
+    """Load symptom_catalog reference data into the LIVE Firestore (idempotent, FR-14.3)."""
+    cmd = [venv_python(), str(FIREBASE / "seed" / "catalog_live.py")]
+    confirm_cloud("write the 14-symptom symptom_catalog reference list to the LIVE project", [cmd])
+    live_env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in {"FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST"}
+    }
+    print(f"\n> {' '.join(cmd)}", flush=True)
+    result = subprocess.run(cmd, cwd=FIREBASE / "seed", env=live_env, check=False)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+
 def task_build_apk() -> None:
     url = backend_url()
     if not url:
@@ -825,6 +842,7 @@ def task_deploy_all() -> None:
     global ASSUME_YES
     steps = [
         ("Firestore rules + indexes, Storage rules", task_deploy_rules),
+        ("Reference data: symptom catalog", task_seed_catalog_live),
         ("FastAPI backend on Cloud Run", task_deploy_backend),
         ("Staff portal on Firebase Hosting", task_deploy_web),
         (
@@ -867,6 +885,7 @@ TASKS = {
     "deploy-rules": task_deploy_rules,
     "create-scheduler-jobs": task_create_scheduler_jobs,
     "set-gemini-secret": task_set_gemini_secret,
+    "seed-catalog-live": task_seed_catalog_live,
     "build-apk": task_build_apk,
     "backend-url": task_backend_url,
     "adb-reverse": task_adb_reverse,
