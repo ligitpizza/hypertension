@@ -74,6 +74,12 @@ final patientAlertsProvider = StreamProvider.family<List<ClinicalAlert>, String>
   return ref.watch(portalRepositoryProvider).patientAlerts(uid, id);
 }, retry: _noRetry);
 
+/// D-41: care plan versions for the doctor's editor.
+final patientCarePlanHistoryProvider = StreamProvider.family<List<CarePlanVersion>, String>(
+  (ref, id) => ref.watch(dashboardRepositoryProvider).carePlanHistory(id),
+  retry: _noRetry,
+);
+
 final portalPatientProvider = StreamProvider.family<PortalPatient?, String>(
   (ref, id) => ref.watch(portalRepositoryProvider).patient(id),
   retry: _noRetry,

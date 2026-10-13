@@ -158,3 +158,14 @@ class CarePlan {
   factory CarePlan.fromFirestore(Map<String, dynamic> d) =>
       CarePlan(content: d['content'] as String? ?? '', updatedAt: _time(d['updatedAt']));
 }
+
+/// D-41: one saved version of the care plan (`care_plans/{patientId}/versions`).
+class CarePlanVersion {
+  const CarePlanVersion({required this.content, required this.savedAt});
+
+  final String content;
+  final DateTime savedAt;
+
+  factory CarePlanVersion.fromFirestore(Map<String, dynamic> d) =>
+      CarePlanVersion(content: d['content'] as String? ?? '', savedAt: _time(d['savedAt']));
+}

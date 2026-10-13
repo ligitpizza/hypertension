@@ -42,6 +42,12 @@ final carePlanProvider = StreamProvider<CarePlan?>((ref) {
   return _forUser<CarePlan?>(ref, repo.carePlan, null);
 }, retry: _noRetry);
 
+/// D-41: the patient's care plan history (View history sheet).
+final carePlanHistoryProvider = StreamProvider<List<CarePlanVersion>>((ref) {
+  final repo = ref.watch(dashboardRepositoryProvider);
+  return _forUser(ref, repo.carePlanHistory, const <CarePlanVersion>[]);
+}, retry: _noRetry);
+
 final upcomingAppointmentsProvider = StreamProvider<List<Appointment>>((ref) {
   final repo = ref.watch(dashboardRepositoryProvider);
   final now = ref.watch(nowProvider)();

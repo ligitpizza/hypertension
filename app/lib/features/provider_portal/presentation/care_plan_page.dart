@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/services/api/api_client.dart';
+import '../../../shared/widgets/care_plan_history.dart';
 import '../state/portal_providers.dart';
 import 'portal_widgets.dart';
 
@@ -64,6 +65,7 @@ class _CarePlanPageState extends ConsumerState<CarePlanPage> {
       _loaded = true;
       _text.text = plan.value?.content ?? '';
     }
+    final history = ref.watch(patientCarePlanHistoryProvider(id));
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -115,6 +117,14 @@ class _CarePlanPageState extends ConsumerState<CarePlanPage> {
                     ),
                   ],
                 ),
+        ),
+        const SizedBox(height: 16),
+        SectionCard(
+          title: 'Previous versions',
+          child: AsyncSection(
+            value: history,
+            builder: (v) => CarePlanHistoryList(versions: v, shrinkWrap: true),
+          ),
         ),
       ],
     );

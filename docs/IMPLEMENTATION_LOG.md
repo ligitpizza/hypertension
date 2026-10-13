@@ -579,4 +579,12 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
     appointment data (M5/M7), delivery preferences in the doctor portal (M13), family linking
     with Call Emergency Contact / Alert Family (FR-14.2).
   - Tests: backend factors (unit + real-model), agent context; Flutter 259/259.
+- **D-41 care plan version history (Ping, 2026-10-14):** the single current plan stays
+  (Table 4.2.3.12); each save through `PUT /provider/patients/{id}/care-plan` also appends
+  `{content, doctorId, savedAt}` to `care_plans/{patientId}/versions` in the same Firestore
+  batch (Needs Ch4 update). Rules: readable by the patient, assigned doctor and admin, never
+  written by clients (3 new rules tests, 136/136). Patient: "View history" on the My care plan
+  card opens a sheet listing versions newest first with the current one marked. Doctor: the
+  care plan editor lists "Previous versions". Plans saved before this change have no history
+  until the next save. Flutter 261/261.
 

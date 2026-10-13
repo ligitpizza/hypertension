@@ -29,6 +29,11 @@ class FakeDashboardRepository implements DashboardRepository {
   @override
   Stream<CarePlan?> carePlan(String patientId) => plan;
 
+  Stream<List<CarePlanVersion>> history = Stream.value(const []);
+
+  @override
+  Stream<List<CarePlanVersion>> carePlanHistory(String patientId) => history;
+
   @override
   Stream<List<VitalReading>> recentReadings(String patientId, {int limit = 20}) => readings;
 
@@ -304,6 +309,26 @@ void main() {
       await t.pumpWidget(app(FakeDashboardRepository()));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('care-plan-empty')), findsOneWidget);
+    });
+
+    tallTest('D-41 View history lists every version, newest marked Current', (t) async {
+      final repo = FakeDashboardRepository()
+        ..plan = Stream.value(CarePlan(content: 'Wake up early', updatedAt: now))
+        ..history = Stream.value([
+          CarePlanVersion(content: 'Wake up early', savedAt: now),
+          CarePlanVersion(
+            content: 'Drink more water today',
+            savedAt: now.subtract(const Duration(days: 1)),
+          ),
+        ]);
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(const Key('care-plan-history-button')));
+      await t.tap(find.byKey(const Key('care-plan-history-button')));
+      await t.pumpAndSettle();
+      expect(find.text('Care plan history'), findsOneWidget);
+      expect(find.text('Drink more water today'), findsOneWidget);
+      expect(find.text('Current'), findsOneWidget);
     });
 
     tallTest("shows the doctor's plan, with Read more for long plans", (t) async {

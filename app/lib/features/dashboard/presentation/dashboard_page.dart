@@ -6,6 +6,7 @@ import '../../../core/utils/bp_classifier.dart';
 import '../../../core/utils/risk_style.dart';
 import '../../../shared/models/health_models.dart';
 import '../../../core/constants/enums.dart';
+import '../../../shared/widgets/care_plan_history.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../symptom_checker/state/symptom_providers.dart';
 import '../domain/dashboard_logic.dart';
@@ -490,6 +491,35 @@ class _CarePlanCard extends ConsumerStatefulWidget {
 class _CarePlanCardState extends ConsumerState<_CarePlanCard> {
   bool _expanded = false;
 
+  /// D-41: every version the doctor saved, newest first.
+  void _showHistory(BuildContext context) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      builder: (context, controller) => Consumer(
+        builder: (context, ref, _) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: ListView(
+            controller: controller,
+            children: [
+              Text('Care plan history', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              ref
+                  .watch(carePlanHistoryProvider)
+                  .when(
+                    loading: () => const LinearProgressIndicator(),
+                    error: (_, _) => const Text('Could not load the history. Try again later.'),
+                    data: (v) => CarePlanHistoryList(versions: v, shrinkWrap: true),
+                  ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final plan = ref.watch(carePlanProvider);
@@ -536,9 +566,21 @@ class _CarePlanCardState extends ConsumerState<_CarePlanCard> {
                         onPressed: () => setState(() => _expanded = !_expanded),
                         child: Text(_expanded ? 'Show less' : 'Read more'),
                       ),
-                    Text(
-                      'From your doctor · updated ${timeAgo(p.updatedAt, ref.watch(nowProvider)())}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'From your doctor · updated '
+                            '${timeAgo(p.updatedAt, ref.watch(nowProvider)())}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        TextButton(
+                          key: const Key('care-plan-history-button'),
+                          onPressed: () => _showHistory(context),
+                          child: const Text('View history'),
+                        ),
+                      ],
                     ),
                   ],
                 );

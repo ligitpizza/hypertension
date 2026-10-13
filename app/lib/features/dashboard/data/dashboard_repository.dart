@@ -18,6 +18,9 @@ abstract interface class DashboardRepository {
   /// The doctor's care plan for this patient, or null if none yet (Module 8, UC10.2 view).
   Stream<CarePlan?> carePlan(String patientId);
 
+  /// D-41: every saved version of the care plan, newest first.
+  Stream<List<CarePlanVersion>> carePlanHistory(String patientId);
+
   /// Upcoming appointments from [from], soonest first (UC2.3).
   Stream<List<Appointment>> upcomingAppointments(String patientId, DateTime from);
 }
@@ -61,6 +64,16 @@ class FirestoreDashboardRepository implements DashboardRepository {
       .doc(patientId)
       .snapshots()
       .map((s) => s.exists ? CarePlan.fromFirestore(s.data()!) : null);
+
+  @override
+  Stream<List<CarePlanVersion>> carePlanHistory(String patientId) => _db
+      .collection(Collections.carePlans)
+      .doc(patientId)
+      .collection('versions')
+      .orderBy('savedAt', descending: true)
+      .limit(50)
+      .snapshots()
+      .map((s) => [for (final d in s.docs) CarePlanVersion.fromFirestore(d.data())]);
 
   @override
   Stream<List<Appointment>> upcomingAppointments(String patientId, DateTime from) => _db

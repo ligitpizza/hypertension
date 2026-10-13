@@ -69,6 +69,11 @@ class FakePatientData implements DashboardRepository {
   @override
   Stream<CarePlan?> carePlan(String patientId) => Stream.value(null);
 
+  List<CarePlanVersion> versions = const [];
+
+  @override
+  Stream<List<CarePlanVersion>> carePlanHistory(String patientId) => Stream.value(versions);
+
   @override
   Stream<List<Medication>> medications(String patientId) =>
       Stream.value(meds[patientId] ?? const []);
@@ -418,6 +423,22 @@ void main() {
       await t.pumpAndSettle();
       expect(repo.savedPlans, ['Target BP < 130/80; low salt']);
       expect(find.byKey(const Key('care-plan-saved')), findsOneWidget);
+    });
+
+    tallTest('D-41 previous versions are listed under the editor', (t) async {
+      data.versions = [
+        CarePlanVersion(content: 'Target BP < 130/80', savedAt: now),
+        CarePlanVersion(
+          content: 'Walk 20 min daily',
+          savedAt: now.subtract(const Duration(days: 2)),
+        ),
+      ];
+      repo.plan = CarePlan(content: 'Target BP < 130/80', updatedAt: now);
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1/care-plan'));
+      await t.pumpAndSettle();
+      expect(find.text('Previous versions'), findsOneWidget);
+      expect(find.text('Walk 20 min daily'), findsOneWidget);
+      expect(find.text('Current'), findsOneWidget);
     });
   });
 
