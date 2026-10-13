@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/constants/enums.dart';
 import '../../../shared/services/api/api_client.dart';
+import '../../../shared/services/push/push_service.dart';
 import '../domain/app_user.dart';
 
 /// User-facing auth failure. `message` is safe to show on screen.
@@ -71,13 +72,16 @@ class FirebaseAuthRepository implements AuthRepository {
     required FirebaseAuth auth,
     required FirebaseFirestore firestore,
     required ApiClient api,
+    PushService push = const NoopPushService(),
   }) : _auth = auth, // ignore: prefer_initializing_formals
        _db = firestore,
-       _api = api; // ignore: prefer_initializing_formals
+       _api = api, // ignore: prefer_initializing_formals
+       _push = push; // ignore: prefer_initializing_formals
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
   final ApiClient _api;
+  final PushService _push;
 
   @override
   Stream<String?> uidChanges() => _auth.authStateChanges().map((u) => u?.uid);
@@ -187,6 +191,8 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<void> signOut(ClientApp app) async {
     try {
       if (_auth.currentUser != null) {
+        // D-33: stop this device receiving the user's alerts (needs the ID token).
+        await _push.unregister().timeout(const Duration(seconds: 5)).catchError((Object _) {});
         await _api
             .sessionEvent(event: SessionEvent.logout.value, app: app.value)
             .timeout(const Duration(seconds: 5));

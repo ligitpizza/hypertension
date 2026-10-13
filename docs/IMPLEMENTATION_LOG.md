@@ -255,5 +255,15 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
     sends family a push only.
   - Doctor alert read access follows `doctorId` on the alert; after a reassignment the old
     doctor still sees alerts addressed to them (new alerts go to the new doctor).
-- Known limitations: patient app does not yet register FCM tokens or show the new response
-  fields (next step).
+- App (patient/family Android): `firebase_messaging` + `flutter_local_notifications`
+  (channels `careflow_alerts` high / `careflow_general`), `POST_NOTIFICATIONS` permission, core
+  library desugaring. The token is registered once a user of that app is signed in and removed
+  before sign-out (UC1.3); foreground pushes are shown as local notifications.
+  Reading Saved (Fig 4.3.3.3) now shows the risk assessment (overall chip, each complication as
+  a percentage with "<1%" for tiny values, "Already diagnosed" for onboarding conditions,
+  reduced-confidence note), "readings left" before the first score, a "see your doctor soon"
+  card when booking is prompted, and the FR-9.4 tips with the disclaimer.
+  Flutter tests: 5 new (196 total).
+- Known limitations: the staff web portal does not receive browser pushes (needs a VAPID key
+  and service worker); the doctor portal (Module 8) reads `clinical_alerts` live instead. The
+  booking prompt is informational until appointments (FR-7.5, Increment 3).

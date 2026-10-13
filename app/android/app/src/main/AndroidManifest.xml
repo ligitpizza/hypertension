@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Module 9 alerts (FR-9.1, FR-9.5): Android 13+ asks before showing notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- FR-3.2 camera PPG: rear camera + torch. Not required, so the app still installs
          on devices without them (manual heart-rate entry is the fallback). -->
     <uses-permission android:name="android.permission.CAMERA"/>

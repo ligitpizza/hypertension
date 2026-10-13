@@ -119,6 +119,19 @@ class ApiClient {
     if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
   });
 
+  // ---- Module 9 push notifications (D-33) ----
+
+  Future<void> registerFcmToken({required String token, required String platform}) =>
+      _post('/devices/fcm-token', {'token': token, 'platform': platform});
+
+  Future<void> removeFcmToken({required String token, required String platform}) async {
+    try {
+      await _dio.delete<void>('/devices/fcm-token', data: {'token': token, 'platform': platform});
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
   Future<Map<String, dynamic>> _get(String path) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(path);

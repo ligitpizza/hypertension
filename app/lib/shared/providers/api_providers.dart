@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/di/locator.dart';
 import '../services/api/api_client.dart';
+import '../services/push/push_service.dart';
 
 /// The API client from get_it; overridden with a fake in tests.
 final apiClientProvider = Provider<ApiClient>((ref) => locator<ApiClient>());
@@ -12,3 +14,11 @@ final apiHealthProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
   // A status check should report failure immediately, not retry silently.
   retry: (_, _) => null,
 );
+
+/// Module 9 push alerts: FCM on the Android apps; no-op on the staff web portal.
+final pushServiceProvider = Provider<PushService>((ref) {
+  if (kIsWeb) return const NoopPushService();
+  final service = FcmPushService(ref.watch(apiClientProvider));
+  ref.onDispose(service.dispose);
+  return service;
+});

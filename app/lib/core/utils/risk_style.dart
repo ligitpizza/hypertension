@@ -17,3 +17,9 @@ String riskLabel(RiskLevel level) => switch (level) {
   RiskLevel.high => 'High Risk',
   RiskLevel.critical => 'Critical Risk',
 };
+
+/// Probability as a whole percentage; values that round to 0 show as "<1%".
+String riskPercent(double value) {
+  final pct = (value * 100).round();
+  return pct < 1 ? '<1%' : '$pct%';
+}

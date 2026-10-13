@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/data/auth_repository.dart';
+import '../features/auth/state/auth_providers.dart';
+import '../shared/providers/api_providers.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_mode.dart';
 
@@ -14,6 +17,13 @@ class CareFlowApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // D-33: register this device for alerts once a user of this app is signed in.
+    ref.listen(currentUserProvider, (previous, next) {
+      final user = next.value;
+      if (user == null || user.uid == previous?.value?.uid) return;
+      if (wrongAppMessage(user.role, ref.read(clientAppProvider)) != null) return;
+      ref.read(pushServiceProvider).register();
+    });
     return MaterialApp.router(
       title: title,
       theme: AppTheme.light(),

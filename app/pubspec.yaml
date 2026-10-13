@@ -45,6 +45,8 @@ dependencies:
   shared_preferences: ^2.5.6
   camera: ^0.12.1
   fl_chart: ^1.2.0
+  firebase_messaging: ^16.7.0
+  flutter_local_notifications: ^22.3.2
 
 dev_dependencies:
   flutter_test:

@@ -81,7 +81,7 @@ class _Single extends StatelessWidget {
           label: Text(riskLabel(level)),
         ),
         for (final e in score.scores.entries)
-          Text('${complicationNames[e.key]}: ${(e.value.value * 100).round()}%'),
+          Text('${complicationNames[e.key]}: ${riskPercent(e.value.value)}'),
         const Text('A trend line appears after your next risk assessment.'),
       ],
     );

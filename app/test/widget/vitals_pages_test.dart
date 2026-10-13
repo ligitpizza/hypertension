@@ -279,6 +279,59 @@ void main() {
       expect(find.textContaining('call 999'), findsOneWidget);
       expect(find.byKey(const Key('saved-hr')), findsNothing);
     });
+
+    tallTest('UC9.1 shows readings left until the first risk assessment', (t) async {
+      await t.pumpWidget(
+        saved(
+          LoggedReading(
+            id: 'r',
+            systolic: 120,
+            diastolic: 80,
+            category: BpCategory.normal,
+            loggedAt: now,
+            readingsUntilRisk: 1,
+          ),
+        ),
+      );
+      expect(find.text('Log 1 more reading to get your risk assessment.'), findsOneWidget);
+      expect(find.byKey(const Key('saved-risk')), findsNothing);
+      expect(find.byKey(const Key('saved-book-prompt')), findsNothing);
+    });
+
+    tallTest('FR-9.3/9.4/UC9.2 risk, booking prompt and recommendations', (t) async {
+      await t.pumpWidget(
+        saved(
+          LoggedReading(
+            id: 'r',
+            systolic: 150,
+            diastolic: 95,
+            category: BpCategory.stage2,
+            alertLevel: AlertLevel.moderate,
+            loggedAt: now,
+            risk: ReadingRisk(
+              overall: RiskLevel.high,
+              scores: {
+                for (final c in Complication.values) c: (value: 0.002, level: RiskLevel.low),
+                Complication.stroke: (value: 0.31, level: RiskLevel.high),
+              },
+              lowConfidence: true,
+              diagnosed: {Complication.t2d},
+            ),
+            recommendations: const ['Avoid heavy exertion.', 'Not a substitute for a doctor.'],
+            bookAppointmentPrompt: true,
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('saved-book-prompt')), findsOneWidget);
+      expect(find.text('High Risk'), findsOneWidget);
+      expect(find.text('31%'), findsOneWidget);
+      expect(find.text('<1%'), findsNWidgets(3)); // cad, heart failure, ckd
+      expect(find.byKey(const Key('saved-diagnosed-t2d')), findsOneWidget);
+      expect(find.byKey(const Key('saved-risk-low-confidence')), findsOneWidget);
+      expect(find.text('• Avoid heavy exertion.'), findsOneWidget);
+      expect(find.text('Not a substitute for a doctor.'), findsOneWidget);
+      expect(find.text('Great job logging!'), findsNothing);
+    });
   });
 
   group('Fig 4.3.3.1 Vitals tab', () {

@@ -24,6 +24,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     auth: FirebaseAuth.instance,
     firestore: FirebaseFirestore.instance,
     api: ref.watch(apiClientProvider),
+    push: ref.watch(pushServiceProvider),
   );
 });
 
