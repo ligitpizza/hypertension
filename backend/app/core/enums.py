@@ -29,6 +29,7 @@ class Collection(StrEnum):
     PAYMENT_TRANSACTIONS = "payment_transactions"
     DELIVERY_TRACKING_EVENTS = "delivery_tracking_events"
     FAMILY_LINK_REQUESTS = "family_link_requests"  # D-06
+    CLINICAL_ALERTS = "clinical_alerts"  # D-32
 
 
 class UserRole(StrEnum):
@@ -222,6 +223,24 @@ class LoginFailureReason(StrEnum):
     WRONG_APP = "wrong_app"
     TOO_MANY_ATTEMPTS = "too_many_attempts"
     OTHER = "other"
+
+
+
+class ClinicalAlertType(StrEnum):
+    """clinical_alerts.type (D-32)."""
+
+    THRESHOLD = "threshold"
+    RISK_ESCALATION = "risk_escalation"
+    DETERIORATION = "deterioration"
+    MEDICATION_REVIEW = "medication_review"
+    TRIAGE = "triage"
+    FLAGGED_MESSAGE = "flagged_message"
+
+
+class ClinicalAlertStatus(StrEnum):
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    DISMISSED = "dismissed"
 
 
 STAFF_ROLES = frozenset({UserRole.DOCTOR, UserRole.PHARMACIST, UserRole.ADMIN})

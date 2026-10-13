@@ -21,7 +21,8 @@
     "symptom_catalog",
     "payment_transactions",
     "delivery_tracking_events",
-    "family_link_requests"
+    "family_link_requests",
+    "clinical_alerts"
   ],
   "user_role": [
     "patient",
@@ -167,5 +168,18 @@
     "wrong_app",
     "too_many_attempts",
     "other"
+  ],
+  "clinical_alert_type": [
+    "threshold",
+    "risk_escalation",
+    "deterioration",
+    "medication_review",
+    "triage",
+    "flagged_message"
+  ],
+  "clinical_alert_status": [
+    "open",
+    "acknowledged",
+    "dismissed"
   ]
 }

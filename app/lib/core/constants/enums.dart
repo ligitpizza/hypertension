@@ -25,6 +25,7 @@ abstract final class Collections {
   static const paymentTransactions = 'payment_transactions';
   static const deliveryTrackingEvents = 'delivery_tracking_events';
   static const familyLinkRequests = 'family_link_requests';
+  static const clinicalAlerts = 'clinical_alerts'; // D-32
 
   static const all = [
     users,
@@ -48,6 +49,7 @@ abstract final class Collections {
     paymentTransactions,
     deliveryTrackingEvents,
     familyLinkRequests,
+    clinicalAlerts,
   ];
 }
 
@@ -343,4 +345,29 @@ enum LoginFailureReason {
   const LoginFailureReason(this.value);
   final String value;
   static LoginFailureReason fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+/// `clinical_alerts.type` (D-32).
+enum ClinicalAlertType {
+  threshold('threshold'),
+  riskEscalation('risk_escalation'),
+  deterioration('deterioration'),
+  medicationReview('medication_review'),
+  triage('triage'),
+  flaggedMessage('flagged_message');
+
+  const ClinicalAlertType(this.value);
+  final String value;
+  static ClinicalAlertType fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+/// `clinical_alerts.status` (D-32).
+enum ClinicalAlertStatus {
+  open('open'),
+  acknowledged('acknowledged'),
+  dismissed('dismissed');
+
+  const ClinicalAlertStatus(this.value);
+  final String value;
+  static ClinicalAlertStatus fromValue(String v) => enumFromValue(values, v, (e) => e.value);
 }

@@ -38,6 +38,8 @@ void main() {
     'client_app': ClientApp.values.map((e) => e.value).toList(),
     'session_event': SessionEvent.values.map((e) => e.value).toList(),
     'login_failure_reason': LoginFailureReason.values.map((e) => e.value).toList(),
+    'clinical_alert_type': ClinicalAlertType.values.map((e) => e.value).toList(),
+    'clinical_alert_status': ClinicalAlertStatus.values.map((e) => e.value).toList(),
   };
 
   for (final entry in cases.entries) {
