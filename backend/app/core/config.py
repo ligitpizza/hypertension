@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # Push notifications (D-33): false logs pushes instead of sending them through FCM.
     fcm_enabled: bool = False
 
+    # AI Health Agent (FR-14.1, docs/06 §G). Empty key = offline fake replies.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_timeout_seconds: float = 20.0
+    # Per-patient agent requests per minute (protects the Gemini quota).
+    agent_rate_per_minute: int = 10
+
     # Unauthenticated failed-login reporting (D-27): max reports per client IP per minute.
     failed_login_rate_per_minute: int = 10
 

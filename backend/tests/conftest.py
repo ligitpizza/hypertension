@@ -10,10 +10,13 @@ from app.core.config import Settings, get_settings
 from app.core.enums import ClinicalAlertType, RiskLevel, UserRole
 from app.core.rate_limit import RateLimiter
 from app.integrations.email import ConsoleEmailClient, EmailMessage, get_email_client
+from app.integrations.gemini import FakeLlmClient, Turn, get_llm_client
 from app.integrations.push import LogPushClient
 from app.main import create_app
 from app.ml.risk_model import get_risk_model
+from app.routers.agent import get_agent_limiter
 from app.routers.auth import get_failed_login_limiter
+from app.services.agent_context import get_agent_data_repository
 from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
@@ -270,6 +273,60 @@ class InMemoryProviderRepository:
         return f"rx{len(self.prescriptions)}"
 
 
+class InMemoryAgentDataRepository:
+    """Agent context over the shared in-memory users / readings / risk repositories."""
+
+    def __init__(
+        self,
+        users: "InMemoryUserRepository",
+        vitals: "InMemoryVitalsRepository",
+        risk: "InMemoryRiskRepository",
+    ) -> None:
+        self._users = users
+        self._vitals = vitals
+        self._risk = risk
+        self.meds: dict[str, list[dict[str, Any]]] = {}
+        self.appointments: dict[str, list[dict[str, Any]]] = {}
+        self.plans: dict[str, dict[str, Any]] = {}
+        self.prescriptions: dict[str, list[dict[str, Any]]] = {}
+        self.messages: list[dict[str, Any]] = []
+
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def health_profile(self, uid: str) -> dict[str, Any] | None:
+        return self._users.health_profiles.get(uid)
+
+    def readings_since(self, uid: str, since: Any) -> list[dict[str, Any]]:
+        mine = [r for r in self._vitals.readings.values() if r["patientId"] == uid]
+        mine = [r for r in mine if r.get("timestamp") is None or r["timestamp"] >= since]
+        return list(reversed(mine))
+
+    def latest_risk(self, uid: str) -> dict[str, Any] | None:
+        mine = [d for d in self._risk.saved if d["patientId"] == uid]
+        return mine[-1] if mine else None
+
+    def medications(self, uid: str) -> list[dict[str, Any]]:
+        return self.meds.get(uid, [])
+
+    def upcoming_appointments(self, uid: str, now: Any) -> list[dict[str, Any]]:
+        return self.appointments.get(uid, [])
+
+    def care_plan(self, uid: str) -> dict[str, Any] | None:
+        return self.plans.get(uid)
+
+    def recent_prescriptions(self, uid: str, limit: int) -> list[dict[str, Any]]:
+        return self.prescriptions.get(uid, [])[:limit]
+
+    def recent_turns(self, uid: str, limit: int) -> list[Turn]:
+        mine = [m for m in self.messages if m["patientId"] == uid][-limit:]
+        return [Turn(m["role"], m["text"]) for m in mine]
+
+    def add_message(self, uid: str, role: str, text: str) -> str:
+        self.messages.append({"patientId": uid, "role": role, "text": text})
+        return f"msg{len(self.messages)}"
+
+
 class FailingEmailClient:
     def send(self, message: EmailMessage) -> bool:
         raise RuntimeError("provider down")
@@ -369,6 +426,25 @@ def provider_repo(repo: InMemoryUserRepository) -> InMemoryProviderRepository:
 
 
 @pytest.fixture
+def agent_repo(
+    repo: InMemoryUserRepository,
+    vitals_repo: InMemoryVitalsRepository,
+    risk_repo: InMemoryRiskRepository,
+) -> InMemoryAgentDataRepository:
+    return InMemoryAgentDataRepository(repo, vitals_repo, risk_repo)
+
+
+@pytest.fixture
+def llm() -> FakeLlmClient:
+    return FakeLlmClient(reply="Your last reading was fine.")
+
+
+@pytest.fixture
+def agent_limiter() -> RateLimiter:
+    return RateLimiter(max_events=100)
+
+
+@pytest.fixture
 def limiter() -> RateLimiter:
     return RateLimiter(max_events=3)
 
@@ -388,6 +464,9 @@ def make_client(
     alerts_repo: InMemoryAlertRepository,
     deterioration_repo: InMemoryDeteriorationRepository,
     provider_repo: InMemoryProviderRepository,
+    agent_repo: InMemoryAgentDataRepository,
+    llm: FakeLlmClient,
+    agent_limiter: RateLimiter,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -407,6 +486,9 @@ def make_client(
         app.dependency_overrides[get_alert_repository] = lambda: alerts_repo
         app.dependency_overrides[get_deterioration_repository] = lambda: deterioration_repo
         app.dependency_overrides[get_provider_repository] = lambda: provider_repo
+        app.dependency_overrides[get_agent_data_repository] = lambda: agent_repo
+        app.dependency_overrides[get_llm_client] = lambda: llm
+        app.dependency_overrides[get_agent_limiter] = lambda: agent_limiter
         return TestClient(app)
 
     return _make

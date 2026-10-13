@@ -62,6 +62,11 @@ def _parse_json(raw: object) -> dict[str, Any]:
     return {}
 
 
+def profile_json(health_profile: dict[str, Any] | None, key: str) -> dict[str, Any]:
+    """One structured-JSON section of a health profile (D-25), or {}."""
+    return _parse_json((health_profile or {}).get(key))
+
+
 def existing_conditions(health_profile: dict[str, Any] | None) -> list[str]:
     """Conditions the patient reported at onboarding (medicalHistory.conditions)."""
     history = _parse_json((health_profile or {}).get("medicalHistory"))

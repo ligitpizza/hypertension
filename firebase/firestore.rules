@@ -112,6 +112,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---- agent_messages (FR-14.1, Table 4.2.3.16) ----
+    // Written only by FastAPI (it calls Gemini). Read by the patient for the chat screen,
+    // and by the assigned doctor / admin like other patient-owned data (docs/04).
+    match /agent_messages/{messageId} {
+      allow read: if canReadPatientData(resource.data.patientId);
+      allow write: if false;
+    }
+
     // ---- symptom_catalog: static lookup, read by any signed-in user ----
     match /symptom_catalog/{symptomId} {
       allow read: if signedIn();
