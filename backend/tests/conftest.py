@@ -18,6 +18,7 @@ from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
 from app.services.notifications import Notifier, get_notifier, get_token_repository
+from app.services.provider import get_provider_repository
 from app.services.risk import get_risk_data_repository
 from app.services.users import get_user_repository
 from app.services.vitals import get_vitals_repository
@@ -232,6 +233,33 @@ class InMemoryDeteriorationRepository:
         return [(t, s) for t, s in self.scores.get(uid, []) if t >= since]
 
 
+class InMemoryProviderRepository:
+    def __init__(self, users: "InMemoryUserRepository") -> None:
+        self._users = users
+        self.medications: dict[str, list[str]] = {}
+        self.notes: list[dict[str, Any]] = []
+        self.care_plans: dict[str, dict[str, Any]] = {}
+        self.prescriptions: list[dict[str, Any]] = []
+
+    def patient(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def current_medicines(self, uid: str) -> list[str]:
+        rx = [p["medicationDetails"] for p in self.prescriptions if p["patientId"] == uid]
+        return self.medications.get(uid, []) + rx
+
+    def add_note(self, data: dict[str, Any]) -> str:
+        self.notes.append(data)
+        return f"note{len(self.notes)}"
+
+    def set_care_plan(self, patient_id: str, data: dict[str, Any]) -> None:
+        self.care_plans[patient_id] = data
+
+    def add_prescription(self, data: dict[str, Any]) -> str:
+        self.prescriptions.append(data)
+        return f"rx{len(self.prescriptions)}"
+
+
 class FailingEmailClient:
     def send(self, message: EmailMessage) -> bool:
         raise RuntimeError("provider down")
@@ -326,6 +354,11 @@ def deterioration_repo() -> InMemoryDeteriorationRepository:
 
 
 @pytest.fixture
+def provider_repo(repo: InMemoryUserRepository) -> InMemoryProviderRepository:
+    return InMemoryProviderRepository(repo)
+
+
+@pytest.fixture
 def limiter() -> RateLimiter:
     return RateLimiter(max_events=3)
 
@@ -344,6 +377,7 @@ def make_client(
     push: LogPushClient,
     alerts_repo: InMemoryAlertRepository,
     deterioration_repo: InMemoryDeteriorationRepository,
+    provider_repo: InMemoryProviderRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -362,6 +396,7 @@ def make_client(
         app.dependency_overrides[get_notifier] = lambda: Notifier(tokens, push)
         app.dependency_overrides[get_alert_repository] = lambda: alerts_repo
         app.dependency_overrides[get_deterioration_repository] = lambda: deterioration_repo
+        app.dependency_overrides[get_provider_repository] = lambda: provider_repo
         return TestClient(app)
 
     return _make

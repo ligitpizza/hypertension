@@ -94,6 +94,24 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---- Module 8 doctor-authored records (FR-8.2, FR-8.3; docs/04 rules summary) ----
+    // Written only through FastAPI (assignment check + audit). Read by the patient,
+    // their assigned doctor and admin; pharmacists also read prescriptions (Module 13).
+    match /clinical_notes/{noteId} {
+      allow read: if canReadPatientData(resource.data.patientId);
+      allow write: if false;
+    }
+
+    match /care_plans/{patientId} {
+      allow read: if canReadPatientData(resource.data.patientId);
+      allow write: if false;
+    }
+
+    match /prescriptions/{prescriptionId} {
+      allow read: if canReadPatientData(resource.data.patientId) || hasRole('pharmacist');
+      allow write: if false;
+    }
+
     // ---- symptom_catalog: static lookup, read by any signed-in user ----
     match /symptom_catalog/{symptomId} {
       allow read: if signedIn();
