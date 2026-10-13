@@ -41,7 +41,7 @@ class LogPushClient:
 
     def send(self, tokens: list[str], message: PushMessage) -> list[str]:
         self.sent.append((list(tokens), message))
-        log.info("[push] to %d device(s): %s - %s", len(tokens), message.title, message.body)
+        log.info("[push] to %d device(s): %s", len(tokens), message.title)
         return []
 
 

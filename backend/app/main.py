@@ -1,5 +1,7 @@
 """CareFlow API entrypoint: `uvicorn app.main:app` (docs/10 §3)."""
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,8 +13,23 @@ from app.routers import admin, agent, auth, devices, health, jobs, provider, ris
 API_PREFIX = "/api/v1"
 
 
+def _configure_logging() -> None:
+    """Show careflow.* INFO messages (push sent, job results) on the console / Cloud Logging.
+
+    Never log request bodies: they contain health data.
+    """
+    logger = logging.getLogger("careflow")
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    _configure_logging()
     app = FastAPI(
         title="CareFlow API",
         version=settings.app_version,

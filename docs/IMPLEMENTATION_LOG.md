@@ -442,3 +442,36 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
     returns to the checker (no stored "reason" to redisplay).
 - Known limitations: the red-flag list comes from the seeded catalog; changing it needs a
   re-seed (local) or a console edit (live).
+
+---
+
+### 2026-10-13 — Increment 2 exit test
+- Scenario (docs/08), local emulators + local FastAPI (real models, real Gemini
+  `gemini-3.1-flash-lite`), demo patient and demo doctor:
+  1. Crisis reading 186/122 (after two normal readings): saved, classified emergency, risk
+     score generated (overall high), guidance mentions 999, push to the patient device, a
+     critical `threshold` clinical alert for the assigned doctor readable by the doctor under
+     Security Rules (patient gets 403), doctor push sent. **PASS.** The real-time portal update
+     was checked earlier in the browser (alerts and critical banner appeared without refresh).
+  2. `emergency_alerts` record: **deferred**. Family emergency alerts are FR-14.2
+     (Increment 3; docs/09 "Module 9 never creates EmergencyAlert").
+  3. Triage fixtures through the API: red flag, severe + crisis BP, crisis BP rule 1, moderate
+     severity, high BP, high heart rate all gave the expected outcome; one "monitor at home"
+     fixture correctly became "contact doctor" because the patient's risk score was High at
+     that moment (rule 5). 7 outcomes saved and readable by the patient. **PASS** (every rule
+     row and boundary is also unit-tested).
+  4. AI agent: listed the day's actual readings with Malaysia times, explained the risk
+     breakdown as model estimates, emergency message got the fixed 999 reply and a doctor
+     alert, proactive update matched the current (moderate) risk with no buttons. **PASS.**
+     The first attempt fell back because Gemini timed out and then returned 503 (overloaded);
+     the fallback message showed as designed and a re-run answered normally (14-27 s with the
+     retry at a busy time).
+  Result: **all criteria pass except the emergency_alerts record, deferred to FR-14.2.**
+- Found and fixed during the exit test: the backend never configured logging, so `careflow.*`
+  INFO messages (pushes, jobs) were invisible locally and in Cloud Logging. `main.py` now adds
+  a console handler for `careflow` at INFO; the local push log prints the title only (no
+  readings). Request bodies are never logged.
+- Patient debug APK with url_launcher built successfully.
+- Test totals: backend pytest all passing (3 emulator integration tests skipped without
+  emulators), rules 133/133, Flutter 239/239; ruff, mypy, flutter analyze clean.
+- **Increment 2 complete** (pending Ping's live redeploy: deploy-all + phone-live).
