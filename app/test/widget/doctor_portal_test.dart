@@ -42,7 +42,11 @@ RiskScore risk(String p, RiskLevel level) => RiskScore(
   patientId: p,
   scores: {
     for (final c in Complication.values)
-      c: ComplicationScore(value: c == Complication.stroke ? 0.31 : 0.002, level: RiskLevel.low),
+      c: ComplicationScore(
+        value: c == Complication.stroke ? 0.31 : 0.002,
+        level: RiskLevel.low,
+        factors: const ['age'],
+      ),
     Complication.stroke: ComplicationScore(
       value: 0.31,
       level: level,
@@ -322,6 +326,7 @@ void main() {
       // D-40 contributing factors (Fig 4.3.12.4).
       expect(find.text('Raised by: Systolic BP, Age, Smoking'), findsOneWidget);
       expect(find.byKey(const Key('factors-cad')), findsNothing);
+      // A Low complication is not explained even if old data carries factors.
       expect(find.textContaining('not proven causes'), findsOneWidget);
     });
 

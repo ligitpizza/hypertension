@@ -587,4 +587,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   card opens a sheet listing versions newest first with the current one marked. Doctor: the
   care plan editor lists "Previous versions". Plans saved before this change have no history
   until the next save. Flutter 261/261.
+- D-40 refinement (Ping, 2026-10-14): factors are now stored and shown only for complications
+  at Moderate or higher. Checking a profile like the live test patient (age 16, 89/59) showed
+  "Raised by: Systolic BP" on 0.0% risks, which is technically true (it nudged the estimate up
+  a hair) but clinically meaningless and confusing. The portal also hides factors on Low
+  complications as a safeguard. Live note: scores generated before the factors deploy (07:19
+  MYT) have none; the next reading creates them.
 

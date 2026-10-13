@@ -6,7 +6,8 @@ the probability with the fixed cut-points from thresholds.json (D-30).
 
 D-40 contributing factors: for XGBoost models, per-input SHAP contributions
 (`pred_contribs`) averaged over the calibration folds; only inputs that raised the
-estimate are kept (top FACTOR_LIMIT above FACTOR_MIN log-odds).
+estimate are kept (top FACTOR_LIMIT above FACTOR_MIN log-odds), and only for complications
+at Moderate or higher.
 """
 
 from __future__ import annotations
@@ -127,10 +128,15 @@ class RiskModel:
             except Exception:  # explanations must never block a risk score
                 log.exception("Contributing factors failed for %s", c.value)
                 contrib = None
-            factors = top_factors(contrib, self._features[c]) if contrib else ()
-            scores[c] = ComplicationRisk(
-                round(value, 4), categorise(value, self._thresholds[c]), factors
+            level = categorise(value, self._thresholds[c])
+            # D-40: explain only Moderate or higher; for near-zero risks the "raising"
+            # inputs are noise (e.g. "systolic" at 89/59 nudging 0.0% up).
+            factors = (
+                top_factors(contrib, self._features[c])
+                if contrib is not None and level is not RiskLevel.LOW
+                else ()
             )
+            scores[c] = ComplicationRisk(round(value, 4), level, factors)
         used = "; ".join(f"{c.value}:{self._model_used[c]}" for c in Complication)
         return RiskPrediction(scores=scores, model_used=used)
 

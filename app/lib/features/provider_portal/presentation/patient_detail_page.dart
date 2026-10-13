@@ -255,7 +255,9 @@ class _VitalsAndRisk extends ConsumerWidget {
                               ],
                             ),
                             // D-40 contributing factors (Fig 4.3.12.4).
-                            if (s.scores[c]!.factors.isNotEmpty)
+                            // Only Moderate and above are explained (D-40, Ping 2026-10-14).
+                            if (s.scores[c]!.factors.isNotEmpty &&
+                                s.scores[c]!.level != RiskLevel.low)
                               Text(
                                 'Raised by: ${s.scores[c]!.factors.map(factorLabel).join(', ')}',
                                 key: Key('factors-${c.value}'),

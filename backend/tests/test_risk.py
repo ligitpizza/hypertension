@@ -307,3 +307,36 @@ def test_d40_real_models_explain_a_hypertensive_patient() -> None:
         assert set(score.factors) <= set(model._features[c])
     stroke = prediction.scores[Complication.STROKE].factors
     assert stroke and stroke[0] in {"age", "systolic", "hypertension", "smoking"}
+
+
+def test_d40_low_risk_complications_are_not_explained() -> None:
+    """Near-zero risks get no factors (Ping, 2026-10-14): they were noise."""
+    from app.core.config import get_settings
+    from app.ml.risk_model import RiskModel
+
+    directory = get_settings().ml_artifacts_dir
+    if not (directory / "stroke_model.joblib").exists():
+        pytest.skip("trained models not present")
+    model = RiskModel.load(directory)
+    young: dict[str, float] = {
+        "age": 16,
+        "female": 0,
+        "systolic": 89,
+        "diastolic": 59,
+        "heart_rate": 66,
+        "bmi": 22,
+        "smoking": 0,
+        "family_history": 0,
+        "hypertension": 0,
+        "high_cholesterol": 0,
+        "bp_medication": 0,
+        "medication_count": 0,
+        "stroke": 0,
+        "cad": 0,
+        "heartFailure": 0,
+        "ckd": 0,
+        "t2d": 0,
+    }
+    for score in model.predict(young).scores.values():
+        if score.level is RiskLevel.LOW:
+            assert score.factors == ()
