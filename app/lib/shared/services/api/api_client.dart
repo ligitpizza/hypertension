@@ -160,6 +160,15 @@ class ApiClient {
     'acknowledgeInteractions': acknowledgeInteractions,
   });
 
+  // ---- FR-14.1 AI Health Agent (D-34) ----
+
+  /// UC2.6: {reply, emergency, fallback}.
+  Future<Map<String, dynamic>> agentChat(String message) =>
+      _post('/agent/chat', {'message': message});
+
+  /// UC2.7: {text, riskLevel, actions, fallback} for the latest reading.
+  Future<Map<String, dynamic>> agentProactive() => _post('/agent/proactive', const {});
+
   // ---- Module 9 push notifications (D-33) ----
 
   Future<void> registerFcmToken({required String token, required String platform}) =>

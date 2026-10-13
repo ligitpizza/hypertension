@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
+import 'package:hypertension/features/ai_agent/state/agent_providers.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
 import 'package:hypertension/features/vitals/data/ppg_capture.dart';
@@ -19,6 +20,7 @@ import 'package:hypertension/shared/models/health_models.dart';
 import 'package:hypertension/shared/services/api/api_client.dart';
 
 import '../helpers/fakes.dart';
+import 'agent_page_test.dart' show FakeAgentRepository;
 import 'dashboard_page_test.dart' show FakeDashboardRepository;
 
 final now = DateTime(2026, 10, 12, 8, 42);
@@ -239,7 +241,10 @@ void main() {
   });
 
   group('Fig 4.3.3.3 Reading Saved', () {
-    Widget saved(LoggedReading r) => MaterialApp(home: ReadingSavedPage(reading: r));
+    Widget saved(LoggedReading r) => ProviderScope(
+      overrides: [agentRepositoryProvider.overrideWithValue(FakeAgentRepository())],
+      child: MaterialApp(home: ReadingSavedPage(reading: r)),
+    );
 
     tallTest('shows value, category badge and heart rate', (t) async {
       await t.pumpWidget(
@@ -331,6 +336,9 @@ void main() {
       expect(find.text('• Avoid heavy exertion.'), findsOneWidget);
       expect(find.text('Not a substitute for a doctor.'), findsOneWidget);
       expect(find.text('Great job logging!'), findsNothing);
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('agent-update')), findsOneWidget);
+      expect(find.text('Your reading is fine.'), findsOneWidget);
     });
   });
 

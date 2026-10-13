@@ -1,3 +1,4 @@
+import '../../features/ai_agent/presentation/agent_page.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/charts/presentation/trends_page.dart';
@@ -52,11 +53,7 @@ final List<RouteBase> patientFeatureRoutes = [
       note: 'Secure messaging with your doctor is coming soon.',
     ),
   ),
-  GoRoute(
-    path: '/ai-agent',
-    builder: (_, _) =>
-        const ComingSoonPage(title: 'AI Health Agent', note: 'The AI Health Agent is coming soon.'),
-  ),
+  GoRoute(path: '/ai-agent', builder: (_, _) => const AgentPage()),
   GoRoute(
     path: '/appointments',
     builder: (_, _) =>

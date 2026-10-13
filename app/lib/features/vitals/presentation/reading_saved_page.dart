@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/enums.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../../../core/utils/risk_style.dart';
+import '../../ai_agent/presentation/agent_update_card.dart';
 import '../../charts/presentation/risk_trend_card.dart' show complicationNames;
 import '../data/vitals_repository.dart';
 
@@ -83,6 +84,8 @@ class ReadingSavedPage extends StatelessWidget {
             const SizedBox(height: 16),
             const _BookAppointmentCard(),
           ],
+          // UC2.7: proactive AI update once a risk score exists (D-34).
+          if (reading.risk != null) ...[const SizedBox(height: 16), const AgentUpdateCard()],
           const SizedBox(height: 16),
           if (reading.risk != null)
             _RiskCard(risk: reading.risk!)

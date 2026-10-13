@@ -333,3 +333,55 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   severity (regression test added). The risk "model used" label now lists each model once.
 - Known limitations: the patient list loads each patient's latest reading and risk with one
   listener per patient, fine for a single doctor's caseload but not for hundreds of patients.
+
+---
+
+### 2026-10-13 — Increment 2 — FR-14.1: AI Health Agent
+- FRs implemented: FR-14.1 (UC2.6 Ask AI Health Agent incl. A1 risk explanation and E1
+  fallback; UC2.7 Receive Proactive Health Update; Fig 4.1.1.16 UC-14.1.1 and UC-14.1.3).
+- Backend: `POST /api/v1/agent/chat`, `POST /api/v1/agent/proactive` (patient only, 10
+  requests/min per patient). Gemini (`gemini-2.5-flash`, configurable `GEMINI_MODEL`) is called
+  over REST from FastAPI only (`app/integrations/gemini.py`, 20 s timeout, thinking disabled for
+  latency); without `GEMINI_API_KEY` a fake client answers. The request body is never logged.
+- Context builder (`app/services/agent_context.py`): one function per data source, joined into
+  the system prompt: patient (name, age, gender), medical history + lifestyle, BP readings of
+  the last 7 days with category and camera-estimate heart rate, latest risk score per
+  complication, medications + adherence, doctor prescriptions, upcoming appointments, care
+  plan, plus the last 10 `agent_messages` as conversation history. Sources whose module is not
+  built yet (medications: Module 5, appointments: Module 7) say "none recorded" and fill in
+  automatically once those modules write data. Times are given in Malaysia time.
+- Guardrails (docs/06 §G): plain language, facts only from the supplied data, risk is an
+  estimate not a diagnosis, no diagnosis / prescribing / dose changes, contact the doctor for
+  anything serious, 999 for emergency symptoms, PPG heart rate is an estimate.
+- D-34: dangerous messages are detected by a deterministic keyword check (chest pain,
+  breathing difficulty, stroke signs, fainting, sudden vision loss, seizure, a few Malay
+  phrases; self-harm separately) and never sent to Gemini: the patient gets a fixed reply with
+  999 (self-harm reply also gives Talian HEAL 15555) and the assigned doctor gets a
+  `flagged_message` critical clinical alert (via the Module 9 escalator: dedupe, push, audit).
+  Normal questions such as "what is my stroke risk?" are not flagged (tested).
+- UC2.7: after a reading with a risk score, Reading Saved requests the update; the card shows
+  the agent's text, the risk chip and rule-chosen buttons (High: Book appointment, View
+  medications; Critical or crisis reading: Book emergency appointment). The update is also
+  saved to the chat history. If Gemini fails, a rule-based text is used.
+- App: `/ai-agent` chat (Fig 4.3.7.1): disclaimer bar ("not a substitute for a doctor ... call
+  999"), suggestion chips, live history from Firestore, optimistic patient bubble + typing
+  indicator, fallback notice, red 999 card after an emergency message.
+- Rules: `agent_messages` readable by the patient (and assigned doctor/admin per docs/04),
+  never writable from clients so replies cannot be forged.
+- Tests: backend 36 new (tests/test_agent.py: danger phrases incl. false-positive checks,
+  context sections, chat/history/persistence, fallback, emergency path, rate limit, roles,
+  proactive levels); rules 4 new → 131/131; Flutter 10 new → 229/229.
+- Deviations / additions vs Chapter 4:
+  - D-34 (no `flagged` field; doctor alert of type `flagged_message` instead).
+  - Severity analysis (Fig 4.1.1.16 step 3 `analyzeSeverity`) is a keyword rule, not a Gemini
+    call, so it is deterministic, testable and works when Gemini is down.
+  - The fallback reply is shown but not saved to `agent_messages` (so a failed call does not
+    pollute later context).
+  - "Call Emergency Contact" and "Alert Family" buttons (UC2.7 Critical) wait for FR-14.2
+    family monitoring (Increment 3); the critical update text tells the patient to call 999.
+  - Booking buttons open the Appointments screen, which is built in Module 7 (Increment 3).
+  - UC-14.1.2 family "vitals insight" is part of FR-14.2 (Increment 3).
+  - Mockup quick-reply symptom chips ("I have a slight headache") are replaced by question
+    suggestions on an empty chat; voice input is not built.
+- Known limitations: the cloud deploy needs `GEMINI_API_KEY` in Cloud Run; it should come from
+  Secret Manager (to be confirmed with Ping before enabling that service).
