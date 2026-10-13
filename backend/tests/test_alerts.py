@@ -22,6 +22,7 @@ from tests.conftest import (
     InMemoryRiskRepository,
     InMemoryTokenRepository,
     InMemoryUserRepository,
+    InMemoryVitalsRepository,
     bearer,
 )
 
@@ -384,3 +385,25 @@ def test_fr_9_6_job_alerts_doctor_once_per_week(
 
     again = client.post("/internal/jobs/deterioration").json()
     assert again["alertsRaised"] == 0
+
+
+class BrokenAlertRepository(InMemoryAlertRepository):
+    def recent_alert_exists(self, uid: str, alert_type: ClinicalAlertType, since: Any) -> bool:
+        raise RuntimeError("The query requires an index.")
+
+
+def test_alerting_failure_still_saves_and_reports_the_reading(
+    client: TestClient,
+    repo: InMemoryUserRepository,
+    tokens: InMemoryTokenRepository,
+    risk_repo: InMemoryRiskRepository,
+    vitals_repo: InMemoryVitalsRepository,
+) -> None:
+    from app.services.escalation import get_alert_repository
+
+    _seed_patient(repo, tokens)
+    broken = BrokenAlertRepository(risk_repo, repo)
+    client.app.dependency_overrides[get_alert_repository] = lambda: broken  # type: ignore[attr-defined]
+    body = _log(client, 150, 95)
+    assert body["alertLevel"] == "moderate"
+    assert len(vitals_repo.readings) == 1

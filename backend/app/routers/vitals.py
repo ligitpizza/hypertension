@@ -7,6 +7,7 @@ three readings, raises threshold and risk alerts (FR-9.1, FR-9.5; UC9.2, UC9.3) 
 returns rule-based recommendations (FR-9.4).
 """
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, status
@@ -36,6 +37,8 @@ from app.services.risk import (
 )
 from app.services.users import UserRepository, get_user_repository
 from app.services.vitals import VitalsRepository, get_vitals_repository
+
+log = logging.getLogger("careflow.vitals")
 
 router = APIRouter(prefix="/vitals", tags=["vitals"])
 
@@ -129,14 +132,19 @@ def log_reading(
         prediction,
         previous,
     )
-    escalator.apply(
-        plan,
-        user.uid,
-        profile.get("assignedDoctorId"),
-        datetime.now(UTC),
-        risk_score_id=score_id,
-        reading_id=reading_id,
-    )
+    try:
+        escalator.apply(
+            plan,
+            user.uid,
+            profile.get("assignedDoctorId"),
+            datetime.now(UTC),
+            risk_score_id=score_id,
+            reading_id=reading_id,
+        )
+    except Exception:
+        # The reading and risk score are already saved; an alerting failure must not
+        # make the patient think the reading was lost (and log it twice).
+        log.exception("Escalation failed for reading %s", reading_id)
     return LogReadingResponse(
         id=reading_id,
         systolic=body.systolic,

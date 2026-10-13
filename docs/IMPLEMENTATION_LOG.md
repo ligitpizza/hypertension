@@ -264,6 +264,11 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   reduced-confidence note), "readings left" before the first score, a "see your doctor soon"
   card when booking is prompted, and the FR-9.4 tips with the disclaimer.
   Flutter tests: 5 new (196 total).
+- Live test fix (2026-10-13): first live reading failed with "query requires an index" (the
+  emulator does not enforce composite indexes). The `clinical_alerts` (patientId, type,
+  createdAt) index direction was corrected and deployed, and an alerting failure is now logged
+  instead of failing `POST /vitals` (the reading was already saved; the app wrongly said it was
+  not). Regression test added.
 - Known limitations: the staff web portal does not receive browser pushes (needs a VAPID key
   and service worker); the doctor portal (Module 8) reads `clinical_alerts` live instead. The
   booking prompt is informational until appointments (FR-7.5, Increment 3).
