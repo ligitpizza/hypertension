@@ -72,10 +72,39 @@ class TriageResult {
   );
 }
 
+/// A saved `triage_outcomes` document (Table 4.2.3.5).
+class TriageRecord {
+  const TriageRecord({
+    required this.id,
+    required this.outcome,
+    required this.severity,
+    required this.symptomIds,
+    required this.generatedAt,
+  });
+
+  final String id;
+  final TriageOutcome outcome;
+  final TriageSeverity severity;
+  final List<String> symptomIds;
+  final DateTime generatedAt;
+
+  factory TriageRecord.fromFirestore(String id, Map<String, dynamic> d) => TriageRecord(
+    id: id,
+    outcome: TriageOutcome.fromValue(d['outcome'] as String),
+    severity: TriageSeverity.fromValue(d['severity'] as String),
+    symptomIds: [for (final s in d['symptoms'] as List<dynamic>? ?? const []) '$s'],
+    generatedAt:
+        (d['generatedAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0),
+  );
+}
+
 /// FR-14.3 (Fig 4.1.1.14 TriageCtrl). The catalog is a direct Firestore read; the
 /// submission goes through FastAPI, which applies the rule table and notifies the doctor.
 abstract interface class SymptomRepository {
   Stream<List<SymptomOption>> catalog();
+
+  /// Newest first (patient dashboard emergency card, doctor triage history; D-37).
+  Stream<List<TriageRecord>> outcomes(String patientId, {int limit = 20});
 
   Future<TriageResult> submit({
     required List<String> symptomIds,
@@ -96,6 +125,15 @@ class ApiSymptomRepository implements SymptomRepository {
       .collection(Collections.symptomCatalog)
       .snapshots()
       .map((s) => [for (final d in s.docs) SymptomOption.fromFirestore(d.id, d.data())]);
+
+  @override
+  Stream<List<TriageRecord>> outcomes(String patientId, {int limit = 20}) => _db
+      .collection(Collections.triageOutcomes)
+      .where('patientId', isEqualTo: patientId)
+      .orderBy('generatedAt', descending: true)
+      .limit(limit)
+      .snapshots()
+      .map((s) => [for (final d in s.docs) TriageRecord.fromFirestore(d.id, d.data())]);
 
   @override
   Future<TriageResult> submit({

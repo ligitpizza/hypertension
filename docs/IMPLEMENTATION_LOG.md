@@ -475,3 +475,37 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Test totals: backend pytest all passing (3 emulator integration tests skipped without
   emulators), rules 133/133, Flutter 239/239; ruff, mypy, flutter analyze clean.
 - **Increment 2 complete** (pending Ping's live redeploy: deploy-all + phone-live).
+
+---
+
+### 2026-10-13 — Increment 2 — Feature 4 band actions (gap review, D-37)
+- Ping compared FR-14.3 with the reference md "Feature 4" Mild / Moderate / Emergency
+  actions (also docs/06 §E). The core checker matched; several band actions were missing or
+  partial. Built now (D-37):
+  - **Mild (130-139 / 80-89):** low-severity `threshold` doctor alert at most once per 24 h
+    that also **emails a BP report** (recent readings, risk breakdown, "may require a
+    medication review" when any complication is High/Critical); the symptom checker does the
+    same for a mild-band BP; Reading Saved offers booking ("Would you like to book an
+    appointment?"). **Follow-up rule:** a second abnormal reading in a row (previous reading
+    >= 130/80) is treated as Moderate.
+  - **Moderate:** doctor message now carries BP, heart rate and overall risk for readings
+    too; symptom-checker contact/emergency outcomes push to linked family; a fixed "avoid
+    physical exertion" AI Health Agent note is saved to the chat; the triage result's second
+    action is "Avoid physical exertion". **2-hour escalation:** job `escalation`
+    (`/internal/jobs/escalation`, Cloud Scheduler `*/15 * * * *`, the project's third and
+    last free job) raises a critical alert (doctor push, urgent patient and family push) for
+    any open high `threshold`/`triage` alert not acknowledged within 2 h, once.
+  - **Emergency:** patient rows with an open critical alert show a red **EMERGENCY** chip and
+    sort first on the doctor's list; the patient dashboard shows a **Call 999 Now** card while
+    an emergency is active (crisis reading or emergency triage in the last 6 h); a fixed
+    "stay calm" agent note goes to the chat; the doctor's patient page has an **Alerts &
+    triage** history tab.
+- Deferred to Increment 3: emergency appointment auto-booking and reassignment (Module 7),
+  family GPS alert + SMS (FR-14.2), live booking buttons (Module 7 page is still a placeholder).
+- Privacy: the fake email client no longer logs email bodies at INFO (BP reports).
+- Indexes added for the new queries before deploying: `clinical_alerts` (status, severity,
+  createdAt) for the job, (patientId, doctorId, createdAt desc) for the history tab;
+  `triage_outcomes` (patientId, generatedAt desc).
+- Tests: backend 23 new (tests/test_band_actions.py) and two existing expectations updated
+  (Mild now also reports to the doctor; 122/80 is stage 1, so the "no alert" triage fixture
+  uses 118/76); Flutter 10 new -> 249/249.

@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../../../core/utils/risk_style.dart';
 import '../../../shared/models/health_models.dart';
+import '../../../core/constants/enums.dart';
 import '../../auth/state/auth_providers.dart';
+import '../../symptom_checker/state/symptom_providers.dart';
 import '../domain/dashboard_logic.dart';
 import '../state/dashboard_providers.dart';
 
@@ -26,7 +28,8 @@ class DashboardPage extends ConsumerWidget {
             ..invalidate(recentReadingsProvider)
             ..invalidate(latestRiskProvider)
             ..invalidate(medicationsProvider)
-            ..invalidate(upcomingAppointmentsProvider);
+            ..invalidate(upcomingAppointmentsProvider)
+            ..invalidate(latestTriageProvider);
         },
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -39,6 +42,7 @@ class DashboardPage extends ConsumerWidget {
             const SizedBox(height: 4),
             const Text('Here is your daily health snapshot.'),
             const SizedBox(height: 16),
+            const _EmergencyCallCard(),
             const _TodaysPlanCard(),
             const SizedBox(height: 16),
             const _LatestBpCard(),
@@ -417,6 +421,57 @@ class _QuickActions extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// D-37 / Fig 4.3.8.2: one-tap emergency call on the dashboard while an emergency is
+/// active (crisis reading or emergency symptom check in the last 6 hours).
+class _EmergencyCallCard extends ConsumerWidget {
+  const _EmergencyCallCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final readings = ref.watch(recentReadingsProvider).value ?? const <VitalReading>[];
+    final triage = ref.watch(latestTriageProvider).value;
+    final active = activeEmergency(
+      latestReading: readings.firstOrNull,
+      latestTriage: triage?.outcome,
+      latestTriageAt: triage?.generatedAt,
+      now: ref.watch(nowProvider)(),
+    );
+    if (!active) return const SizedBox.shrink();
+    final color = BpClassifier.color(BpCategory.crisis);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        key: const Key('dashboard-emergency'),
+        color: color,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Emergency: if you feel unwell, call 999 now. Stay calm and do not drive '
+                'yourself. Your doctor has been notified.',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                key: const Key('dashboard-call-999'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: color,
+                ),
+                onPressed: () => ref.read(dialerProvider)('999'),
+                icon: const Icon(Icons.call),
+                label: const Text('Call 999 Now'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

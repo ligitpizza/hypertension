@@ -19,8 +19,9 @@ List<PatientRow> filterPatients(
   ]..sort(comparePriority);
 }
 
-/// Highest risk first; then the most recent reading; then name.
+/// Emergencies first (D-37); then highest risk; then the most recent reading; then name.
 int comparePriority(PatientRow a, PatientRow b) {
+  if (a.emergency != b.emergency) return a.emergency ? -1 : 1;
   final byRisk = (b.riskLevel?.index ?? -1).compareTo(a.riskLevel?.index ?? -1);
   if (byRisk != 0) return byRisk;
   final at = a.lastUpdate, bt = b.lastUpdate;

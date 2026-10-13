@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/enums.dart';
 import '../../../shared/models/health_models.dart';
 import '../../../shared/providers/api_providers.dart';
 import '../../auth/state/auth_providers.dart';
@@ -44,8 +45,13 @@ final patientLatestRiskProvider = StreamProvider.family<RiskScore?, String>(
 );
 
 /// Dashboard rows: each patient joined with their latest reading and risk score.
-/// Rows fill in as each patient's data arrives.
+/// Rows fill in as each patient's data arrives. A patient with an open critical alert is
+/// flagged as Emergency (D-37).
 final patientRowsProvider = Provider<AsyncValue<List<PatientRow>>>((ref) {
+  final emergencies = {
+    for (final a in ref.watch(openAlertsProvider).value ?? const <ClinicalAlert>[])
+      if (a.severity == RiskLevel.critical) a.patientId,
+  };
   return ref
       .watch(assignedPatientsProvider)
       .whenData(
@@ -55,10 +61,18 @@ final patientRowsProvider = Provider<AsyncValue<List<PatientRow>>>((ref) {
               patient: p,
               latestReading: ref.watch(patientLatestReadingProvider(p.uid)).value,
               latestRisk: ref.watch(patientLatestRiskProvider(p.uid)).value,
+              emergency: emergencies.contains(p.uid),
             ),
         ],
       );
 });
+
+/// D-37: alert history for one patient on the doctor's patient page.
+final patientAlertsProvider = StreamProvider.family<List<ClinicalAlert>, String>((ref, id) {
+  final uid = _doctorId(ref);
+  if (uid == null) return Stream.value(const []);
+  return ref.watch(portalRepositoryProvider).patientAlerts(uid, id);
+}, retry: _noRetry);
 
 final portalPatientProvider = StreamProvider.family<PortalPatient?, String>(
   (ref, id) => ref.watch(portalRepositoryProvider).patient(id),

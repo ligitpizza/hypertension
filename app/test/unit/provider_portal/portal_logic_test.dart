@@ -138,4 +138,12 @@ void main() {
     );
     expect(modelLabel('XGBoost v1'), 'XGBoost v1');
   });
+
+  test('D-37 emergency patients sort before any risk level', () {
+    final flagged = PatientRow(
+      patient: const PortalPatient(uid: 'x', name: 'Zed'),
+      emergency: true,
+    );
+    expect(filterPatients([...rows, flagged]).first.patient.name, 'Zed');
+  });
 }

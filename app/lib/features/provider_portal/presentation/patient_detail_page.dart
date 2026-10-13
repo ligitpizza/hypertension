@@ -13,6 +13,8 @@ import '../../charts/state/trends_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
 import '../domain/portal_logic.dart';
 import '../domain/portal_models.dart';
+import '../../symptom_checker/data/symptom_repository.dart';
+import '../../symptom_checker/state/symptom_providers.dart';
 import '../state/portal_providers.dart';
 import 'portal_widgets.dart';
 
@@ -278,9 +280,11 @@ class _HistoryTabs extends ConsumerWidget {
     final rx = ref.watch(patientPrescriptionsProvider(patientId));
     final plan = ref.watch(patientCarePlanProvider(patientId));
     final notes = ref.watch(patientNotesProvider(patientId));
+    final alerts = ref.watch(patientAlertsProvider(patientId));
+    final triage = ref.watch(patientTriageProvider(patientId));
 
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Card(
         child: Column(
           children: [
@@ -291,6 +295,7 @@ class _HistoryTabs extends ConsumerWidget {
                 Tab(text: 'Medications'),
                 Tab(text: 'Care plan'),
                 Tab(text: 'Clinical notes'),
+                Tab(text: 'Alerts & triage'),
               ],
             ),
             SizedBox(
@@ -386,6 +391,7 @@ class _HistoryTabs extends ConsumerWidget {
                     ),
                   ),
                   _pad(NotesList(notes: notes)),
+                  _pad(_AlertHistory(alerts: alerts, triage: triage)),
                 ],
               ),
             ),
@@ -424,5 +430,63 @@ class NotesList extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+/// D-37: the patient's alert and symptom-check history ("full event logged to the record").
+class _AlertHistory extends StatelessWidget {
+  const _AlertHistory({required this.alerts, required this.triage});
+
+  final AsyncValue<List<ClinicalAlert>> alerts;
+  final AsyncValue<List<TriageRecord>> triage;
+
+  static String _outcome(TriageOutcome o) => switch (o) {
+    TriageOutcome.seekEmergencyCare => 'Seek emergency care',
+    TriageOutcome.contactDoctor => 'Contact doctor',
+    TriageOutcome.monitorAtHome => 'Monitor at home',
+  };
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    children: [
+      Text('Alerts', style: Theme.of(context).textTheme.titleSmall),
+      AsyncSection(
+        value: alerts,
+        isEmpty: (a) => a.isEmpty,
+        emptyText: 'No alerts for this patient.',
+        builder: (a) => Column(
+          children: [
+            for (final x in a)
+              ListTile(
+                dense: true,
+                leading: CircleAvatar(radius: 6, backgroundColor: riskColor(x.severity)),
+                title: Text('${alertTypeLabel(x.type)} · ${x.severity.value}'),
+                subtitle: Text('${formatDate(x.createdAt)} · ${x.status.value}\n${x.message}'),
+                isThreeLine: true,
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      Text('Symptom checks', style: Theme.of(context).textTheme.titleSmall),
+      AsyncSection(
+        value: triage,
+        isEmpty: (t) => t.isEmpty,
+        emptyText: 'No symptom checks yet.',
+        builder: (t) => Column(
+          children: [
+            for (final x in t)
+              ListTile(
+                key: Key('triage-${x.id}'),
+                dense: true,
+                title: Text('${_outcome(x.outcome)} · ${x.severity.value}'),
+                subtitle: Text(
+                  '${formatDate(x.generatedAt)} · ${x.symptomIds.map((s) => s.replaceAll('_', ' ')).join(', ')}',
+                ),
+              ),
+          ],
+        ),
+      ),
+    ],
   );
 }

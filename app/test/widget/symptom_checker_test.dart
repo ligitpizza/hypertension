@@ -31,6 +31,11 @@ class FakeSymptomRepository implements SymptomRepository {
   Stream<List<SymptomOption>> catalog() => Stream.value(catalogList);
 
   List<SymptomOption> catalogList = testCatalog;
+  List<TriageRecord> records = const [];
+
+  @override
+  Stream<List<TriageRecord>> outcomes(String patientId, {int limit = 20}) =>
+      Stream.value(records.take(limit).toList());
 
   @override
   Future<TriageResult> submit({

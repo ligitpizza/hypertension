@@ -82,7 +82,7 @@ class ReadingSavedPage extends StatelessWidget {
           ],
           if (reading.bookAppointmentPrompt) ...[
             const SizedBox(height: 16),
-            const _BookAppointmentCard(),
+            _BookAppointmentCard(mild: reading.alertLevel == AlertLevel.mild),
           ],
           // UC2.7: proactive AI update once a risk score exists (D-34).
           if (reading.risk != null) ...[const SizedBox(height: 16), const AgentUpdateCard()],
@@ -153,19 +153,34 @@ class _CrisisBanner extends StatelessWidget {
 
 /// UC9.2 / UC9.3: high reading or risk. Booking itself is FR-7.5 (appointments module).
 class _BookAppointmentCard extends StatelessWidget {
-  const _BookAppointmentCard();
+  const _BookAppointmentCard({this.mild = false});
+
+  /// D-37 Mild: an optional offer; the doctor gets the daily BP report.
+  final bool mild;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       key: const Key('saved-book-prompt'),
-      color: Theme.of(context).colorScheme.errorContainer,
+      color: mild
+          ? Theme.of(context).colorScheme.secondaryContainer
+          : Theme.of(context).colorScheme.errorContainer,
       child: ListTile(
         leading: const Icon(Icons.event_available),
-        title: const Text('Please see your doctor soon'),
-        subtitle: const Text(
-          'Your doctor has been notified. We recommend booking an appointment to review '
-          'your treatment.',
+        title: Text(
+          mild ? 'Would you like to book an appointment?' : 'Please see your doctor soon',
+        ),
+        subtitle: Text(
+          mild
+              ? 'Your reading is slightly high. Your doctor will receive a BP report, and you '
+                    'can book an appointment if you would like to talk it through.'
+              : 'Your doctor has been notified. Avoid heavy physical exertion and book an '
+                    'appointment to review your treatment.',
+        ),
+        trailing: TextButton(
+          key: const Key('saved-book-button'),
+          onPressed: () => context.push('/appointments'),
+          child: const Text('Book'),
         ),
       ),
     );

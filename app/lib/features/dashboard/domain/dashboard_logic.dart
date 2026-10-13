@@ -1,3 +1,5 @@
+import '../../../core/constants/enums.dart';
+import '../../../core/utils/bp_classifier.dart';
 import '../../../shared/models/health_models.dart';
 
 /// Pure helpers behind the dashboard cards, kept separate for unit tests.
@@ -63,3 +65,27 @@ String appointmentLabel(DateTime when, DateTime now) {
 
 /// Risk assessment is shown only after at least three readings (Figs 4.3.3.1 / 4.3.4.2).
 const minReadingsForRisk = 3;
+
+/// D-37: how long after a crisis reading or an emergency triage result the dashboard keeps
+/// the one-tap Call 999 card.
+const emergencyWindow = Duration(hours: 6);
+
+/// D-37: an emergency is active when the latest reading is in the crisis range or the
+/// latest symptom check said "seek emergency care", within [emergencyWindow].
+bool activeEmergency({
+  required VitalReading? latestReading,
+  required TriageOutcome? latestTriage,
+  required DateTime? latestTriageAt,
+  required DateTime now,
+}) {
+  bool recent(DateTime t) => now.difference(t) <= emergencyWindow;
+  final crisisReading =
+      latestReading != null &&
+      recent(latestReading.timestamp) &&
+      BpClassifier.classify(latestReading.systolic, latestReading.diastolic) == BpCategory.crisis;
+  final emergencyTriage =
+      latestTriage == TriageOutcome.seekEmergencyCare &&
+      latestTriageAt != null &&
+      recent(latestTriageAt);
+  return crisisReading || emergencyTriage;
+}

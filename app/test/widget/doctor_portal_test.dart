@@ -17,10 +17,13 @@ import 'package:hypertension/features/provider_portal/presentation/doctor_dashbo
 import 'package:hypertension/features/provider_portal/presentation/patient_detail_page.dart';
 import 'package:hypertension/features/provider_portal/presentation/prescription_page.dart';
 import 'package:hypertension/features/provider_portal/state/portal_providers.dart';
+import 'package:hypertension/features/symptom_checker/data/symptom_repository.dart';
+import 'package:hypertension/features/symptom_checker/state/symptom_providers.dart';
 import 'package:hypertension/shared/models/health_models.dart';
 import 'package:hypertension/shared/services/api/api_client.dart';
 
 import '../helpers/fakes.dart';
+import 'symptom_checker_test.dart' show FakeSymptomRepository;
 import 'trends_page_test.dart' show FakeTrendsRepository;
 
 // Module 8 doctor portal (FR-8.1-8.4; UC8.1-UC8.6; Figs 4.3.12.1-4.3.12.7).
@@ -90,6 +93,12 @@ class FakePortalRepository implements PortalRepository {
   Stream<List<ClinicalAlert>> openAlerts(String doctorId) => Stream.value(alerts);
 
   @override
+  Stream<List<ClinicalAlert>> patientAlerts(String doctorId, String patientId) => Stream.value([
+    for (final a in alerts)
+      if (a.patientId == patientId) a,
+  ]);
+
+  @override
   Future<void> closeAlert(String alertId, ClinicalAlertStatus status) async =>
       closed.add((alertId, status));
 
@@ -131,6 +140,8 @@ class FakePortalRepository implements PortalRepository {
   }
 }
 
+final symptoms = FakeSymptomRepository();
+
 Widget portal(FakePortalRepository repo, FakePatientData data, String location) {
   final router = GoRouter(
     initialLocation: location,
@@ -167,6 +178,7 @@ Widget portal(FakePortalRepository repo, FakePatientData data, String location) 
   return ProviderScope(
     overrides: [
       portalRepositoryProvider.overrideWithValue(repo),
+      symptomRepositoryProvider.overrideWithValue(symptoms),
       dashboardRepositoryProvider.overrideWithValue(data),
       trendsRepositoryProvider.overrideWithValue(
         FakeTrendsRepository([for (final r in data.readings.values) ...r]),
@@ -395,6 +407,51 @@ void main() {
       await t.pumpAndSettle();
       expect(repo.savedPlans, ['Target BP < 130/80; low salt']);
       expect(find.byKey(const Key('care-plan-saved')), findsOneWidget);
+    });
+  });
+
+  group('D-37 emergency flag and history', () {
+    ClinicalAlert critical(String patient) => ClinicalAlert(
+      id: 'c-$patient',
+      patientId: patient,
+      type: ClinicalAlertType.threshold,
+      severity: RiskLevel.critical,
+      message: 'EMERGENCY: crisis reading.',
+      status: ClinicalAlertStatus.open,
+      createdAt: now,
+    );
+
+    tallTest('a patient with an open critical alert is flagged EMERGENCY and listed first', (
+      t,
+    ) async {
+      repo.alerts = [critical('p3')]; // Mei Lin has no risk score but an emergency
+      await t.pumpWidget(portal(repo, data, '/doctor'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('emergency-p3')), findsOneWidget);
+      expect(find.byKey(const Key('emergency-p1')), findsNothing);
+      final tiles = find.byType(ListTile);
+      expect(((tiles.evaluate().first.widget as ListTile).title as Text).data, 'Mei Lin');
+    });
+
+    tallTest('patient page shows alert and symptom-check history', (t) async {
+      repo.alerts = [critical('p1')];
+      symptoms.records = [
+        TriageRecord(
+          id: 'tr1',
+          outcome: TriageOutcome.contactDoctor,
+          severity: TriageSeverity.moderate,
+          symptomIds: const ['dizziness'],
+          generatedAt: now,
+        ),
+      ];
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Alerts & triage'));
+      await t.pumpAndSettle();
+      expect(find.text('BP spike · critical'), findsOneWidget);
+      expect(find.text('Contact doctor · moderate'), findsOneWidget);
+      expect(find.textContaining('dizziness'), findsOneWidget);
+      symptoms.records = const [];
     });
   });
 }

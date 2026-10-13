@@ -17,6 +17,9 @@ abstract interface class PortalRepository {
 
   Stream<List<ClinicalAlert>> openAlerts(String doctorId);
 
+  /// All alerts (any status) this doctor received for one patient, newest first.
+  Stream<List<ClinicalAlert>> patientAlerts(String doctorId, String patientId);
+
   Future<void> closeAlert(String alertId, ClinicalAlertStatus status);
 
   Stream<List<ClinicalNote>> notes(String patientId);
@@ -67,6 +70,16 @@ class FirestorePortalRepository implements PortalRepository {
       .collection(Collections.clinicalAlerts)
       .where('doctorId', isEqualTo: doctorId)
       .where('status', isEqualTo: ClinicalAlertStatus.open.value)
+      .orderBy('createdAt', descending: true)
+      .limit(50)
+      .snapshots()
+      .map((s) => [for (final d in s.docs) ClinicalAlert.fromFirestore(d.id, d.data())]);
+
+  @override
+  Stream<List<ClinicalAlert>> patientAlerts(String doctorId, String patientId) => _db
+      .collection(Collections.clinicalAlerts)
+      .where('patientId', isEqualTo: patientId)
+      .where('doctorId', isEqualTo: doctorId)
       .orderBy('createdAt', descending: true)
       .limit(50)
       .snapshots()

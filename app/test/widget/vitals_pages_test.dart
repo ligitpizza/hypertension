@@ -285,6 +285,25 @@ void main() {
       expect(find.byKey(const Key('saved-hr')), findsNothing);
     });
 
+    tallTest('D-37 mild reading offers booking and mentions the doctor report', (t) async {
+      await t.pumpWidget(
+        saved(
+          LoggedReading(
+            id: 'r',
+            systolic: 135,
+            diastolic: 85,
+            category: BpCategory.stage1,
+            alertLevel: AlertLevel.mild,
+            loggedAt: now,
+            bookAppointmentPrompt: true,
+          ),
+        ),
+      );
+      expect(find.text('Would you like to book an appointment?'), findsOneWidget);
+      expect(find.textContaining('Your doctor will receive a BP report'), findsOneWidget);
+      expect(find.byKey(const Key('saved-book-button')), findsOneWidget);
+    });
+
     tallTest('UC9.1 shows readings left until the first risk assessment', (t) async {
       await t.pumpWidget(
         saved(

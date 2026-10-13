@@ -46,7 +46,10 @@ class TriageResultPage extends ConsumerWidget {
     ],
     TriageOutcome.contactDoctor => const [
       ('Contact your doctor today', 'Your doctor has been notified. Call or book an appointment.'),
-      ('Rest and re-measure', 'Sit quietly for 5 minutes, then measure your blood pressure again.'),
+      (
+        'Avoid physical exertion',
+        'Rest while you wait for your doctor. Sit quietly for 5 minutes, then re-measure.',
+      ),
       ('Watch for warning signs', 'Call 999 if you get chest pain, breathlessness or weakness.'),
     ],
     TriageOutcome.monitorAtHome => const [

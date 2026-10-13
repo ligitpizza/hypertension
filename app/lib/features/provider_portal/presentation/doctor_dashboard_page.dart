@@ -163,6 +163,15 @@ class _DoctorDashboardPageState extends ConsumerState<DoctorDashboardPage> {
                         spacing: 12,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
+                          if (r.emergency)
+                            Chip(
+                              key: Key('emergency-${r.patient.uid}'),
+                              backgroundColor: riskColor(RiskLevel.critical),
+                              label: const Text(
+                                'EMERGENCY',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
+                            ),
                           BpText(reading: r.latestReading),
                           RiskChip(level: r.riskLevel),
                         ],

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hypertension/features/symptom_checker/data/symptom_repository.dart';
+import 'package:hypertension/features/symptom_checker/state/symptom_providers.dart';
 import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/auth/domain/app_user.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
@@ -36,6 +38,9 @@ class FakeDashboardRepository implements DashboardRepository {
   Stream<List<Appointment>> upcomingAppointments(String patientId, DateTime from) => appts;
 }
 
+TriageRecord? triage;
+final dialed = <String>[];
+
 Widget app(FakeDashboardRepository repo) {
   final router = GoRouter(
     initialLocation: '/dashboard',
@@ -48,6 +53,11 @@ Widget app(FakeDashboardRepository repo) {
   return ProviderScope(
     overrides: [
       dashboardRepositoryProvider.overrideWithValue(repo),
+      latestTriageProvider.overrideWith((ref) => Stream.value(triage)),
+      dialerProvider.overrideWithValue((n) async {
+        dialed.add(n);
+        return true;
+      }),
       nowProvider.overrideWithValue(() => now),
       authUidProvider.overrideWith((ref) => Stream.value('p1')),
       currentUserProvider.overrideWith(
@@ -233,6 +243,55 @@ void main() {
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
       expect(find.byKey(const Key('dashboard-greeting')), findsOneWidget);
+    });
+  });
+
+  group('D-37 dashboard emergency call card', () {
+    VitalReading reading(int sys, int dia, Duration ago) => VitalReading(
+      id: 'r',
+      patientId: 'p1',
+      systolic: sys,
+      diastolic: dia,
+      timestamp: now.subtract(ago),
+    );
+
+    tearDown(() {
+      triage = null;
+      dialed.clear();
+    });
+
+    tallTest('crisis reading in the last 6 h shows Call 999, which opens the dialer', (t) async {
+      final repo = FakeDashboardRepository()
+        ..readings = Stream.value([reading(186, 122, const Duration(hours: 1))]);
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('dashboard-emergency')), findsOneWidget);
+      await t.tap(find.byKey(const Key('dashboard-call-999')));
+      await t.pump();
+      expect(dialed, ['999']);
+    });
+
+    tallTest('emergency symptom check also shows it; normal readings do not', (t) async {
+      triage = TriageRecord(
+        id: 't',
+        outcome: TriageOutcome.seekEmergencyCare,
+        severity: TriageSeverity.severe,
+        symptomIds: const ['chest_pain'],
+        generatedAt: now.subtract(const Duration(minutes: 20)),
+      );
+      final repo = FakeDashboardRepository()
+        ..readings = Stream.value([reading(118, 76, const Duration(minutes: 5))]);
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('dashboard-emergency')), findsOneWidget);
+    });
+
+    tallTest('no card without an active emergency', (t) async {
+      final repo = FakeDashboardRepository()
+        ..readings = Stream.value([reading(186, 122, const Duration(hours: 7))]);
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('dashboard-emergency')), findsNothing);
     });
   });
 }

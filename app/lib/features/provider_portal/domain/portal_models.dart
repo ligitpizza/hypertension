@@ -25,11 +25,19 @@ class PortalPatient {
 
 /// One row of the doctor dashboard: patient + latest reading + latest risk score.
 class PatientRow {
-  const PatientRow({required this.patient, this.latestReading, this.latestRisk});
+  const PatientRow({
+    required this.patient,
+    this.latestReading,
+    this.latestRisk,
+    this.emergency = false,
+  });
 
   final PortalPatient patient;
   final VitalReading? latestReading;
   final RiskScore? latestRisk;
+
+  /// D-37: an open critical alert exists for this patient (flagged and listed first).
+  final bool emergency;
 
   /// Null until the patient has a risk score (three readings, UC9.1).
   RiskLevel? get riskLevel => latestRisk?.overallLevel;
