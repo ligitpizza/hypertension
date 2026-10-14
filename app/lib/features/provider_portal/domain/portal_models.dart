@@ -144,3 +144,56 @@ class InteractionWarning {
         ),
   ];
 }
+
+/// D-44: the model's risk at the BP before the first medicine vs the BP since, with every
+/// other input (including the medication flag) held the same.
+class MedicationEffect {
+  const MedicationEffect({
+    required this.status,
+    this.firstMedication,
+    this.startedAt,
+    this.daysOnMedication,
+    this.early = false,
+    this.bpBefore,
+    this.bpAfter,
+    this.readingsBefore = 0,
+    this.readingsAfter = 0,
+    this.complications = const {},
+  });
+
+  /// ok | no_medication | no_baseline | no_followup | model_unavailable
+  final String status;
+  final String? firstMedication;
+  final DateTime? startedAt;
+  final int? daysOnMedication;
+  final bool early;
+  final (double, double)? bpBefore;
+  final (double, double)? bpAfter;
+  final int readingsBefore;
+  final int readingsAfter;
+
+  /// complication key -> (before %, after %).
+  final Map<String, (double, double)> complications;
+
+  static (double, double)? _bp(Object? v) =>
+      v is Map ? ((v['systolic'] as num).toDouble(), (v['diastolic'] as num).toDouble()) : null;
+
+  factory MedicationEffect.fromJson(Map<String, dynamic> d) => MedicationEffect(
+    status: d['status'] as String? ?? 'no_medication',
+    firstMedication: d['firstMedication'] as String?,
+    startedAt: DateTime.tryParse(d['startedAt'] as String? ?? '')?.toLocal(),
+    daysOnMedication: (d['daysOnMedication'] as num?)?.toInt(),
+    early: d['early'] as bool? ?? false,
+    bpBefore: _bp(d['bpBefore']),
+    bpAfter: _bp(d['bpAfter']),
+    readingsBefore: (d['readingsBefore'] as num?)?.toInt() ?? 0,
+    readingsAfter: (d['readingsAfter'] as num?)?.toInt() ?? 0,
+    complications: {
+      for (final e in ((d['complications'] as Map?) ?? const {}).entries)
+        '${e.key}': (
+          ((e.value as Map)['before'] as num).toDouble(),
+          ((e.value as Map)['after'] as num).toDouble(),
+        ),
+    },
+  );
+}

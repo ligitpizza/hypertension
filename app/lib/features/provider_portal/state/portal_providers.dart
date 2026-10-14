@@ -109,3 +109,9 @@ final patientCarePlanProvider = StreamProvider.family<CarePlan?, String>(
   (ref, id) => ref.watch(portalRepositoryProvider).carePlan(id),
   retry: _noRetry,
 );
+
+/// D-44: computed by the API on demand (not stored); the card has its own Retry.
+final medicationEffectProvider = FutureProvider.autoDispose.family<MedicationEffect, String>(
+  (ref, id) => ref.watch(portalRepositoryProvider).medicationEffect(id),
+  retry: (_, _) => null,
+);

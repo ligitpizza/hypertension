@@ -194,6 +194,10 @@ class ApiClient {
   /// After a message is stored: push the recipient; escalate if the scan flagged it.
   Future<void> notifyMessage(String messageId) => _post('/messages/$messageId/notify', const {});
 
+  /// D-44: risk before vs after the patient's first medicine (assigned doctor only).
+  Future<Map<String, dynamic>> medicationEffect(String patientId) =>
+      _get('/provider/patients/$patientId/medication-effect');
+
   // ---- Module 5 medications (FR-5.1-5.4, D-43) ----
 
   /// UC5.1 / UC5.6: add; a MEDICATION_WARNINGS error carries duplicates and interactions

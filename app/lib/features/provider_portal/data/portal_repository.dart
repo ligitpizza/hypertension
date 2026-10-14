@@ -42,6 +42,9 @@ abstract interface class PortalRepository {
     bool isRecurring = false,
     bool acknowledgeInteractions = false,
   });
+
+  /// D-44 risk before vs after starting medication.
+  Future<MedicationEffect> medicationEffect(String patientId);
 }
 
 class FirestorePortalRepository implements PortalRepository {
@@ -145,4 +148,8 @@ class FirestorePortalRepository implements PortalRepository {
     );
     return res['medicationDetails'] as String? ?? medicationName;
   }
+
+  @override
+  Future<MedicationEffect> medicationEffect(String patientId) async =>
+      MedicationEffect.fromJson(await _api.medicationEffect(patientId));
 }

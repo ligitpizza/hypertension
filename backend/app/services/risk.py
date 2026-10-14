@@ -25,6 +25,10 @@ class RiskDataRepository(Protocol):
 
     def recent_readings(self, uid: str, limit: int) -> list[dict[str, Any]]: ...
 
+    def readings_before(self, uid: str, before: datetime, limit: int) -> list[dict[str, Any]]:
+        """Newest first, strictly before `before` (D-44 baseline)."""
+        ...
+
     def medications(self, uid: str) -> list[dict[str, Any]]: ...
 
     def save_risk_score(self, data: dict[str, Any]) -> str: ...
@@ -46,6 +50,16 @@ class FirestoreRiskDataRepository:
         query = (
             self._db.collection(Collection.VITAL_READINGS.value)
             .where(filter=firestore.FieldFilter("patientId", "==", uid))
+            .order_by("timestamp", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        return [dict(d.to_dict()) for d in query.stream()]
+
+    def readings_before(self, uid: str, before: datetime, limit: int) -> list[dict[str, Any]]:
+        query = (
+            self._db.collection(Collection.VITAL_READINGS.value)
+            .where(filter=firestore.FieldFilter("patientId", "==", uid))
+            .where(filter=firestore.FieldFilter("timestamp", "<", before))
             .order_by("timestamp", direction=firestore.Query.DESCENDING)
             .limit(limit)
         )

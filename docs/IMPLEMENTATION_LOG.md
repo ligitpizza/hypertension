@@ -677,3 +677,21 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Known limitations: reminders use the phone's alarm in inexact mode; missed doses are only
   back-filled for today and yesterday (the job runs every 15 minutes, so gaps only happen if
   it is down for over a day).
+
+### 2026-10-14 — Increment 3 — ML follow-up: risk since starting medication (D-44)
+- What: Fig 4.3.12.4 Medications tab card "Since starting medication": average BP before the
+  first medicine vs now, and each complication's model estimate at both BPs (arrow down /
+  up / unchanged within 0.5 points). Also shows the first medicine and days on medication.
+- Why not compare stored scores: the trained models raise the estimate when `bp_medication`
+  is 1 (people on BP medicine in NHANES were sicker), so a naive before/after would blame the
+  medicine. Both runs use the current profile with the medication and hypertension flags
+  held fixed; only systolic/diastolic change. Copy says it is an estimate, not proof.
+- API: `GET /api/v1/provider/patients/{id}/medication-effect` (assigned doctor; 403/404
+  otherwise). Statuses: ok, no_medication, no_baseline (no readings before the first
+  medicine), no_followup, model_unavailable (BP only); `early` under 14 days.
+  `RiskDataRepository.readings_before` uses the existing (patientId, timestamp desc) index.
+- Tests: backend 11 (statuses, BP-only difference, real-model check that stroke risk falls
+  when BP falls, access); Flutter 3 widget.
+- Open point for Ping: the live risk score still flips `bp_medication` to 1 once any medicine
+  is added (D-31), so a patient's displayed risk can rise slightly when they add their first
+  medicine.

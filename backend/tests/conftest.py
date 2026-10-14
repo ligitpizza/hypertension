@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -144,6 +145,14 @@ class InMemoryRiskRepository:
     def recent_readings(self, uid: str, limit: int) -> list[dict[str, Any]]:
         mine = [r for r in self._vitals.readings.values() if r["patientId"] == uid]
         return list(reversed(mine))[:limit]
+
+    def readings_before(self, uid: str, before: datetime, limit: int) -> list[dict[str, Any]]:
+        mine = [
+            r
+            for r in self._vitals.readings.values()
+            if r["patientId"] == uid and r["timestamp"] < before
+        ]
+        return sorted(mine, key=lambda r: r["timestamp"], reverse=True)[:limit]
 
     def medications(self, uid: str) -> list[dict[str, Any]]:
         return self.meds.get(uid, [])

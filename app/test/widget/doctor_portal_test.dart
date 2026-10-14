@@ -97,6 +97,10 @@ class FakePortalRepository implements PortalRepository {
   final savedPlans = <String>[];
   final rxCalls = <bool>[];
   List<Map<String, String>> interactionDetails = const [];
+  MedicationEffect effect = const MedicationEffect(status: 'no_medication');
+
+  @override
+  Future<MedicationEffect> medicationEffect(String patientId) async => effect;
 
   @override
   Stream<List<PortalPatient>> assignedPatients(String doctorId) => Stream.value(patients);
@@ -335,6 +339,72 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('No readings yet.'), findsOneWidget);
       expect(find.text('No risk score yet (needs three readings).'), findsOneWidget);
+    });
+  });
+
+  group('D-44 risk since starting medication', () {
+    Future<void> openMeds(WidgetTester t) async {
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Medications'));
+      await t.pumpAndSettle();
+    }
+
+    tallTest('shows BP and per-complication risk before vs now', (t) async {
+      repo.effect = MedicationEffect.fromJson({
+        'status': 'ok',
+        'firstMedication': 'Amlodipine 5mg',
+        'startedAt': '2026-09-12T00:00:00Z',
+        'daysOnMedication': 30,
+        'early': false,
+        'readingsBefore': 3,
+        'readingsAfter': 3,
+        'bpBefore': {'systolic': 162.3, 'diastolic': 99.0},
+        'bpAfter': {'systolic': 131.7, 'diastolic': 83.0},
+        'complications': {
+          'stroke': {'before': 4.1, 'after': 2.6},
+          'ckd': {'before': 12.0, 'after': 12.2},
+          't2d': {'before': 5.0, 'after': 6.0},
+        },
+      });
+      await openMeds(t);
+      expect(find.text('Average BP: 162/99 → 132/83 mmHg'), findsOneWidget);
+      expect(find.text('4.1% → 2.6%'), findsOneWidget);
+      final stroke = find.byKey(const Key('effect-Previous stroke'));
+      expect(
+        find.descendant(of: stroke, matching: find.byIcon(Icons.arrow_downward)),
+        findsOneWidget,
+      );
+      final ckd = find.byKey(const Key('effect-Kidney disease'));
+      expect(find.descendant(of: ckd, matching: find.byIcon(Icons.remove)), findsOneWidget);
+      expect(find.textContaining('Not proof that the medicine caused'), findsOneWidget);
+      expect(find.byKey(const Key('effect-early')), findsNothing);
+    });
+
+    tallTest('explains why there is nothing to compare', (t) async {
+      repo.effect = MedicationEffect.fromJson({
+        'status': 'no_baseline',
+        'firstMedication': 'Amlodipine 5mg',
+        'startedAt': '2026-09-12T00:00:00Z',
+        'daysOnMedication': 30,
+      });
+      await openMeds(t);
+      expect(find.textContaining('no readings from before that date'), findsOneWidget);
+    });
+
+    tallTest('flags an early comparison', (t) async {
+      repo.effect = MedicationEffect.fromJson({
+        'status': 'model_unavailable',
+        'firstMedication': 'Amlodipine 5mg',
+        'startedAt': '2026-10-09T00:00:00Z',
+        'daysOnMedication': 3,
+        'early': true,
+        'bpBefore': {'systolic': 150, 'diastolic': 95},
+        'bpAfter': {'systolic': 145, 'diastolic': 92},
+      });
+      await openMeds(t);
+      expect(find.byKey(const Key('effect-early')), findsOneWidget);
+      expect(find.textContaining('showing BP only'), findsOneWidget);
     });
   });
 

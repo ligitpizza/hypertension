@@ -11,11 +11,13 @@ import '../../charts/presentation/bp_trend_chart.dart';
 import '../../charts/presentation/risk_trend_card.dart' show complicationNames;
 import '../../charts/state/trends_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
+import '../../medications/domain/med_schedule.dart';
 import '../domain/portal_logic.dart';
 import '../domain/portal_models.dart';
 import '../../symptom_checker/data/symptom_repository.dart';
 import '../../symptom_checker/state/symptom_providers.dart';
 import '../state/portal_providers.dart';
+import 'medication_effect_card.dart';
 import 'portal_widgets.dart';
 
 /// Fig 4.3.12.4 Patient Detail (FR-8.2; UC8.3): vitals, risk, BP trend, medications,
@@ -365,7 +367,7 @@ class _HistoryTabs extends ConsumerWidget {
                                 ListTile(
                                   dense: true,
                                   title: Text('${x.name} ${x.dosage}'),
-                                  subtitle: Text(x.schedule),
+                                  subtitle: Text(describeSchedule(x.schedule)),
                                   trailing: x.adherenceRate == null
                                       ? null
                                       : Text('Adherence ${x.adherenceRate!.round()}%'),
@@ -373,6 +375,8 @@ class _HistoryTabs extends ConsumerWidget {
                             ],
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        MedicationEffectCard(patientId: patientId),
                         const SizedBox(height: 12),
                         Text('Prescriptions', style: Theme.of(context).textTheme.titleSmall),
                         AsyncSection(

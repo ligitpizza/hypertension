@@ -3,6 +3,7 @@
 POST /provider/patients/{id}/notes          clinical note (Fig 4.3.12.5)
 PUT  /provider/patients/{id}/care-plan      the patient's single living care plan
 POST /provider/patients/{id}/prescriptions  with drug interaction warning (UC8.4 E1)
+GET  /provider/patients/{id}/medication-effect  risk before vs after medication (D-44)
 
 Only the patient's assigned doctor may write (FR-8.1, NFR-2.2); every write is audited.
 """
@@ -15,13 +16,16 @@ from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
 from app.core.enums import Collection, UserRole
 from app.core.errors import ApiError
+from app.ml.risk_model import RiskModel, get_risk_model
 from app.schemas.provider import CarePlanRequest, NoteRequest, PrescriptionRequest
 from app.services.interactions import check
+from app.services.medication_effect import medication_effect
 from app.services.provider import (
     ProviderRepository,
     get_provider_repository,
     medication_details,
 )
+from app.services.risk import RiskDataRepository, get_risk_data_repository
 
 router = APIRouter(prefix="/provider/patients", tags=["provider"])
 
@@ -125,3 +129,17 @@ def issue_prescription(
         "medicationDetails": details,
         "interactions": [i.to_dict() for i in interactions],
     }
+
+
+@router.get("/{patient_id}/medication-effect")
+def get_medication_effect(
+    patient_id: str,
+    doctor: CurrentUser = Depends(doctor_only),
+    repo: ProviderRepository = Depends(get_provider_repository),
+    risk_repo: RiskDataRepository = Depends(get_risk_data_repository),
+    model: RiskModel | None = Depends(get_risk_model),
+) -> dict[str, Any]:
+    """D-44: the model's estimate of what the BP change since the first medicine means for
+    each complication, with all other inputs (including the medication flag) held fixed."""
+    _assigned_patient(patient_id, doctor, repo)
+    return medication_effect(patient_id, risk_repo, model)
