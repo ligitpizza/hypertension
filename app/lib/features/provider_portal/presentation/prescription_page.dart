@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/services/api/api_client.dart';
+import '../../medications/domain/med_schedule.dart';
 import '../domain/portal_models.dart';
 import '../state/portal_providers.dart';
 import 'portal_widgets.dart';
@@ -166,7 +167,7 @@ class _PrescriptionPageState extends ConsumerState<PrescriptionPage> {
                   ListTile(
                     dense: true,
                     title: Text('${x.name} ${x.dosage}'),
-                    subtitle: Text(x.schedule),
+                    subtitle: Text(describeSchedule(x.schedule)),
                   ),
               ],
             ),
