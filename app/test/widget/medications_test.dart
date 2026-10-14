@@ -110,7 +110,10 @@ class FakeReminders implements DoseReminders {
   }
 
   @override
-  Future<void> sync(List<Medication> meds) async => synced.add(meds.length);
+  Future<ReminderStatus> sync(List<Medication> meds) async {
+    synced.add(meds.length);
+    return const ReminderStatus();
+  }
 }
 
 Widget app(
@@ -377,6 +380,47 @@ void main() {
       await t.scrollUntilVisible(find.byKey(const Key('rx-rx1')), 200);
       expect(find.text('On your list'), findsOneWidget);
       expect(find.byKey(const Key('rx-add-rx1')), findsNothing);
+    });
+  });
+
+  group('reminder status line (never fail silently)', () {
+    Future<void> show(WidgetTester t, AsyncValue<ReminderStatus> status) async {
+      await t.pumpWidget(app(FakeMedicationsRepository(), [med('m1', 'Lisinopril', '22:48')]));
+      await t.pumpAndSettle();
+      ProviderScope.containerOf(
+        t.element(find.byType(MedicationsPage)),
+      ).read(reminderStatusProvider.notifier).set(status);
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('lists what the phone scheduled', (t) async {
+      await show(
+        t,
+        const AsyncData(ReminderStatus(scheduled: ['Lisinopril 10:48 PM'], exact: true)),
+      );
+      expect(find.text('Phone reminders set: Lisinopril 10:48 PM'), findsOneWidget);
+    });
+
+    testWidgets('says when reminders may be late', (t) async {
+      await show(t, const AsyncData(ReminderStatus(scheduled: ['Lisinopril 10:48 PM'])));
+      expect(find.textContaining('may be a few minutes late'), findsOneWidget);
+    });
+
+    testWidgets('shows the real error with a retry', (t) async {
+      await show(t, AsyncError(StateError('exact_alarms_not_permitted'), StackTrace.empty));
+      expect(
+        find.textContaining('could not be set: Bad state: exact_alarms_not_permitted'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('reminders-retry')), findsOneWidget);
+    });
+
+    testWidgets('shows reminders that failed individually', (t) async {
+      await show(
+        t,
+        const AsyncData(ReminderStatus(errors: ['Lisinopril 10:48 PM: PlatformException(x)'])),
+      );
+      expect(find.byKey(const Key('reminders-partial')), findsOneWidget);
     });
   });
 

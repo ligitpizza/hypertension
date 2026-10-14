@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -8,9 +10,21 @@ import '../domain/med_schedule.dart';
 /// UC5.3 dose reminders on the phone (D-43): one daily local notification per dose time,
 /// in Malaysia time, so reminders arrive on time even offline. The backend's 15-minute
 /// job sends a backup push for doses still not taken.
+/// What the last sync did, shown on the Meds tab so a failure is never silent.
+class ReminderStatus {
+  const ReminderStatus({this.scheduled = const [], this.exact = false, this.errors = const []});
+
+  /// "Amlodipine 8:00 PM" for each reminder set on the phone.
+  final List<String> scheduled;
+  final bool exact;
+
+  /// One line per reminder that could not be set.
+  final List<String> errors;
+}
+
 abstract interface class DoseReminders {
   /// Make the scheduled reminders match [meds] exactly (empty list = cancel all).
-  Future<void> sync(List<Medication> meds);
+  Future<ReminderStatus> sync(List<Medication> meds);
 
   /// Whether reminders can fire at the exact minute (Android "Alarms & reminders").
   Future<bool> exactAllowed();
@@ -23,7 +37,7 @@ class NoopDoseReminders implements DoseReminders {
   const NoopDoseReminders();
 
   @override
-  Future<void> sync(List<Medication> meds) async {}
+  Future<ReminderStatus> sync(List<Medication> meds) async => const ReminderStatus();
 
   @override
   Future<bool> exactAllowed() async => true;
@@ -94,7 +108,7 @@ class LocalDoseReminders implements DoseReminders {
   }
 
   @override
-  Future<void> sync(List<Medication> meds) async {
+  Future<ReminderStatus> sync(List<Medication> meds) async {
     final myt = await _start();
     // Exact when the patient allowed it; otherwise inexact (may be a few minutes late),
     // with the server's 15-minute backup push as the safety net (D-43 as revised).
@@ -107,10 +121,12 @@ class LocalDoseReminders implements DoseReminders {
       }
     }
     final now = tz.TZDateTime.now(myt);
+    final scheduled = <String>[];
+    final errors = <String>[];
     for (final MapEntry(key: id, value: (med, t)) in planned.entries) {
       var at = tz.TZDateTime(myt, now.year, now.month, now.day, t.hour, t.minute);
       if (!at.isAfter(now)) at = at.add(const Duration(days: 1));
-      await _plugin.zonedSchedule(
+      Future<void> schedule(AndroidScheduleMode mode) => _plugin.zonedSchedule(
         id: id,
         title: 'Time to take ${med.name}',
         body: '${med.dosage} at ${t.label}. Open CareFlow to confirm.',
@@ -124,12 +140,31 @@ class LocalDoseReminders implements DoseReminders {
             priority: Priority.high,
           ),
         ),
-        androidScheduleMode: exact
-            ? AndroidScheduleMode.exactAllowWhileIdle
-            : AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode: mode,
         matchDateTimeComponents: DateTimeComponents.time,
         payload: '$_payloadPrefix${med.id}',
       );
+      final label = '${med.name} ${t.label}';
+      try {
+        // One failing reminder must not stop the others; a refused exact alarm falls
+        // back to an inexact one rather than no reminder at all.
+        try {
+          await schedule(
+            exact
+                ? AndroidScheduleMode.exactAllowWhileIdle
+                : AndroidScheduleMode.inexactAllowWhileIdle,
+          );
+        } on PlatformException catch (e) {
+          if (!exact) rethrow;
+          debugPrint('CareFlow: exact reminder refused (${e.code}); using inexact');
+          await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
+        }
+        scheduled.add(label);
+      } catch (e) {
+        debugPrint('CareFlow: reminder for $label failed: $e');
+        errors.add('$label: $e');
+      }
     }
+    return ReminderStatus(scheduled: scheduled, exact: exact, errors: errors);
   }
 }

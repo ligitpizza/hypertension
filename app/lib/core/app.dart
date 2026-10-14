@@ -39,7 +39,7 @@ class CareFlowApp extends ConsumerWidget {
     if (ref.watch(clientAppProvider) == ClientApp.patient) {
       // D-45: the "Medication reminders" switch off means no local reminders.
       ref.listen(reminderMedicationsProvider, (_, meds) {
-        if (meds != null) ref.read(doseRemindersProvider).sync(meds).catchError((Object _) {});
+        if (meds != null) syncReminders(ref, meds);
       });
     }
     return MaterialApp.router(

@@ -115,6 +115,7 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
             children: [
               _ScheduleHeader(now: now),
+              if (scheduled.isNotEmpty) const _ReminderStatusLine(),
               if (scheduled.isNotEmpty) const _ExactRemindersBanner(),
               if (scheduled.isNotEmpty) const _BackgroundBanner(),
               if (scheduled.isNotEmpty) _ProgressCard(doses: scheduled),
@@ -168,6 +169,64 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
   }
 }
 
+/// What the phone actually scheduled, or why it couldn't (never fail silently).
+class _ReminderStatusLine extends ConsumerWidget {
+  const _ReminderStatusLine();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(reminderStatusProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final small = Theme.of(context).textTheme.bodySmall;
+    Widget problem(String key, String text) => Row(
+      key: Key(key),
+      children: [
+        Expanded(
+          child: Text(text, style: small?.copyWith(color: scheme.error)),
+        ),
+        TextButton(
+          key: const Key('reminders-retry'),
+          onPressed: () {
+            final meds = ref.read(reminderMedicationsProvider);
+            if (meds != null) syncReminders(ref, meds);
+          },
+          child: const Text('Try again'),
+        ),
+      ],
+    );
+    return switch (status) {
+      AsyncError(:final error) => problem(
+        'reminders-failed',
+        'Phone reminders could not be set: $error',
+      ),
+      AsyncData(:final value) when value.errors.isNotEmpty => problem(
+        'reminders-partial',
+        'Some reminders could not be set:\n${value.errors.join('\n')}',
+      ),
+      AsyncData(:final value) => Padding(
+        key: const Key('reminders-ok'),
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Icon(Icons.alarm_on, size: 16, color: scheme.primary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                value.scheduled.isEmpty
+                    ? 'No phone reminders set.'
+                    : 'Phone reminders set${value.exact ? '' : ' (may be a few minutes late)'}: '
+                          '${value.scheduled.join(', ')}',
+                style: small,
+              ),
+            ),
+          ],
+        ),
+      ),
+      _ => const SizedBox.shrink(),
+    };
+  }
+}
+
 /// D-43: without Android's "Alarms & reminders" permission, reminders may arrive late.
 class _ExactRemindersBanner extends ConsumerWidget {
   const _ExactRemindersBanner();
@@ -189,7 +248,7 @@ class _ExactRemindersBanner extends ConsumerWidget {
             ref.invalidate(exactRemindersAllowedProvider);
             // Re-schedule so existing reminders use the new precision.
             final meds = ref.read(reminderMedicationsProvider);
-            if (meds != null) await reminders.sync(meds);
+            if (meds != null) await syncReminders(ref, meds);
           },
           child: const Text('Allow'),
         ),

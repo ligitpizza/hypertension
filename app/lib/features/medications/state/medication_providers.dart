@@ -72,3 +72,25 @@ final myPrescriptionsProvider = StreamProvider<List<Prescription>>((ref) {
   if (uid == null) return Stream.value(const []);
   return ref.watch(medicationsRepositoryProvider).prescriptions(uid);
 }, retry: (_, _) => null);
+
+/// The result of the latest reminder sync (null until the first one finishes).
+class ReminderStatusNotifier extends Notifier<AsyncValue<ReminderStatus>?> {
+  @override
+  AsyncValue<ReminderStatus>? build() => null;
+
+  void set(AsyncValue<ReminderStatus> value) => state = value;
+}
+
+final reminderStatusProvider =
+    NotifierProvider<ReminderStatusNotifier, AsyncValue<ReminderStatus>?>(
+      ReminderStatusNotifier.new,
+    );
+
+/// Sync the phone's reminders and record the outcome for the Meds tab.
+Future<void> syncReminders(WidgetRef ref, List<Medication> meds) async {
+  final status = await AsyncValue.guard(() => ref.read(doseRemindersProvider).sync(meds));
+  if (status case AsyncError(:final error)) {
+    debugPrint('CareFlow: reminder sync failed: $error');
+  }
+  ref.read(reminderStatusProvider.notifier).set(status);
+}
