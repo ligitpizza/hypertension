@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Header, status
 from app.core.audit import SYSTEM_SCHEDULER_USER, AuditLogger, get_audit_logger
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
+from app.services.account_purge import AccountPurgeJob, get_account_purge_job
 from app.services.deterioration import DeteriorationJob, get_deterioration_job
 from app.services.medication_job import MedicationJob, get_medication_job
 from app.services.unanswered import UnansweredAlertJob, get_unanswered_alert_job
@@ -72,9 +73,12 @@ JOBS: dict[str, Callable[[AuditLogger], dict[str, Any]]] = {
 
 
 @router.post("/deterioration", dependencies=[Depends(verify_scheduler)])
-def run_deterioration(job: DeteriorationJob = Depends(get_deterioration_job)) -> dict[str, Any]:
-    """FR-9.6: daily 30-day deterioration scan."""
-    return {"job": "deterioration", "status": "ok", **job.run()}
+def run_deterioration(
+    job: DeteriorationJob = Depends(get_deterioration_job),
+    purge: AccountPurgeJob = Depends(get_account_purge_job),
+) -> dict[str, Any]:
+    """Daily: FR-9.6 30-day deterioration scan, and D-46 purge of deleted accounts."""
+    return {"job": "deterioration", "status": "ok", **job.run(), **purge.run()}
 
 
 @router.post("/escalation", dependencies=[Depends(verify_scheduler)])

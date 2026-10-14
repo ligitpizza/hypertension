@@ -26,6 +26,7 @@ from app.services.medications import MedicationDoc, get_medication_repository
 from app.services.notifications import Notifier, get_notifier, get_token_repository
 from app.services.provider import get_provider_repository
 from app.services.risk import get_risk_data_repository
+from app.services.settings import get_settings_repository
 from app.services.triage import Symptom, get_triage_repository
 from app.services.users import get_user_repository
 from app.services.vitals import get_vitals_repository
@@ -65,6 +66,8 @@ class FakeIdentityProvider:
     def __init__(self) -> None:
         self.emails: dict[str, str] = {"taken@example.com": "u-existing"}
         self.claims: dict[str, str] = {}
+        self.revoked: list[str] = []
+        self.deleted: list[str] = []
         self._next = 0
 
     def create_user(self, *, email: str, display_name: str) -> str:
@@ -80,6 +83,12 @@ class FakeIdentityProvider:
 
     def password_setup_link(self, email: str) -> str:
         return f"https://example.test/reset?email={email}&oob=abc"
+
+    def revoke_sessions(self, uid: str) -> None:
+        self.revoked.append(uid)
+
+    def delete_user(self, uid: str) -> None:
+        self.deleted.append(uid)
 
 
 class InMemoryUserRepository:
@@ -191,6 +200,7 @@ def fake_risk_model(p: float = 0.3) -> Any:
 class InMemoryTokenRepository:
     def __init__(self) -> None:
         self.by_user: dict[str, dict[str, str]] = {}
+        self.notification_prefs: dict[str, dict[str, Any]] = {}
 
     def add(self, uid: str, token: str, platform: str) -> None:
         self.by_user.setdefault(uid, {})[token] = platform
@@ -200,6 +210,9 @@ class InMemoryTokenRepository:
 
     def tokens(self, uid: str) -> list[str]:
         return list(self.by_user.get(uid, {}))
+
+    def prefs(self, uid: str) -> dict[str, Any]:
+        return self.notification_prefs.get(uid, {})
 
 
 class InMemoryAlertRepository:
@@ -268,6 +281,70 @@ class InMemoryDeteriorationRepository:
 
     def scores_since(self, uid: str, since: Any) -> list[tuple[Any, dict[str, Any]]]:
         return [(t, s) for t, s in self.scores.get(uid, []) if t >= since]
+
+
+class InMemorySettingsRepository:
+    """Module 12: shares users/profiles, readings and provider records with the other fakes."""
+
+    def __init__(
+        self,
+        users: "InMemoryUserRepository",
+        vitals: "InMemoryVitalsRepository",
+        provider: "InMemoryProviderRepository",
+    ) -> None:
+        self._users = users
+        self._vitals = vitals
+        self._provider = provider
+        self.records: dict[str, list[dict[str, Any]]] = {}  # other exported collections
+
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def health_profile(self, uid: str) -> dict[str, Any] | None:
+        return self._users.health_profiles.get(uid)
+
+    def update_user(self, uid: str, data: dict[str, Any]) -> None:
+        self._users.users[uid].update(data)
+
+    def update_health_profile(self, uid: str, data: dict[str, str]) -> None:
+        self._users.health_profiles.setdefault(uid, {"patientId": uid}).update(data)
+
+    def export_records(self, uid: str) -> dict[str, list[dict[str, Any]]]:
+        mine = [r for r in self._vitals.readings.values() if r["patientId"] == uid]
+        return {
+            **{k: [r for r in v if r.get("patientId") == uid] for k, v in self.records.items()},
+            "vital_readings": mine,
+            "prescriptions": [p for p in self._provider.prescriptions if p["patientId"] == uid],
+            "clinical_notes": [n for n in self._provider.notes if n.get("patientId") == uid],
+        }
+
+    def care_plan(self, uid: str) -> dict[str, Any] | None:
+        return self._provider.care_plans.get(uid)
+
+    def recurring_prescriptions(self, uid: str) -> list[dict[str, Any]]:
+        return [
+            p
+            for p in self._provider.prescriptions
+            if p["patientId"] == uid and p.get("isRecurring")
+        ]
+
+    def due_deletions(self, requested_before: datetime) -> list[str]:
+        return [
+            uid
+            for uid, u in self._users.users.items()
+            if u.get("deletionRequestedAt") is not None
+            and u["deletionRequestedAt"] <= requested_before
+        ]
+
+    def purge(self, uid: str) -> int:
+        gone = [k for k, r in self._vitals.readings.items() if r["patientId"] == uid]
+        for k in gone:
+            del self._vitals.readings[k]
+        for p in self.recurring_prescriptions(uid):
+            p["isRecurring"] = False
+        self._users.health_profiles.pop(uid, None)
+        self._users.users.pop(uid, None)
+        return len(gone) + 2
 
 
 class InMemoryProviderRepository:
@@ -592,6 +669,15 @@ def limiter() -> RateLimiter:
 
 
 @pytest.fixture
+def settings_repo(
+    repo: InMemoryUserRepository,
+    vitals_repo: InMemoryVitalsRepository,
+    provider_repo: InMemoryProviderRepository,
+) -> InMemorySettingsRepository:
+    return InMemorySettingsRepository(repo, vitals_repo, provider_repo)
+
+
+@pytest.fixture
 def make_client(
     audit: InMemoryAuditLogger,
     identity: FakeIdentityProvider,
@@ -612,6 +698,7 @@ def make_client(
     triage_repo: InMemoryTriageRepository,
     message_repo: InMemoryMessageRepository,
     med_repo: InMemoryMedicationRepository,
+    settings_repo: InMemorySettingsRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -637,6 +724,7 @@ def make_client(
         app.dependency_overrides[get_triage_repository] = lambda: triage_repo
         app.dependency_overrides[get_message_repository] = lambda: message_repo
         app.dependency_overrides[get_medication_repository] = lambda: med_repo
+        app.dependency_overrides[get_settings_repository] = lambda: settings_repo
         return TestClient(app)
 
     return _make

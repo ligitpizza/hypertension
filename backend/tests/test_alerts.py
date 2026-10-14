@@ -393,6 +393,7 @@ def test_fr_9_6_job_alerts_doctor_once_per_week(
         "status": "ok",
         "patientsScanned": 2,
         "alertsRaised": 1,
+        "accountsPurged": 0,  # D-46 purge shares the daily call
     }
     assert alerts_repo.alerts[0]["type"] == "deterioration"
     assert "stroke" in alerts_repo.alerts[0]["message"]

@@ -41,6 +41,19 @@ def _check_email(value: str) -> str:
     return value
 
 
+def check_dob(v: date) -> date:
+    """A plausible adult date of birth (UC1.4, UC12.1)."""
+    today = date.today()
+    if v >= today:
+        raise ValueError("Date of birth must be in the past.")
+    age = today.year - v.year - ((today.month, today.day) < (v.month, v.day))
+    if age > MAX_AGE_YEARS:
+        raise ValueError("Enter a valid date of birth.")
+    if age < MIN_AGE_YEARS:
+        raise ValueError(f"You must be at least {MIN_AGE_YEARS} years old to use CareFlow.")
+    return v
+
+
 def _check_phone(value: str) -> str:
     if not _PHONE_RE.match(value):
         raise ValueError("Enter a valid phone number.")
@@ -115,18 +128,7 @@ class OnboardingRequest(_Strict):
     medicalHistory: MedicalHistory
     lifestyleFactors: LifestyleFactors
 
-    @field_validator("dateOfBirth")
-    @classmethod
-    def _plausible_dob(cls, v: date) -> date:
-        today = date.today()
-        if v >= today:
-            raise ValueError("Date of birth must be in the past.")
-        age = today.year - v.year - ((today.month, today.day) < (v.month, v.day))
-        if age > MAX_AGE_YEARS:
-            raise ValueError("Enter a valid date of birth.")
-        if age < MIN_AGE_YEARS:
-            raise ValueError(f"You must be at least {MIN_AGE_YEARS} years old to use CareFlow.")
-        return v
+    _dob = field_validator("dateOfBirth")(check_dob)
 
 
 # ---------- sessions & failed logins (FR-1.5, D-27) ----------

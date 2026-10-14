@@ -15,6 +15,19 @@ log = logging.getLogger("careflow.notify")
 
 TOKENS = "fcmTokens"
 
+# D-45: push data types that count as medication reminders; every other non-urgent push is a
+# health update. Urgent pushes ignore the preferences.
+MEDICATION_TYPES = {"dose", "refill"}
+
+
+def pref_key(message: PushMessage) -> str | None:
+    """The notificationPrefs switch that governs this push, or None if it is always sent."""
+    if message.urgent:
+        return None
+    return (
+        "medicationReminders" if message.data.get("type") in MEDICATION_TYPES else "healthUpdates"
+    )
+
 
 class TokenRepository(Protocol):
     def add(self, uid: str, token: str, platform: str) -> None: ...
@@ -22,6 +35,10 @@ class TokenRepository(Protocol):
     def remove(self, uid: str, token: str) -> None: ...
 
     def tokens(self, uid: str) -> list[str]: ...
+
+    def prefs(self, uid: str) -> dict[str, Any]:
+        """users.notificationPrefs (D-45); {} when unset."""
+        ...
 
 
 class FirestoreTokenRepository:
@@ -42,6 +59,11 @@ class FirestoreTokenRepository:
     def tokens(self, uid: str) -> list[str]:
         return [d.id for d in self._col(uid).stream()]
 
+    def prefs(self, uid: str) -> dict[str, Any]:
+        snap = self._db.collection(Collection.USERS.value).document(uid).get()
+        raw = (snap.to_dict() or {}).get("notificationPrefs") if snap.exists else None
+        return dict(raw) if isinstance(raw, dict) else {}
+
 
 def get_token_repository() -> TokenRepository:
     return FirestoreTokenRepository(get_firestore())
@@ -58,6 +80,15 @@ class Notifier:
         tokens = self._tokens.tokens(uid)
         if not tokens:
             return 0
+        key = pref_key(message)
+        if key is not None:
+            try:
+                muted = self._tokens.prefs(uid).get(key) is False
+            except Exception:  # unreadable prefs -> deliver (safer than silence)
+                muted = False
+            if muted:
+                log.info("Push '%s' to %s skipped (%s off)", message.title, uid, key)
+                return 0
         try:
             invalid = self._push.send(tokens, message)
         except Exception:  # a push failure must never break the clinical flow

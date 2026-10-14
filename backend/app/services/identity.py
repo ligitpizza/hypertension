@@ -22,6 +22,14 @@ class IdentityProvider(Protocol):
 
     def password_setup_link(self, email: str) -> str: ...
 
+    def revoke_sessions(self, uid: str) -> None:
+        """Sign the user out everywhere (refresh tokens revoked; UC12.4)."""
+        ...
+
+    def delete_user(self, uid: str) -> None:
+        """Remove the login (D-46 purge); a login that is already gone is fine."""
+        ...
+
 
 class FirebaseIdentityProvider:
     def create_user(self, *, email: str, display_name: str) -> str:
@@ -41,6 +49,15 @@ class FirebaseIdentityProvider:
     def password_setup_link(self, email: str) -> str:
         link: str = fb_auth.generate_password_reset_link(email, app=get_firebase_app())
         return link
+
+    def revoke_sessions(self, uid: str) -> None:
+        fb_auth.revoke_refresh_tokens(uid, app=get_firebase_app())
+
+    def delete_user(self, uid: str) -> None:
+        try:
+            fb_auth.delete_user(uid, app=get_firebase_app())
+        except fb_auth.UserNotFoundError:
+            pass
 
 
 def get_identity_provider() -> IdentityProvider:

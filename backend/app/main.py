@@ -22,6 +22,7 @@ from app.routers import (
     triage,
     vitals,
 )
+from app.routers import settings as settings_routes
 
 API_PREFIX = "/api/v1"
 
@@ -73,6 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(triage.router, prefix=API_PREFIX)
     app.include_router(messages.router, prefix=API_PREFIX)
     app.include_router(medications.router, prefix=API_PREFIX)
+    app.include_router(settings_routes.router, prefix=API_PREFIX)
     app.include_router(jobs.router)
     return app
 
