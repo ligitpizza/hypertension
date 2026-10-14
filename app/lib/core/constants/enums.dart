@@ -372,3 +372,14 @@ enum ClinicalAlertStatus {
   final String value;
   static ClinicalAlertStatus fromValue(String v) => enumFromValue(values, v, (e) => e.value);
 }
+
+/// `prescriptions.source` (D-50); absent means doctor.
+enum PrescriptionSource {
+  doctor('doctor'),
+  patient('patient');
+
+  const PrescriptionSource(this.value);
+  final String value;
+  static PrescriptionSource fromValue(String? v) =>
+      v == null ? doctor : enumFromValue(values, v, (e) => e.value);
+}

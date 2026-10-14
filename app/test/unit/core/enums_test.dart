@@ -40,6 +40,7 @@ void main() {
     'login_failure_reason': LoginFailureReason.values.map((e) => e.value).toList(),
     'clinical_alert_type': ClinicalAlertType.values.map((e) => e.value).toList(),
     'clinical_alert_status': ClinicalAlertStatus.values.map((e) => e.value).toList(),
+    'prescription_source': PrescriptionSource.values.map((e) => e.value).toList(),
   };
 
   for (final entry in cases.entries) {

@@ -3,6 +3,7 @@
 POST /provider/patients/{id}/notes          clinical note (Fig 4.3.12.5)
 PUT  /provider/patients/{id}/care-plan      the patient's single living care plan
 POST /provider/patients/{id}/prescriptions  with drug interaction warning (UC8.4 E1)
+DELETE /provider/patients/{id}/prescriptions/{rxId}  the issuing doctor only (D-50)
 GET  /provider/patients/{id}/medication-effect  risk before vs after medication (D-44)
 
 Only the patient's assigned doctor may write (FR-8.1, NFR-2.2); every write is audited.
@@ -14,7 +15,7 @@ from fastapi import APIRouter, Depends, status
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
-from app.core.enums import Collection, UserRole
+from app.core.enums import Collection, PrescriptionSource, UserRole
 from app.core.errors import ApiError
 from app.ml.risk_model import RiskModel, get_risk_model
 from app.schemas.provider import CarePlanRequest, NoteRequest, PrescriptionRequest
@@ -114,6 +115,7 @@ def issue_prescription(
             "doctorId": doctor.uid,
             "medicationDetails": details,
             "isRecurring": body.isRecurring,
+            "source": PrescriptionSource.DOCTOR.value,  # D-50
         }
     )
     audit.log(
@@ -129,6 +131,31 @@ def issue_prescription(
         "medicationDetails": details,
         "interactions": [i.to_dict() for i in interactions],
     }
+
+
+@router.delete("/{patient_id}/prescriptions/{rx_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_prescription(
+    patient_id: str,
+    rx_id: str,
+    doctor: CurrentUser = Depends(doctor_only),
+    repo: ProviderRepository = Depends(get_provider_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> None:
+    """D-50: the doctor who issued a prescription may delete it (development use)."""
+    _assigned_patient(patient_id, doctor, repo)
+    rx = repo.prescription(rx_id)
+    if rx is None or rx.get("patientId") != patient_id or rx.get("doctorId") != doctor.uid:
+        raise ApiError(
+            "PRESCRIPTION_NOT_FOUND", "Prescription not found.", status.HTTP_404_NOT_FOUND
+        )
+    repo.delete_prescription(rx_id)
+    audit.log(
+        user_id=doctor.uid,
+        action="DELETE_PRESCRIPTION",
+        details="Prescription deleted by the issuing doctor.",
+        target_type=Collection.PRESCRIPTIONS.value,
+        target_id=rx_id,
+    )
 
 
 @router.get("/{patient_id}/medication-effect")

@@ -40,6 +40,7 @@ CASES: dict[str, type[StrEnum]] = {
     "login_failure_reason": enums.LoginFailureReason,
     "clinical_alert_type": enums.ClinicalAlertType,
     "clinical_alert_status": enums.ClinicalAlertStatus,
+    "prescription_source": enums.PrescriptionSource,
 }
 
 

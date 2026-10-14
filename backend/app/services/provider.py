@@ -29,6 +29,12 @@ class ProviderRepository(Protocol):
 
     def add_prescription(self, data: dict[str, Any]) -> str: ...
 
+    def prescription(self, rx_id: str) -> dict[str, Any] | None: ...
+
+    def update_prescription(self, rx_id: str, data: dict[str, Any]) -> None: ...
+
+    def delete_prescription(self, rx_id: str) -> None: ...
+
 
 class FirestoreProviderRepository:
     def __init__(self, db: Any) -> None:
@@ -77,14 +83,28 @@ class FirestoreProviderRepository:
         )
         return str(ref.id)
 
+    def prescription(self, rx_id: str) -> dict[str, Any] | None:
+        snap = self._db.collection(Collection.PRESCRIPTIONS.value).document(rx_id).get()
+        return dict(snap.to_dict()) if snap.exists else None
+
+    def update_prescription(self, rx_id: str, data: dict[str, Any]) -> None:
+        self._db.collection(Collection.PRESCRIPTIONS.value).document(rx_id).update(data)
+
+    def delete_prescription(self, rx_id: str) -> None:
+        self._db.collection(Collection.PRESCRIPTIONS.value).document(rx_id).delete()
+
 
 def get_provider_repository() -> ProviderRepository:
     return FirestoreProviderRepository(get_firestore())
 
 
-def medication_details(name: str, dosage: str, frequency: str, duration: str | None) -> str:
+def medication_details(
+    name: str, dosage: str, frequency: str, duration: str | None, clinic: str | None = None
+) -> str:
     """prescriptions.medicationDetails is one string in Ch4 (Table 4.2.3.11)."""
     parts = [f"{name} {dosage}".strip(), frequency]
     if duration:
         parts.append(f"for {duration}")
+    if clinic:  # D-50: patient-reported, where it was prescribed
+        parts.append(f"from {clinic}")
     return ", ".join(p for p in parts if p)

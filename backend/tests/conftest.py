@@ -367,6 +367,17 @@ class InMemoryProviderRepository:
         self.notes.append(data)
         return f"note{len(self.notes)}"
 
+    def prescription(self, rx_id: str) -> dict[str, Any] | None:
+        return next((p for p in self.prescriptions if p.get("id") == rx_id), None)
+
+    def update_prescription(self, rx_id: str, data: dict[str, Any]) -> None:
+        rx = self.prescription(rx_id)
+        assert rx is not None
+        rx.update(data)
+
+    def delete_prescription(self, rx_id: str) -> None:
+        self.prescriptions = [p for p in self.prescriptions if p.get("id") != rx_id]
+
     def set_care_plan(self, patient_id: str, data: dict[str, Any]) -> None:
         self.care_plans[patient_id] = data
         self.plan_versions.setdefault(patient_id, []).append(
@@ -374,8 +385,9 @@ class InMemoryProviderRepository:
         )
 
     def add_prescription(self, data: dict[str, Any]) -> str:
-        self.prescriptions.append(data)
-        return f"rx{len(self.prescriptions)}"
+        rx_id = f"rx{len(self.prescriptions) + 1}"
+        self.prescriptions.append({**data, "id": rx_id})
+        return rx_id
 
 
 class InMemoryAgentDataRepository:

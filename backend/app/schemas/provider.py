@@ -22,3 +22,14 @@ class PrescriptionRequest(BaseModel):
     isRecurring: bool = False  # UC13.1; monthly orders arrive with Module 13
     # UC8.4 E1: the doctor saw the interaction warning and chose to continue.
     acknowledgeInteractions: bool = False
+
+
+class ReportedPrescriptionRequest(BaseModel):
+    """D-50: a prescription the patient got elsewhere (e.g. another clinic's paper slip)."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    medicationName: str = Field(min_length=2, max_length=100)
+    dosage: str = Field(min_length=1, max_length=50)
+    frequency: str = Field(min_length=1, max_length=100)
+    duration: str | None = Field(default=None, max_length=50)
+    clinic: str | None = Field(default=None, max_length=100)

@@ -237,6 +237,13 @@ class ClinicalAlertType(StrEnum):
     LOW_ADHERENCE = "low_adherence"  # D-49
 
 
+class PrescriptionSource(StrEnum):
+    """prescriptions.source (D-50); absent means doctor."""
+
+    DOCTOR = "doctor"
+    PATIENT = "patient"
+
+
 class ClinicalAlertStatus(StrEnum):
     OPEN = "open"
     ACKNOWLEDGED = "acknowledged"
