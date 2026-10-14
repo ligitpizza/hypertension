@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://hypertension-dd85f.web.app", "https://hypertension-dd85f.firebaseapp.com"],
+    "method": ["GET"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]

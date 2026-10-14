@@ -22,6 +22,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
   deploy-backend          Cloud Run service careflow-api (asia-southeast1, max 2 instances)
   deploy-web              Build the staff portal and deploy Firebase Hosting
   deploy-rules            Firestore rules + indexes and Storage rules
+  set-storage-cors        Let the staff portal (browser) download message attachments
+                          (idempotent; firebase/storage.cors.json; also run by deploy-all)
   create-scheduler-jobs   Idempotent Cloud Scheduler jobs calling /internal/jobs/*
   seed-catalog-live       Write the symptom_catalog reference list to the live project
                           (idempotent; also run by deploy-all)
@@ -437,6 +439,25 @@ def task_deploy_web() -> None:
     shutil.rmtree(public, ignore_errors=True)
     shutil.copytree(APP / "build" / "web", public)
     run(deploy, cwd=FIREBASE)
+
+
+STORAGE_BUCKET = f"{PROJECT_ID}.firebasestorage.app"
+
+
+def task_set_storage_cors() -> None:
+    """D-52: browsers may only download Storage files from origins the bucket allows."""
+    cmd = [
+        exe("gcloud"),
+        "storage",
+        "buckets",
+        "update",
+        f"gs://{STORAGE_BUCKET}",
+        f"--cors-file={FIREBASE / 'storage.cors.json'}",
+        "--project",
+        PROJECT_ID,
+    ]
+    confirm_cloud("allow the staff portal to download Storage files (CORS)", [cmd])
+    run(cmd)
 
 
 def task_deploy_rules() -> None:
@@ -861,6 +882,7 @@ def task_deploy_all() -> None:
     global ASSUME_YES
     steps = [
         ("Firestore rules + indexes, Storage rules", task_deploy_rules),
+        ("Storage CORS for the staff portal", task_set_storage_cors),
         ("Reference data: symptom catalog", task_seed_catalog_live),
         ("FastAPI backend on Cloud Run", task_deploy_backend),
         ("Staff portal on Firebase Hosting", task_deploy_web),
@@ -902,6 +924,7 @@ TASKS = {
     "deploy-backend": task_deploy_backend,
     "deploy-web": task_deploy_web,
     "deploy-rules": task_deploy_rules,
+    "set-storage-cors": task_set_storage_cors,
     "create-scheduler-jobs": task_create_scheduler_jobs,
     "set-gemini-secret": task_set_gemini_secret,
     "seed-catalog-live": task_seed_catalog_live,
