@@ -297,3 +297,20 @@ def test_d47_pdf_lines_all_start_at_the_left_margin(client: TestClient) -> None:
     xs = {round(float(x)) for x in re.findall(rb"BT ([\d.]+) [\d.]+ Td", text)}
     assert len(xs) == 1
     assert b"Blood pressure readings (3)" in text.replace(rb"\(", b"(").replace(rb"\)", b")")
+
+
+def test_d51_existing_patient_adds_ic_in_settings(
+    client: TestClient, repo: InMemoryUserRepository
+) -> None:
+    body = {"name": "Siti", "dateOfBirth": "1970-03-01", "gender": "female"}
+    res = client.put(
+        "/api/v1/settings/profile", json={**body, "icNumber": "700301145678"}, headers=PATIENT
+    )
+    assert res.status_code == 200 and repo.users[P]["icNumber"] == "700301-14-5678"
+    repo.users["u-other"] = {"role": "patient", "icNumber": "650101-10-1234"}
+    taken = client.put(
+        "/api/v1/settings/profile", json={**body, "icNumber": "650101-10-1234"}, headers=PATIENT
+    )
+    assert taken.status_code == 409
+    bad = client.put("/api/v1/settings/profile", json={**body, "icNumber": "abc"}, headers=PATIENT)
+    assert bad.status_code == 422

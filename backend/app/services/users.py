@@ -24,6 +24,10 @@ class UserRepository(Protocol):
 
     def link_code_exists(self, code: str) -> bool: ...
 
+    def ic_owner(self, ic_number: str) -> str | None:
+        """The uid already using this IC number (D-51), if any."""
+        ...
+
     def complete_onboarding(
         self, uid: str, profile: dict[str, Any], user_updates: dict[str, Any]
     ) -> None: ...
@@ -48,6 +52,10 @@ class FirestoreUserRepository:
     def link_code_exists(self, code: str) -> bool:
         query = self._users().where(filter=firestore.FieldFilter("linkCode", "==", code)).limit(1)
         return any(True for _ in query.stream())
+
+    def ic_owner(self, ic_number: str) -> str | None:
+        query = self._users().where(filter=firestore.FieldFilter("icNumber", "==", ic_number))
+        return next((d.id for d in query.limit(1).stream()), None)
 
     def complete_onboarding(
         self, uid: str, profile: dict[str, Any], user_updates: dict[str, Any]

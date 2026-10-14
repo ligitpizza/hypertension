@@ -26,6 +26,7 @@ from app.schemas.settings import (
     NotificationPrefs,
     PersonalInfoUpdate,
 )
+from app.services.ic import IcError, parse_ic
 from app.services.identity import IdentityProvider, get_identity_provider
 from app.services.notifications import TokenRepository, get_token_repository
 from app.services.risk import (
@@ -42,6 +43,7 @@ from app.services.settings import (
     get_settings_repository,
     parse_profile_field,
 )
+from app.services.users import UserRepository, get_user_repository
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 log = logging.getLogger("careflow.settings")
@@ -78,6 +80,7 @@ def update_profile(
     body: PersonalInfoUpdate,
     user: CurrentUser = Depends(patient_only),
     repo: SettingsRepository = Depends(get_settings_repository),
+    users: UserRepository = Depends(get_user_repository),
     risk_repo: RiskDataRepository = Depends(get_risk_data_repository),
     model: RiskModel | None = Depends(get_risk_model),
     audit: AuditLogger = Depends(get_audit_logger),
@@ -87,7 +90,19 @@ def update_profile(
     old_dob = current.get("dateOfBirth")
     old_dob = old_dob.date() if isinstance(old_dob, datetime) else None
     changed_inputs = old_dob != body.dateOfBirth or current.get("gender") != body.gender.value
-    repo.update_user(user.uid, {"name": body.name, "dateOfBirth": dob, "gender": body.gender.value})
+    updates: dict[str, Any] = {"name": body.name, "dateOfBirth": dob, "gender": body.gender.value}
+    if body.icNumber:  # D-51
+        try:
+            ic = parse_ic(body.icNumber).value
+        except IcError as exc:
+            raise ApiError("INVALID_IC", str(exc), status.HTTP_422_UNPROCESSABLE_CONTENT) from exc
+        owner = users.ic_owner(ic)
+        if owner is not None and owner != user.uid:
+            raise ApiError(
+                "IC_IN_USE", "This IC number is already registered.", status.HTTP_409_CONFLICT
+            )
+        updates["icNumber"] = ic
+    repo.update_user(user.uid, updates)
     rescored = changed_inputs and _rescore(user.uid, risk_repo, model)
     audit.log(
         user_id=user.uid,

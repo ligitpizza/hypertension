@@ -25,6 +25,7 @@ from app.schemas.auth import (
     RegisterProfileResponse,
     SessionEventRequest,
 )
+from app.services.ic import IcError, parse_ic
 from app.services.identity import IdentityProvider, get_identity_provider
 from app.services.users import UserRepository, get_user_repository, new_link_code
 
@@ -51,6 +52,28 @@ def _unique_link_code(repo: UserRepository) -> str:
     raise ApiError(
         "LINK_CODE_UNAVAILABLE", "Please try again.", status.HTTP_503_SERVICE_UNAVAILABLE
     )
+
+
+def _patient_ic(raw: str | None, role: UserRole, repo: UserRepository, uid: str) -> str | None:
+    """D-51: patients must give a valid IC number that nobody else uses."""
+    if role is not UserRole.PATIENT:
+        return None
+    if not raw:
+        raise ApiError(
+            "IC_REQUIRED", "Enter your IC number.", status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+    try:
+        ic = parse_ic(raw).value
+    except IcError as exc:
+        raise ApiError("INVALID_IC", str(exc), status.HTTP_422_UNPROCESSABLE_CONTENT) from exc
+    owner = repo.ic_owner(ic)
+    if owner is not None and owner != uid:
+        raise ApiError(
+            "IC_IN_USE",
+            "This IC number is already registered. Sign in instead, or contact support.",
+            status.HTTP_409_CONFLICT,
+        )
+    return ic
 
 
 @router.post("/register-profile", response_model=RegisterProfileResponse)
@@ -83,6 +106,7 @@ def register_profile(
         )
     if not user.email:
         raise ApiError("EMAIL_REQUIRED", "The account has no email address.")
+    ic = _patient_ic(body.icNumber, role, repo, user.uid)
 
     doc: dict[str, Any] = {
         "email": user.email,
@@ -92,6 +116,7 @@ def register_profile(
     }
     if role is UserRole.PATIENT:
         doc |= {
+            "icNumber": ic,  # D-51
             "onboardingComplete": False,
             "assignedDoctorId": None,
             "linkCode": _unique_link_code(repo),  # D-06

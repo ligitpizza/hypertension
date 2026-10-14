@@ -66,6 +66,8 @@ def _check_phone(value: str) -> str:
 class RegisterProfileRequest(_Strict):
     name: str = Field(min_length=2, max_length=100)
     role: Literal[UserRole.PATIENT, UserRole.FAMILY_MEMBER]
+    # D-51: required for patients (checked in the router, which knows the role).
+    icNumber: str | None = Field(default=None, max_length=20)
 
 
 class RegisterProfileResponse(BaseModel):
