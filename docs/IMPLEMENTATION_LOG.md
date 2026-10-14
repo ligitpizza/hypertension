@@ -755,3 +755,9 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   "Allow" banner only when timed doses exist and permission is missing, and re-schedules
   after it is granted. Inexact remains the fallback; the 15-minute backup push (fixed above)
   is the safety net. Tests: 3 widget (349 total).
+- **Messaging still failing after the key fix (real cause):** the browser console showed
+  `MissingPluginException` for flutter_secure_storage: the live portal had been built with a
+  stale cached web plugin list (from before Module 10 added the plugin), so no key could be
+  read or written. The key-vault race fix above was real but was not this bug. `deploy-web`
+  now clears Flutter's build cache first and refuses to deploy if `main.dart.js` lacks the
+  plugin's web code.

@@ -400,6 +400,25 @@ def task_deploy_backend() -> None:
     run(cmd)
 
 
+# Text that only appears in main.dart.js when the plugin's web code is compiled in. A stale
+# build cache once shipped a portal without flutter_secure_storage_web (every secure message
+# failed with MissingPluginException), so the deploy now checks before uploading.
+WEB_PLUGIN_MARKERS = {
+    "flutter_secure_storage_web (D-42 message keys)": "FlutterSecureStorageWeb only works",
+}
+
+
+def build_staff_web(build: list[str]) -> None:
+    # Flutter caches the generated web plugin list per build configuration and does not
+    # always refresh it when plugins are added; clearing the cache forces a fresh one.
+    shutil.rmtree(APP / ".dart_tool" / "flutter_build", ignore_errors=True)
+    run(build, cwd=APP)
+    js = (APP / "build" / "web" / "main.dart.js").read_text(encoding="utf-8", errors="ignore")
+    missing = [name for name, marker in WEB_PLUGIN_MARKERS.items() if marker not in js]
+    if missing:
+        sys.exit(f"Staff portal build is missing web plugins: {', '.join(missing)}. Not deploying.")
+
+
 def task_deploy_web() -> None:
     build = [
         exe("flutter"),
@@ -412,7 +431,7 @@ def task_deploy_web() -> None:
     ]
     deploy = [exe("firebase"), "deploy", "--only", "hosting", "--project", PROJECT_ID]
     confirm_cloud("build the staff portal and deploy Firebase Hosting", [build, deploy])
-    run(build, cwd=APP)
+    build_staff_web(build)
     # Hosting can only serve files inside the firebase/ project directory.
     public = FIREBASE / "public"
     shutil.rmtree(public, ignore_errors=True)
