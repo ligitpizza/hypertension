@@ -250,6 +250,7 @@ def test_uc9_2_emergency_reading_alerts_everyone(
     push: LogPushClient,
     alerts_repo: InMemoryAlertRepository,
     audit: InMemoryAuditLogger,
+    appointment_repo: Any,
 ) -> None:
     _seed_patient(repo, tokens)
     body = _log(client, 185, 122)
@@ -257,7 +258,10 @@ def test_uc9_2_emergency_reading_alerts_everyone(
     assert body["bookAppointmentPrompt"] is True
     assert "999" in body["recommendations"][0]
     assert body["recommendations"][-1] == DISCLAIMER
-    assert _recipients(push) == ["u-patient", "u-doctor", "u-family"]
+    # Alerts, then D-53's emergency auto-booking (patient + doctor told of the slot).
+    assert _recipients(push) == ["u-patient", "u-doctor", "u-family", "u-patient", "u-doctor"]
+    [appt] = appointment_repo.appointments.values()
+    assert appt["type"] == "emergency" and appt["doctorId"] == "u-doctor"
     alert = alerts_repo.alerts[0]
     assert alert["type"] == "threshold" and alert["severity"] == "critical"
     assert alert["doctorId"] == "u-doctor" and alert["status"] == "open"

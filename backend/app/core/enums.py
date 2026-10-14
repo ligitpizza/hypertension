@@ -17,6 +17,7 @@ class Collection(StrEnum):
     DOSE_LOGS = "dose_logs"
     HEALTH_RECORDS = "health_records"
     APPOINTMENTS = "appointments"
+    DOCTOR_ASSIGNMENT_REQUESTS = "doctor_assignment_requests"  # D-54
     CLINICAL_NOTES = "clinical_notes"
     PRESCRIPTIONS = "prescriptions"
     CARE_PLANS = "care_plans"
@@ -62,6 +63,27 @@ class AppointmentStatus(StrEnum):
     RESCHEDULED = "rescheduled"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
+
+
+class AppointmentType(StrEnum):
+    """appointments.type (D-53)."""
+
+    CHECKUP = "checkup"
+    FOLLOW_UP = "follow_up"
+    EMERGENCY = "emergency"
+
+
+class AssignmentRequestKind(StrEnum):
+    """doctor_assignment_requests.kind (D-54)."""
+
+    NEW_PATIENT = "new_patient"
+    REASSIGN = "reassign"
+
+
+class AssignmentRequestStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    DECLINED = "declined"
 
 
 class OrderMethod(StrEnum):

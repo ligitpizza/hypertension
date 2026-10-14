@@ -4,18 +4,15 @@ Skipped unless FIRESTORE_EMULATOR_HOST and FIREBASE_AUTH_EMULATOR_HOST are set.
 `python tasks.py test` runs them inside `firebase emulators:exec --only auth,firestore`.
 """
 
-import os
 import uuid
 from datetime import UTC, datetime
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    not (
-        os.environ.get("FIRESTORE_EMULATOR_HOST") and os.environ.get("FIREBASE_AUTH_EMULATOR_HOST")
-    ),
-    reason="Firebase emulators not running",
-)
+from tests.conftest import EMULATORS_STARTED
+
+# conftest fills in emulator addresses as a production guard, so check what was really set.
+pytestmark = pytest.mark.skipif(not EMULATORS_STARTED, reason="Firebase emulators not running")
 
 
 @pytest.fixture(scope="module")

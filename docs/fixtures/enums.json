@@ -10,6 +10,7 @@
     "dose_logs",
     "health_records",
     "appointments",
+    "doctor_assignment_requests",
     "clinical_notes",
     "prescriptions",
     "care_plans",
@@ -186,5 +187,19 @@
   "prescription_source": [
     "doctor",
     "patient"
+  ],
+  "appointment_type": [
+    "checkup",
+    "follow_up",
+    "emergency"
+  ],
+  "assignment_request_kind": [
+    "new_patient",
+    "reassign"
+  ],
+  "assignment_request_status": [
+    "pending",
+    "approved",
+    "declined"
   ]
 }

@@ -14,12 +14,14 @@ from fastapi import APIRouter, Depends, status
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
-from app.core.enums import Collection, RiskLevel, UserRole
+from app.core.enums import AlertLevel, Collection, RiskLevel, UserRole
 from app.core.errors import ApiError
 from app.ml.risk_inputs import MIN_READINGS, existing_conditions
 from app.ml.risk_model import RiskModel, RiskPrediction, get_risk_model
 from app.schemas.vitals import LogReadingRequest, LogReadingResponse
 from app.services.agent_context import AgentDataRepository, get_agent_data_repository
+from app.services.appointment_extras import auto_book_emergency
+from app.services.appointments import AppointmentRepository, get_appointment_repository
 from app.services.bp import alert_level, classify, plausibility_error
 from app.services.escalation import (
     AlertRepository,
@@ -29,6 +31,7 @@ from app.services.escalation import (
     get_escalator,
     plan_escalation,
 )
+from app.services.notifications import Notifier, get_notifier
 from app.services.recommendations import recommendations
 from app.services.risk import (
     NotEnoughReadingsError,
@@ -56,6 +59,8 @@ def log_reading(
     alerts: AlertRepository = Depends(get_alert_repository),
     escalator: Escalator = Depends(get_escalator),
     agent: AgentDataRepository = Depends(get_agent_data_repository),
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+    notifier: Notifier = Depends(get_notifier),
 ) -> LogReadingResponse:
     reason = plausibility_error(body.systolic, body.diastolic, body.heartRate)
     if reason is not None:
@@ -158,6 +163,18 @@ def log_reading(
         # The reading and risk score are already saved; an alerting failure must not
         # make the patient think the reading was lost (and log it twice).
         log.exception("Escalation failed for reading %s", reading_id)
+    if plan.alert_level is AlertLevel.EMERGENCY:
+        # docs/06 Emergency band / D-53: book the next free slot with the patient's doctor.
+        try:
+            auto_book_emergency(
+                appointments,
+                notifier,
+                user.uid,
+                profile.get("assignedDoctorId"),
+                datetime.now(UTC),
+            )
+        except Exception:
+            log.exception("Emergency auto-booking failed for reading %s", reading_id)
     if plan.agent_note:
         # D-37: the AI Health Agent's fixed advice (avoid exertion / stay calm) in the chat.
         try:

@@ -15,6 +15,7 @@ from app.core.audit import SYSTEM_SCHEDULER_USER, AuditLogger, get_audit_logger
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.services.account_purge import AccountPurgeJob, get_account_purge_job
+from app.services.appointment_extras import AppointmentJob, get_appointment_job
 from app.services.deterioration import DeteriorationJob, get_deterioration_job
 from app.services.medication_job import MedicationJob, get_medication_job
 from app.services.unanswered import UnansweredAlertJob, get_unanswered_alert_job
@@ -93,6 +94,7 @@ def run_deterioration(
 def run_escalation(
     job: UnansweredAlertJob = Depends(get_unanswered_alert_job),
     meds: MedicationJob = Depends(get_medication_job),
+    appointments: AppointmentJob = Depends(get_appointment_job),
 ) -> dict[str, Any]:
     """Every 15 minutes: D-37 unanswered-alert escalation, and D-43 medication sweep
     (missed doses, backup reminders) so no extra Cloud Scheduler job is needed."""
@@ -102,6 +104,11 @@ def run_escalation(
     except Exception:  # one sweep failing must not hide the other's result
         log.exception("Medication sweep failed")
         result["medicationSweep"] = "failed"
+    try:  # D-53 appointment reminders (24 h / 1 h) and completion
+        result.update(appointments.run())
+    except Exception:
+        log.exception("Appointment sweep failed")
+        result["appointmentSweep"] = "failed"
     return result
 
 

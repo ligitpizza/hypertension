@@ -1,3 +1,22 @@
+# ruff: noqa: E402  (the production guard below must run before the app modules import)
+import os
+
+# Tests must never reach the live project. Without these, any repository a test forgets to
+# fake falls back to Application Default Credentials (the developer's gcloud login), i.e.
+# production. With them, a missing fake fails against localhost instead (it happened once:
+# the emergency auto-booking path, 2026-10-15).
+# The emulator integration tests run only when the emulators were really started
+# (`tasks.py test` sets the variables); remember that before filling in the guard values.
+EMULATORS_STARTED = bool(
+    os.environ.get("FIRESTORE_EMULATOR_HOST") and os.environ.get("FIREBASE_AUTH_EMULATOR_HOST")
+)
+for _var, _host in (
+    ("FIRESTORE_EMULATOR_HOST", "localhost:8080"),
+    ("FIREBASE_AUTH_EMULATOR_HOST", "localhost:9099"),
+    ("FIREBASE_STORAGE_EMULATOR_HOST", "localhost:9199"),
+):
+    os.environ.setdefault(_var, _host)
+
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -19,6 +38,7 @@ from app.routers.agent import get_agent_limiter
 from app.routers.auth import get_failed_login_limiter
 from app.routers.messages import get_message_repository
 from app.services.agent_context import get_agent_data_repository
+from app.services.appointments import get_appointment_repository
 from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
@@ -348,6 +368,71 @@ class InMemorySettingsRepository:
         self._users.health_profiles.pop(uid, None)
         self._users.users.pop(uid, None)
         return len(gone) + 2
+
+
+class InMemoryAppointmentRepository:
+    """Module 7 (D-53); booking is atomic like the Firestore transaction."""
+
+    def __init__(self, users: "InMemoryUserRepository") -> None:
+        self._users = users
+        self.appointments: dict[str, dict[str, Any]] = {}
+
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def get(self, appointment_id: str) -> Any:
+        from app.services.appointments import AppointmentDoc
+
+        a = self.appointments.get(appointment_id)
+        return AppointmentDoc(appointment_id, a) if a else None
+
+    def taken(self, doctor_id: str, start: datetime, end: datetime) -> set[datetime]:
+        from app.services.appointments import ACTIVE
+
+        return {
+            a["dateTime"]
+            for a in self.appointments.values()
+            if a["doctorId"] == doctor_id and start <= a["dateTime"] < end and a["status"] in ACTIVE
+        }
+
+    def book(self, data: dict[str, Any], exclude_id: str | None = None) -> str:
+        from app.services.appointments import ACTIVE, SlotTakenError
+
+        for k, a in self.appointments.items():
+            if (
+                k != exclude_id
+                and a["doctorId"] == data["doctorId"]
+                and a["dateTime"] == data["dateTime"]
+                and a["status"] in ACTIVE
+            ):
+                raise SlotTakenError
+        appt_id = exclude_id or f"a{len(self.appointments) + 1}"
+        self.appointments[appt_id] = dict(data)
+        return appt_id
+
+    def update(self, appointment_id: str, data: dict[str, Any]) -> None:
+        self.appointments[appointment_id].update(data)
+
+    def upcoming_for_patient(self, patient_id: str, now: datetime) -> list[Any]:
+        from app.services.appointments import ACTIVE, AppointmentDoc
+
+        return sorted(
+            (
+                AppointmentDoc(k, a)
+                for k, a in self.appointments.items()
+                if a["patientId"] == patient_id and a["dateTime"] >= now and a["status"] in ACTIVE
+            ),
+            key=lambda d: d.data["dateTime"],
+        )
+
+    def active_between(self, start: datetime, end: datetime) -> list[Any]:
+        from app.services.appointments import ACTIVE, AppointmentDoc
+
+        return [
+            AppointmentDoc(k, a)
+            for k, a in self.appointments.items()
+            if start <= a["dateTime"] < end and a["status"] in ACTIVE
+        ]
 
 
 class InMemoryProviderRepository:
@@ -699,6 +784,11 @@ def limiter() -> RateLimiter:
 
 
 @pytest.fixture
+def appointment_repo(repo: InMemoryUserRepository) -> InMemoryAppointmentRepository:
+    return InMemoryAppointmentRepository(repo)
+
+
+@pytest.fixture
 def settings_repo(
     repo: InMemoryUserRepository,
     vitals_repo: InMemoryVitalsRepository,
@@ -729,6 +819,7 @@ def make_client(
     message_repo: InMemoryMessageRepository,
     med_repo: InMemoryMedicationRepository,
     settings_repo: InMemorySettingsRepository,
+    appointment_repo: InMemoryAppointmentRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -755,6 +846,7 @@ def make_client(
         app.dependency_overrides[get_message_repository] = lambda: message_repo
         app.dependency_overrides[get_medication_repository] = lambda: med_repo
         app.dependency_overrides[get_settings_repository] = lambda: settings_repo
+        app.dependency_overrides[get_appointment_repository] = lambda: appointment_repo
         return TestClient(app)
 
     return _make

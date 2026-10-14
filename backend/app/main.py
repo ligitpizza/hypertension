@@ -11,6 +11,7 @@ from app.ml.risk_model import load_risk_model
 from app.routers import (
     admin,
     agent,
+    appointments,
     auth,
     devices,
     health,
@@ -75,6 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(triage.router, prefix=API_PREFIX)
     app.include_router(messages.router, prefix=API_PREFIX)
     app.include_router(medications.router, prefix=API_PREFIX)
+    app.include_router(appointments.router, prefix=API_PREFIX)
     app.include_router(prescriptions.router, prefix=API_PREFIX)
     app.include_router(settings_routes.router, prefix=API_PREFIX)
     app.include_router(jobs.router)
