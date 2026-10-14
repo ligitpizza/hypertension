@@ -39,6 +39,7 @@ from app.routers.auth import get_failed_login_limiter
 from app.routers.messages import get_message_repository
 from app.services.agent_context import get_agent_data_repository
 from app.services.appointments import get_appointment_repository
+from app.services.assignments import get_assignment_repository
 from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
@@ -435,6 +436,37 @@ class InMemoryAppointmentRepository:
         ]
 
 
+class InMemoryAssignmentRepository:
+    """D-54 doctor assignment requests."""
+
+    def __init__(self, users: "InMemoryUserRepository") -> None:
+        self._users = users
+        self.requests: dict[str, dict[str, Any]] = {}
+
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def request(self, request_id: str) -> dict[str, Any] | None:
+        return self.requests.get(request_id)
+
+    def has_pending(self, patient_id: str) -> bool:
+        return any(
+            r["patientId"] == patient_id and r["status"] == "pending"
+            for r in self.requests.values()
+        )
+
+    def create(self, data: dict[str, Any]) -> str:
+        request_id = f"r{len(self.requests) + 1}"
+        self.requests[request_id] = dict(data)
+        return request_id
+
+    def resolve(self, request_id: str, data: dict[str, Any]) -> None:
+        self.requests[request_id].update(data)
+
+    def set_doctor(self, patient_id: str, doctor_id: str) -> None:
+        self._users.users[patient_id]["assignedDoctorId"] = doctor_id
+
+
 class InMemoryProviderRepository:
     def __init__(self, users: "InMemoryUserRepository") -> None:
         self._users = users
@@ -784,6 +816,11 @@ def limiter() -> RateLimiter:
 
 
 @pytest.fixture
+def assignment_repo(repo: InMemoryUserRepository) -> InMemoryAssignmentRepository:
+    return InMemoryAssignmentRepository(repo)
+
+
+@pytest.fixture
 def appointment_repo(repo: InMemoryUserRepository) -> InMemoryAppointmentRepository:
     return InMemoryAppointmentRepository(repo)
 
@@ -820,6 +857,7 @@ def make_client(
     med_repo: InMemoryMedicationRepository,
     settings_repo: InMemorySettingsRepository,
     appointment_repo: InMemoryAppointmentRepository,
+    assignment_repo: InMemoryAssignmentRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -847,6 +885,7 @@ def make_client(
         app.dependency_overrides[get_medication_repository] = lambda: med_repo
         app.dependency_overrides[get_settings_repository] = lambda: settings_repo
         app.dependency_overrides[get_appointment_repository] = lambda: appointment_repo
+        app.dependency_overrides[get_assignment_repository] = lambda: assignment_repo
         return TestClient(app)
 
     return _make

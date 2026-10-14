@@ -111,6 +111,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---- D-54 doctor assignment requests (UC7.3) ----
+    // Written only through FastAPI. The admin sees all; the patient sees requests about
+    // them (to show "waiting for the clinic"); a requesting doctor sees their own.
+    match /doctor_assignment_requests/{requestId} {
+      allow read: if isAdmin()
+        || isSelf(resource.data.patientId)
+        || isSelf(resource.data.requestedBy);
+      allow write: if false;
+    }
+
     // ---- Module 8 doctor-authored records (FR-8.2, FR-8.3; docs/04 rules summary) ----
     // Written only through FastAPI (assignment check + audit). Read by the patient,
     // their assigned doctor and admin; pharmacists also read prescriptions (Module 13).
