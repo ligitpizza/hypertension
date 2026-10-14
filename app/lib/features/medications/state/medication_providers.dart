@@ -6,6 +6,7 @@ import '../../../shared/models/health_models.dart';
 import '../../../shared/providers/api_providers.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
+import '../data/background_access.dart';
 import '../data/dose_reminders.dart';
 import '../data/medications_repository.dart';
 import '../domain/med_schedule.dart';
@@ -53,3 +54,13 @@ final exactRemindersAllowedProvider = FutureProvider.autoDispose<bool>(
   (ref) => ref.watch(doseRemindersProvider).exactAllowed(),
   retry: (_, _) => null,
 );
+
+final backgroundAccessProvider = Provider<BackgroundAccess>(
+  (ref) => kIsWeb ? const NoopBackgroundAccess() : const AndroidBackgroundAccess(),
+);
+
+/// Show the "let CareFlow run in the background" card: restricted and not dismissed.
+final backgroundPromptProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final access = ref.watch(backgroundAccessProvider);
+  return !await access.unrestricted() && !await access.dismissed();
+}, retry: (_, _) => null);

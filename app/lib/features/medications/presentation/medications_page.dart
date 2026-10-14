@@ -107,6 +107,7 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
             children: [
               _ScheduleHeader(now: now),
               if (scheduled.isNotEmpty) const _ExactRemindersBanner(),
+              if (scheduled.isNotEmpty) const _BackgroundBanner(),
               if (scheduled.isNotEmpty) _ProgressCard(doses: scheduled),
               for (final period in DosePeriod.values.where((p) => p != DosePeriod.asNeeded))
                 if (scheduled.any((d) => d.period == period)) ...[
@@ -169,6 +170,89 @@ class _ExactRemindersBanner extends ConsumerWidget {
             if (meds != null) await reminders.sync(meds);
           },
           child: const Text('Allow'),
+        ),
+      ),
+    );
+  }
+}
+
+/// Phones that save battery aggressively (Honor, Xiaomi) can hold reminders back.
+class _BackgroundBanner extends ConsumerWidget {
+  const _BackgroundBanner();
+
+  Future<void> _phoneSteps(BuildContext context, WidgetRef ref) async {
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        key: const Key('background-steps'),
+        title: const Text('Keep reminders on time'),
+        content: const Text(
+          'In the settings page that opens:\n\n'
+          'Honor / Huawei: Battery → App launch → CareFlow → turn off "Manage '
+          'automatically", then turn on Auto-launch, Secondary launch and Run in background.\n\n'
+          'Xiaomi / Redmi: turn on Autostart and set Battery saver to "No restrictions".\n\n'
+          'Other phones: set Battery to "Unrestricted".',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('Cancel')),
+          FilledButton(
+            key: const Key('open-phone-settings'),
+            onPressed: () => Navigator.of(c).pop(true),
+            child: const Text('Open settings'),
+          ),
+        ],
+      ),
+    );
+    if (open == true) await ref.read(backgroundAccessProvider).openSettings();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(backgroundPromptProvider).value != true) return const SizedBox.shrink();
+    final access = ref.read(backgroundAccessProvider);
+    return Card(
+      key: const Key('background-banner'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.battery_alert_outlined),
+                SizedBox(width: 12),
+                Expanded(child: Text('Let CareFlow run in the background')),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text('Battery saving on some phones stops medicine reminders.'),
+            Wrap(
+              alignment: WrapAlignment.end,
+              children: [
+                TextButton(
+                  key: const Key('background-not-now'),
+                  onPressed: () async {
+                    await access.dismiss();
+                    ref.invalidate(backgroundPromptProvider);
+                  },
+                  child: const Text('Not now'),
+                ),
+                TextButton(
+                  key: const Key('background-phone-settings'),
+                  onPressed: () => _phoneSteps(context, ref),
+                  child: const Text('Phone settings'),
+                ),
+                FilledButton.tonal(
+                  key: const Key('background-allow'),
+                  onPressed: () async {
+                    await access.request();
+                    ref.invalidate(backgroundPromptProvider);
+                  },
+                  child: const Text('Allow'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

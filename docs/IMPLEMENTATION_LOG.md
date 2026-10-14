@@ -761,3 +761,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   read or written. The key-vault race fix above was real but was not this bug. `deploy-web`
   now clears Flutter's build cache first and refuses to deploy if `main.dart.js` lacks the
   plugin's web code.
+- **Reminders on Honor/Xiaomi (Ping's request):** the 7:30 PM backup push arrived, but the
+  phone's own reminder was held back by battery saving. The Meds screen now shows "Let
+  CareFlow run in the background" (only with timed doses, until allowed or "Not now"):
+  Allow shows Android's battery-optimisation exemption dialog; Phone settings explains the
+  Honor/Huawei "App launch" and Xiaomi "Autostart" steps and opens CareFlow's settings page
+  (no app can flip those switches itself). Added `permission_handler` 12.0.1 (13.x needs
+  Android SDK 37, not installed). Tests: 4 widget (353 total); patient APK build checked.

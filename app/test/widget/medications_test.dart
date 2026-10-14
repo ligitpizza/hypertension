@@ -6,6 +6,7 @@ import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/auth/domain/app_user.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
+import 'package:hypertension/features/medications/data/background_access.dart';
 import 'package:hypertension/features/medications/data/dose_reminders.dart';
 import 'package:hypertension/features/medications/data/medications_repository.dart';
 import 'package:hypertension/features/medications/presentation/medication_form_page.dart';
@@ -59,6 +60,33 @@ Medication med(String id, String name, String schedule, {double? qty, double? ra
 
 final pushed = <(String, Object?)>[];
 
+class FakeBackground implements BackgroundAccess {
+  FakeBackground({this.free = true});
+
+  bool free;
+  bool hidden = false;
+  int requests = 0;
+  int settingsOpened = 0;
+
+  @override
+  Future<bool> unrestricted() async => free;
+
+  @override
+  Future<void> request() async {
+    requests++;
+    free = true;
+  }
+
+  @override
+  Future<void> openSettings() async => settingsOpened++;
+
+  @override
+  Future<bool> dismissed() async => hidden;
+
+  @override
+  Future<void> dismiss() async => hidden = true;
+}
+
 class FakeReminders implements DoseReminders {
   FakeReminders({this.exact = true});
 
@@ -86,6 +114,7 @@ Widget app(
   Object? extra,
   String? doctorId = 'd1',
   FakeReminders? reminders,
+  FakeBackground? background,
 }) {
   final router = GoRouter(
     initialLocation: initial,
@@ -110,6 +139,7 @@ Widget app(
     overrides: [
       medicationsRepositoryProvider.overrideWithValue(repo),
       doseRemindersProvider.overrideWithValue(reminders ?? FakeReminders()),
+      backgroundAccessProvider.overrideWithValue(background ?? FakeBackground()),
       medicationsProvider.overrideWith((ref) => Stream.value(meds)),
       nowProvider.overrideWithValue(() => now),
       currentUserProvider.overrideWith(
@@ -252,14 +282,55 @@ void main() {
 
   testWidgets('no banner when nothing has a dose time', (t) async {
     await t.pumpWidget(
-      app(
-        FakeMedicationsRepository(),
-        [med('m3', 'Ibuprofen', 'as_needed')],
-        reminders: FakeReminders(exact: false),
-      ),
+      app(FakeMedicationsRepository(), [
+        med('m3', 'Ibuprofen', 'as_needed'),
+      ], reminders: FakeReminders(exact: false)),
     );
     await t.pumpAndSettle();
     expect(find.byKey(const Key('exact-reminders-banner')), findsNothing);
+  });
+
+  group('battery saving prompt', () {
+    Future<FakeBackground> open(WidgetTester t, {String schedule = '20:00'}) async {
+      final bg = FakeBackground(free: false);
+      await t.pumpWidget(
+        app(FakeMedicationsRepository(), [med('m1', 'Lisinopril', schedule)], background: bg),
+      );
+      await t.pumpAndSettle();
+      return bg;
+    }
+
+    testWidgets('Allow shows the system dialog and hides the card', (t) async {
+      final bg = await open(t);
+      expect(find.byKey(const Key('background-banner')), findsOneWidget);
+      await t.tap(find.byKey(const Key('background-allow')));
+      await t.pumpAndSettle();
+      expect(bg.requests, 1);
+      expect(find.byKey(const Key('background-banner')), findsNothing);
+    });
+
+    testWidgets('Phone settings explains the brand steps, then opens settings', (t) async {
+      final bg = await open(t);
+      await t.tap(find.byKey(const Key('background-phone-settings')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Manage automatically'), findsOneWidget);
+      await t.tap(find.byKey(const Key('open-phone-settings')));
+      await t.pumpAndSettle();
+      expect(bg.settingsOpened, 1);
+    });
+
+    testWidgets('Not now hides it on this phone', (t) async {
+      final bg = await open(t);
+      await t.tap(find.byKey(const Key('background-not-now')));
+      await t.pumpAndSettle();
+      expect(bg.hidden, isTrue);
+      expect(find.byKey(const Key('background-banner')), findsNothing);
+    });
+
+    testWidgets('not shown without timed doses', (t) async {
+      await open(t, schedule: 'as_needed');
+      expect(find.byKey(const Key('background-banner')), findsNothing);
+    });
   });
 
   group('UC5.1 add / edit form', () {
