@@ -77,8 +77,11 @@ class ApiClient {
   // ---- Module 1 (FR-1.1 to FR-1.6) ----
 
   /// UC1.1: create the users doc and role claim after Firebase sign-up.
-  Future<Map<String, dynamic>> registerProfile({required String name, required String role}) =>
-      _post('/auth/register-profile', {'name': name, 'role': role});
+  Future<Map<String, dynamic>> registerProfile({
+    required String name,
+    required String role,
+    String? icNumber,
+  }) => _post('/auth/register-profile', {'name': name, 'role': role, 'icNumber': ?icNumber});
 
   /// UC1.4: submit the onboarding health profile (D-25 shape).
   Future<Map<String, dynamic>> completeOnboarding(Map<String, dynamic> body) =>

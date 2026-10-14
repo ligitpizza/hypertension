@@ -40,6 +40,7 @@ abstract interface class AuthRepository {
     required String email,
     required String password,
     required UserRole role,
+    String? icNumber,
   });
 
   /// UC1.2 A1.
@@ -145,14 +146,17 @@ class FirebaseAuthRepository implements AuthRepository {
     required String email,
     required String password,
     required UserRole role,
+    String? icNumber,
   }) async {
+    UserCredential? created;
     try {
       final cred = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
+      created = cred;
       await cred.user!.updateDisplayName(name.trim());
-      await _api.registerProfile(name: name.trim(), role: role.value);
+      await _api.registerProfile(name: name.trim(), role: role.value, icNumber: icNumber);
       // Pick up the new role claim set by the server.
       await cred.user!.getIdToken(true);
     } on FirebaseAuthException catch (e) {
@@ -172,7 +176,13 @@ class FirebaseAuthRepository implements AuthRepository {
         ),
         _ => const AuthFailure(LoginFailureReason.other, AuthMessages.generic),
       };
-    } on ApiException {
+    } on ApiException catch (e) {
+      // D-51: a rejected IC number would leave a sign-in without a profile; remove it so
+      // the person can correct the number and register again.
+      if (e.code.startsWith('IC_') || e.code == 'INVALID_IC') {
+        await created?.user?.delete().catchError((Object _) {});
+        throw AuthFailure(LoginFailureReason.other, e.message);
+      }
       // Firebase account exists but the profile call failed: the app retries
       // register-profile (idempotent) on next start via the router guard.
       throw const AuthFailure(LoginFailureReason.other, AuthMessages.network);

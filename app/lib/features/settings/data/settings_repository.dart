@@ -24,11 +24,13 @@ abstract interface class SettingsRepository {
   /// The stored health profile (D-25) merged with the user's date of birth and gender.
   Stream<OnboardingData?> profile(AppUser user);
 
-  /// UC12.1. Returns true when the risk score was re-generated.
+  /// UC12.1. Returns true when the risk score was re-generated. [icNumber] (D-51) is
+  /// sent only when given.
   Future<bool> updatePersonal({
     required String name,
     required DateTime dateOfBirth,
     required Gender gender,
+    String? icNumber,
   });
 
   Future<void> updateContact(OnboardingData data);
@@ -87,11 +89,13 @@ class ApiSettingsRepository implements SettingsRepository {
     required String name,
     required DateTime dateOfBirth,
     required Gender gender,
+    String? icNumber,
   }) async {
     final res = await _api.updateProfile({
       'name': name.trim(),
       'dateOfBirth': _isoDate(dateOfBirth),
       'gender': gender.value,
+      'icNumber': ?icNumber,
     });
     return res['rescored'] == true;
   }

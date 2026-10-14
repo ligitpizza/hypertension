@@ -6,6 +6,8 @@ import '../../../core/constants/enums.dart';
 import '../../../shared/providers/api_providers.dart';
 import '../data/auth_repository.dart';
 import '../state/auth_providers.dart';
+import '../../../shared/services/api/api_client.dart';
+import '../../../core/utils/ic_number.dart';
 
 /// Shown while Firebase restores the session or the profile loads.
 class SplashPage extends StatelessWidget {
@@ -96,6 +98,13 @@ class FinishRegistrationPage extends ConsumerStatefulWidget {
 class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage> {
   bool _working = false;
   String? _error;
+  final _ic = TextEditingController(); // D-51: patients must give it to finish
+
+  @override
+  void dispose() {
+    _ic.dispose();
+    super.dispose();
+  }
 
   Future<void> _retry() async {
     setState(() {
@@ -104,6 +113,15 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
     });
     final app = ref.read(clientAppProvider);
     final user = FirebaseAuth.instance.currentUser;
+    final patient = app != ClientApp.family;
+    final icError = patient ? validateIc(_ic.text) : null;
+    if (icError != null) {
+      setState(() {
+        _working = false;
+        _error = icError;
+      });
+      return;
+    }
     try {
       await ref
           .read(apiClientProvider)
@@ -112,8 +130,13 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
                 ? user!.displayName!
                 : 'CareFlow user',
             role: app == ClientApp.family ? UserRole.familyMember.value : UserRole.patient.value,
+            icNumber: patient ? parseIc(_ic.text).value : null,
           );
       await user?.getIdToken(true);
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _error = e.code.contains('IC') ? e.message : AuthMessages.network);
+      }
     } catch (_) {
       if (mounted) setState(() => _error = AuthMessages.network);
     } finally {
@@ -135,7 +158,24 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
       icon: Icons.manage_accounts_outlined,
       title: 'Finish setting up',
       message: _error ?? 'We could not finish creating your account. Please try again.',
-      extra: FilledButton(onPressed: _working ? null : _retry, child: const Text('Try again')),
+      extra: Column(
+        children: [
+          if (ref.watch(clientAppProvider) != ClientApp.family) ...[
+            SizedBox(
+              width: 280,
+              child: TextField(
+                key: const Key('finish-ic'),
+                controller: _ic,
+                keyboardType: TextInputType.number,
+                inputFormatters: [IcInputFormatter()],
+                decoration: const InputDecoration(labelText: 'IC number (MyKad)'),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          FilledButton(onPressed: _working ? null : _retry, child: const Text('Try again')),
+        ],
+      ),
     );
   }
 }

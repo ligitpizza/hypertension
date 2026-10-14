@@ -10,18 +10,28 @@ DateTime _time(Object? v) =>
 
 /// An assigned patient's `users` document (FR-8.1), as much as the portal shows.
 class PortalPatient {
-  const PortalPatient({required this.uid, required this.name, this.dateOfBirth, this.gender});
+  const PortalPatient({
+    required this.uid,
+    required this.name,
+    this.dateOfBirth,
+    this.gender,
+    this.icNumber,
+  });
 
   final String uid;
   final String name;
   final DateTime? dateOfBirth;
   final String? gender;
 
+  /// D-51; shown masked in the portal.
+  final String? icNumber;
+
   factory PortalPatient.fromFirestore(String uid, Map<String, dynamic> d) => PortalPatient(
     uid: uid,
     name: d['name'] as String? ?? 'Unnamed patient',
     dateOfBirth: d['dateOfBirth'] == null ? null : _time(d['dateOfBirth']),
     gender: d['gender'] as String?,
+    icNumber: d['icNumber'] as String?,
   );
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +7,8 @@ import '../../../core/constants/enums.dart';
 import '../../../core/utils/validators.dart';
 import '../data/auth_repository.dart';
 import '../state/auth_providers.dart';
+import '../../../core/utils/ic_number.dart';
+import 'onboarding/onboarding_labels.dart';
 
 /// UC1.1 Register Account (FR-1.1). Patient app registers patients, Family app
 /// registers family members; staff never self-register (FR-1.6).
@@ -22,12 +25,39 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
+  final _ic = TextEditingController();
+
+  /// "Born 1 Jan 1990 · Male" once the IC is complete and valid.
+  String? _icPreview() {
+    try {
+      final ic = parseIc(_ic.text);
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      final d = ic.dateOfBirth;
+      return 'Born ${d.day} ${months[d.month - 1]} ${d.year} · ${OnboardingLabels.gender(ic.gender)}';
+    } on FormatException {
+      return null;
+    }
+  }
+
   bool _submitting = false;
   String? _error;
 
   @override
   void dispose() {
-    for (final c in [_name, _email, _password, _confirm]) {
+    for (final c in [_name, _ic, _email, _password, _confirm]) {
       c.dispose();
     }
     super.dispose();
@@ -43,7 +73,13 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     try {
       await ref
           .read(authRepositoryProvider)
-          .register(name: _name.text, email: _email.text, password: _password.text, role: role);
+          .register(
+            name: _name.text,
+            email: _email.text,
+            password: _password.text,
+            role: role,
+            icNumber: role == UserRole.patient ? parseIc(_ic.text).value : null,
+          );
     } on AuthFailure catch (f) {
       if (mounted) setState(() => _error = f.message);
     } catch (_) {
@@ -90,6 +126,25 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         validator: Validators.name,
                       ),
                       const SizedBox(height: 12),
+                      if (!isFamily) ...[
+                        // D-51: MyKad number; date of birth and gender come from it later.
+                        TextFormField(
+                          key: const Key('register-ic'),
+                          controller: _ic,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [IcInputFormatter()],
+                          decoration: InputDecoration(
+                            labelText: 'IC number (MyKad)',
+                            hintText: '900101-14-5678',
+                            helperText: _icPreview(),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                          // Clear the error as soon as the number is corrected.
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          validator: validateIc,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       TextFormField(
                         key: const Key('register-email'),
                         controller: _email,

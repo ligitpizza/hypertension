@@ -42,9 +42,12 @@ class FakeSettingsRepository implements SettingsRepository {
     required String name,
     required DateTime dateOfBirth,
     required Gender gender,
+    String? icNumber,
   }) async {
     if (saveError != null) throw saveError!;
-    calls.add('personal:$name:${gender.value}:${dateOfBirth.year}');
+    calls.add(
+      'personal:$name:${gender.value}:${dateOfBirth.year}${icNumber == null ? '' : ':$icNumber'}',
+    );
     return rescored;
   }
 
@@ -226,6 +229,24 @@ void main() {
       expect(repo.calls, ['personal:Siti A.:male:1965']);
       expect(find.text('Saved. Your risk assessment was updated.'), findsOneWidget);
       expect(find.text('Settings'), findsWidgets); // popped back
+    });
+
+    testWidgets('D-51 an existing patient adds their IC; DOB and gender follow it', (t) async {
+      await t.pumpWidget(
+        app(
+          repo,
+          auth,
+          initial: '/settings/personal',
+          me: user.copyForTest(dateOfBirth: DateTime(1965)),
+        ),
+      );
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const Key('settings-ic')), '800505105679');
+      await t.pump();
+      expect(find.text('5/5/1980'), findsOneWidget);
+      await t.tap(find.byKey(const Key('settings-save')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['personal:Siti Aminah:male:1980:800505-10-5679']);
     });
 
     testWidgets('E1 server rejection is shown on the form', (t) async {

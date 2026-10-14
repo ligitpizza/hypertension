@@ -9,6 +9,7 @@ import '../../auth/presentation/onboarding/onboarding_labels.dart';
 import '../../auth/state/auth_providers.dart';
 import '../state/settings_providers.dart';
 import 'settings_widgets.dart';
+import '../../../core/utils/ic_number.dart';
 
 /// Shared save handling: validate, call the API, show the result (UC12.1 E1 inline).
 mixin _SaveFlow<W extends ConsumerStatefulWidget> on ConsumerState<W> {
@@ -60,15 +61,21 @@ class PersonalInfoPage extends ConsumerWidget {
       // Wait for the user document so the form starts with the saved values.
       body: user == null
           ? const Center(child: CircularProgressIndicator())
-          : _PersonalForm(name: user.name, dateOfBirth: user.dateOfBirth, gender: user.gender),
+          : _PersonalForm(
+              name: user.name,
+              dateOfBirth: user.dateOfBirth,
+              gender: user.gender,
+              icNumber: user.icNumber,
+            ),
     );
   }
 }
 
 class _PersonalForm extends ConsumerStatefulWidget {
-  const _PersonalForm({required this.name, this.dateOfBirth, this.gender});
+  const _PersonalForm({required this.name, this.dateOfBirth, this.gender, this.icNumber});
 
   final String name;
+  final String? icNumber;
   final DateTime? dateOfBirth;
   final Gender? gender;
 
@@ -78,12 +85,14 @@ class _PersonalForm extends ConsumerStatefulWidget {
 
 class _PersonalInfoPageState extends ConsumerState<_PersonalForm> with _SaveFlow<_PersonalForm> {
   late final _name = TextEditingController(text: widget.name);
+  late final _ic = TextEditingController(text: widget.icNumber);
   late DateTime? _dob = widget.dateOfBirth;
   late Gender? _gender = widget.gender;
 
   @override
   void dispose() {
     _name.dispose();
+    _ic.dispose();
     super.dispose();
   }
 
@@ -114,6 +123,30 @@ class _PersonalInfoPageState extends ConsumerState<_PersonalForm> with _SaveFlow
             textCapitalization: TextCapitalization.words,
             validator: (v) => (v ?? '').trim().length < 2 ? 'Enter your full name.' : null,
           ),
+          TextFormField(
+            key: const Key('settings-ic'),
+            controller: _ic,
+            keyboardType: TextInputType.number,
+            inputFormatters: [IcInputFormatter()],
+            decoration: InputDecoration(
+              labelText: 'IC number (MyKad)',
+              helperText: widget.icNumber == null ? 'Add your IC number for your records.' : null,
+            ),
+            // Required once set; accounts made before D-51 may leave it empty.
+            validator: (v) => validateIc(v, required: widget.icNumber != null),
+            onChanged: (v) {
+              // Fill date of birth and gender from a newly entered IC.
+              try {
+                final info = parseIc(v);
+                setState(() {
+                  _dob = info.dateOfBirth;
+                  _gender = info.gender;
+                });
+              } on FormatException {
+                // Not complete yet.
+              }
+            },
+          ),
           const SectionLabel('Date of birth'),
           OutlinedButton.icon(
             key: const Key('settings-dob'),
@@ -139,7 +172,12 @@ class _PersonalInfoPageState extends ConsumerState<_PersonalForm> with _SaveFlow
               save(
                 () => ref
                     .read(settingsRepositoryProvider)
-                    .updatePersonal(name: _name.text, dateOfBirth: _dob!, gender: _gender!),
+                    .updatePersonal(
+                      name: _name.text,
+                      dateOfBirth: _dob!,
+                      gender: _gender!,
+                      icNumber: _ic.text.trim().isEmpty ? null : parseIc(_ic.text).value,
+                    ),
               );
             },
           ),

@@ -801,3 +801,11 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   shown blue ("From your doctor" / "Doctor-issued"), patient-reported green ("Added by you" /
   "Reported by patient") on the Meds tab and in the portal. Frequency list shared by both
   forms. Tests: backend 7; Flutter 8 (383 total).
+- **D-51 IC number:** `users.icNumber` ("YYMMDD-PB-####"). Patient registration requires it
+  (typed with auto-dashes, live check, "Born 1 Jan 1990 · Male" preview); the API checks the
+  12 digits, a real date and uniqueness (409 IC_IN_USE). If the server rejects the IC after
+  the sign-in account was created, that account is deleted so the person can retry. The
+  "Finish setting up" recovery screen also asks for it. Onboarding pre-fills date of birth
+  and gender from it; Settings → Personal information lets existing patients add it (and
+  updates DOB/gender). The portal shows it masked (900101-**-**77); the export includes it.
+  Family members are not asked. Tests: backend 9; Flutter 12 (394 total).

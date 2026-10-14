@@ -9,6 +9,7 @@ import '../../../../shared/services/api/api_client.dart';
 import '../../domain/onboarding_data.dart';
 import '../../state/auth_providers.dart';
 import 'onboarding_labels.dart';
+import '../../../../core/utils/ic_number.dart';
 
 /// UC1.4 Complete Onboarding Health Profile (FR-1.4), three steps:
 /// personal information, medical history, lifestyle (D-25).
@@ -54,6 +55,17 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       if (draft != null) {
         _data = draft;
         _step = step.clamp(0, 2);
+      }
+    }
+    // D-51: date of birth and gender come from the IC number unless already entered.
+    final ic = ref.read(currentUserProvider).value?.icNumber;
+    if (ic != null) {
+      try {
+        final info = parseIc(ic);
+        _data.dateOfBirth ??= info.dateOfBirth;
+        _data.gender ??= info.gender;
+      } on FormatException {
+        // Leave the fields for the patient to fill in.
       }
     }
     if (mounted) setState(() => _loading = false);

@@ -101,12 +101,39 @@ void main() {
       final repo = FakeAuthRepository();
       await t.pumpWidget(harness(const RegisterPage(), repo: repo));
       await fill(t, 'register-name', 'Ali Bin Abu');
+      await fill(t, 'register-ic', '900101145677');
       await fill(t, 'register-email', 'ali@x.my');
       await fill(t, 'register-password', 'goodpass1');
       await fill(t, 'register-confirm', 'goodpass1');
       await t.tap(find.byKey(const Key('register-submit')));
       await t.pumpAndSettle();
       expect(repo.lastRegisterRole, UserRole.patient);
+      expect(repo.lastRegisterIc, '900101-14-5677'); // D-51, formatted
+    });
+
+    tallTest('D-51 a patient must give a valid IC; it previews date of birth', (t) async {
+      final repo = FakeAuthRepository();
+      await t.pumpWidget(harness(const RegisterPage(), repo: repo));
+      await fill(t, 'register-name', 'Ali Bin Abu');
+      await fill(t, 'register-ic', '901301145677'); // month 13
+      await fill(t, 'register-email', 'ali@x.my');
+      await fill(t, 'register-password', 'goodpass1');
+      await fill(t, 'register-confirm', 'goodpass1');
+      await t.tap(find.byKey(const Key('register-submit')));
+      await t.pump();
+      expect(find.textContaining('real date of birth'), findsOneWidget);
+      expect(repo.calls, isEmpty);
+      await fill(t, 'register-ic', '900101145677');
+      await t.pump();
+      expect(find.text('Born 1 Jan 1990 · Male'), findsOneWidget);
+      expect(find.text('900101-14-5677'), findsOneWidget); // dashes added while typing
+    });
+
+    tallTest('D-51 family members are not asked for an IC', (t) async {
+      await t.pumpWidget(
+        harness(const RegisterPage(), repo: FakeAuthRepository(), app: ClientApp.family),
+      );
+      expect(find.byKey(const Key('register-ic')), findsNothing);
     });
 
     tallTest('FR-1.1 family app registers a family member', (t) async {
@@ -126,6 +153,7 @@ void main() {
         ..registerError = const AuthFailure(LoginFailureReason.other, AuthMessages.emailInUse);
       await t.pumpWidget(harness(const RegisterPage(), repo: repo));
       await fill(t, 'register-name', 'Ali');
+      await fill(t, 'register-ic', '900101145677');
       await fill(t, 'register-email', 'ali@x.my');
       await fill(t, 'register-password', 'goodpass1');
       await fill(t, 'register-confirm', 'goodpass1');

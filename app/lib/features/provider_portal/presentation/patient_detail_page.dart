@@ -21,6 +21,7 @@ import 'dose_history.dart';
 import 'medication_effect_card.dart';
 import 'portal_prescription_tile.dart';
 import 'portal_widgets.dart';
+import '../../../core/utils/ic_number.dart';
 
 /// Fig 4.3.12.4 Patient Detail (FR-8.2; UC8.3): vitals, risk, BP trend, medications,
 /// prescriptions, care plan and clinical notes for one assigned patient.
@@ -137,6 +138,7 @@ class _Header extends StatelessWidget {
     final facts = [
       if (age != null) '$age years',
       if (patient.gender != null) patient.gender![0].toUpperCase() + patient.gender!.substring(1),
+      if (patient.icNumber != null) 'IC ${maskIc(patient.icNumber)}',
     ].join(' · ');
     return Card(
       child: Padding(

@@ -38,6 +38,7 @@ class AppUser {
     this.dateOfBirth,
     this.gender,
     this.notificationPrefs = const NotificationPrefs(),
+    this.icNumber,
   });
 
   final String uid;
@@ -61,6 +62,9 @@ class AppUser {
 
   final NotificationPrefs notificationPrefs;
 
+  /// Patients only (D-51), "YYMMDD-PB-####"; null for accounts made before it existed.
+  final String? icNumber;
+
   bool get needsOnboarding => role == UserRole.patient && onboardingComplete != true;
 
   factory AppUser.fromFirestore(String uid, Map<String, dynamic> data) => AppUser(
@@ -75,5 +79,6 @@ class AppUser {
     dateOfBirth: (data['dateOfBirth'] as Timestamp?)?.toDate(),
     gender: data['gender'] is String ? Gender.fromValue(data['gender'] as String) : null,
     notificationPrefs: NotificationPrefs.fromMap(data['notificationPrefs']),
+    icNumber: data['icNumber'] as String?,
   );
 }

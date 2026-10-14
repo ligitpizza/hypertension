@@ -20,6 +20,7 @@ class FakeAuthRepository implements AuthRepository {
   final calls = <String>[];
   Map<String, dynamic>? lastOnboarding;
   UserRole? lastSelectedRole;
+  String? lastRegisterIc;
   UserRole? lastRegisterRole;
   final _signInGate = Completer<void>();
   bool holdSignIn = false;
@@ -52,9 +53,11 @@ class FakeAuthRepository implements AuthRepository {
     required String email,
     required String password,
     required UserRole role,
+    String? icNumber,
   }) async {
     calls.add('register');
     lastRegisterRole = role;
+    lastRegisterIc = icNumber;
     if (registerError != null) throw registerError!;
   }
 
