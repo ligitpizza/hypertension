@@ -120,4 +120,10 @@ void main() {
       expect(plannedReminders(const []), isEmpty);
     });
   });
+
+  test('reminders can resolve Malaysia time (live bug: missing tz alias)', () {
+    final myt = malaysiaTimeZone();
+    expect(myt.name, 'Asia/Kuala_Lumpur');
+    expect(myt.currentTimeZone.offset, const Duration(hours: 8));
+  });
 }

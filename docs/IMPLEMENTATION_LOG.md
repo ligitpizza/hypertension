@@ -823,3 +823,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   people only. Attachments need a connection (text still queues offline).
   Tests: rules 8 new (168 total); backend 2; Flutter 7 (401 total). Packages: file_picker,
   image_picker.
+- **Reminder root cause found (thanks to the status line):** "Location with the name
+  Asia/Kuala_Lumpur doesn't exist". Since tzdata 2023 that zone is an alias of
+  Asia/Singapore, and the slim `timezone/data/latest.dart` set omits aliases. Now loads
+  `latest_all.dart`; a unit test checks the zone resolves to UTC+8.
+- **Prescription card layout:** the action button squeezed the text into a narrow column on
+  phones; the action and the source chip now share a wrapping row under the full-width
+  text. Widget test renders at 360 px and checks for no overflow.

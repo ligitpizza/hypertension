@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../../shared/models/health_models.dart';
@@ -71,6 +71,14 @@ Map<int, (Medication, DoseTime)> plannedReminders(List<Medication> meds) => {
     for (final t in tryParseSchedule(m.schedule) ?? const <DoseTime>[]) reminderId(m.id, t): (m, t),
 };
 
+/// Malaysia's zone for scheduling. Needs the *full* tz database: since tzdata 2023
+/// "Asia/Kuala_Lumpur" is an alias of Asia/Singapore, and the slim `latest.dart` set leaves
+/// aliases out (live bug: "Location with the name Asia/Kuala_Lumpur doesn't exist").
+tz.Location malaysiaTimeZone() {
+  tzdata.initializeTimeZones();
+  return tz.getLocation('Asia/Kuala_Lumpur');
+}
+
 class LocalDoseReminders implements DoseReminders {
   LocalDoseReminders({FlutterLocalNotificationsPlugin? plugin})
     : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
@@ -80,7 +88,6 @@ class LocalDoseReminders implements DoseReminders {
 
   Future<tz.Location> _start() async {
     if (_myt != null) return _myt!;
-    tzdata.initializeTimeZones();
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -89,7 +96,7 @@ class LocalDoseReminders implements DoseReminders {
     await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(remindersChannel);
-    return _myt = tz.getLocation('Asia/Kuala_Lumpur');
+    return _myt = malaysiaTimeZone();
   }
 
   AndroidFlutterLocalNotificationsPlugin? get _android =>

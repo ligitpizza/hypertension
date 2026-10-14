@@ -463,6 +463,25 @@ void main() {
       expect(repo.deletedRx, ['rx2']);
     });
 
+    testWidgets('on a phone-width screen the name uses most of the card', (t) async {
+      t.view.physicalSize = const Size(360, 800);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      final long = Prescription(
+        id: 'rx3',
+        medicationDetails: 'Losartan 50mg, Once daily, morning',
+        isRecurring: true,
+        issuedAt: DateTime.utc(2026, 10, 13),
+        doctorId: 'd1',
+      );
+      await t.pumpWidget(app(FakeMedicationsRepository()..rx = [long], const []));
+      await t.pumpAndSettle();
+      final card = t.getSize(find.byKey(const Key('rx-rx3')));
+      final name = t.getSize(find.text('Losartan 50mg, Once daily, morning'));
+      expect(name.width, greaterThan(card.width * 0.6));
+      expect(t.takeException(), isNull); // no overflow
+    });
+
     testWidgets('a doctor prescription does not open for editing', (t) async {
       await t.pumpWidget(app(FakeMedicationsRepository()..rx = [doctorRx], const []));
       await t.pumpAndSettle();

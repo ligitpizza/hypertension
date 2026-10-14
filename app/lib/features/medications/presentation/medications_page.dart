@@ -367,42 +367,78 @@ class _PrescriptionTile extends StatelessWidget {
     final p = prescription;
     final issued = toMyt(p.issuedAt);
     final color = prescriptionColor(p);
+    final theme = Theme.of(context);
+    // Text gets the full width; the action sits on its own row so long names never wrap
+    // letter by letter.
     return Card(
       key: Key('rx-${p.id}'),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: color, width: 1.5),
       ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.15),
-          child: Icon(p.byPatient ? Icons.edit_note : Icons.receipt_long_outlined, color: color),
-        ),
-        title: Text(p.medicationDetails),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${p.byPatient ? 'Recorded' : 'Prescribed'} ${issued.day} '
-              '${_months[issued.month - 1]} ${issued.year}'
-              '${p.isRecurring ? ' • repeats monthly' : ''}',
-            ),
-            const SizedBox(height: 4),
-            PrescriptionSourceChip(prescription: p, forDoctor: false),
-          ],
-        ),
-        isThreeLine: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
         onTap: p.byPatient ? () => context.push('/medications/prescription', extra: p) : null,
-        trailing: tracked
-            ? const Chip(label: Text('On your list'))
-            : TextButton(
-                key: Key('rx-add-${p.id}'),
-                onPressed: () => context.push(
-                  '/medications/add',
-                  extra: draftFromPrescription(p.medicationDetails),
-                ),
-                child: const Text('Add to my reminders'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: color.withValues(alpha: 0.15),
+                    child: Icon(
+                      p.byPatient ? Icons.edit_note : Icons.receipt_long_outlined,
+                      color: color,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(p.medicationDetails, style: theme.textTheme.titleMedium),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${p.byPatient ? 'Recorded' : 'Prescribed'} ${issued.day} '
+                          '${_months[issued.month - 1]} ${issued.year}'
+                          '${p.isRecurring ? ' • repeats monthly' : ''}',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
+              // Chip left, action right; on narrow phones the action wraps below.
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  children: [
+                    PrescriptionSourceChip(prescription: p, forDoctor: false),
+                    if (tracked)
+                      const Chip(label: Text('On your list'))
+                    else
+                      TextButton.icon(
+                        key: Key('rx-add-${p.id}'),
+                        onPressed: () => context.push(
+                          '/medications/add',
+                          extra: draftFromPrescription(p.medicationDetails),
+                        ),
+                        icon: const Icon(Icons.alarm_add_outlined, size: 18),
+                        label: const Text('Add to my reminders'),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
