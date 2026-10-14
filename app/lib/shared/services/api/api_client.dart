@@ -216,6 +216,38 @@ class ApiClient {
     {if (scheduledTime != null) 'scheduledTime': scheduledTime.toUtc().toIso8601String()},
   );
 
+  // ---- Module 12 settings (FR-12.1, FR-12.2; D-45 to D-47) ----
+
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> body) =>
+      _send('PUT', '/settings/profile', body);
+
+  Future<Map<String, dynamic>> updateContact(Map<String, dynamic> body) =>
+      _send('PUT', '/settings/contact', body);
+
+  Future<Map<String, dynamic>> updateHealthProfile(Map<String, dynamic> body) =>
+      _send('PUT', '/settings/health-profile', body);
+
+  Future<Map<String, dynamic>> updateNotificationPrefs(Map<String, dynamic> body) =>
+      _send('PUT', '/settings/notifications', body);
+
+  /// UC12.3: the export file's bytes (pdf or json).
+  Future<List<int>> exportData(String format) async {
+    try {
+      final res = await _dio.get<List<int>>(
+        '/settings/export',
+        queryParameters: {'format': format},
+        options: Options(responseType: ResponseType.bytes, receiveTimeout: agentTimeout),
+      );
+      return res.data ?? const [];
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  /// UC12.4: deactivate now, purge after 7 days (D-46).
+  Future<Map<String, dynamic>> deleteAccount({bool acknowledgeRecurring = false}) =>
+      _send('DELETE', '/settings/account?acknowledgeRecurring=$acknowledgeRecurring', null);
+
   // ---- Module 9 push notifications (D-33) ----
 
   Future<void> registerFcmToken({required String token, required String platform}) =>

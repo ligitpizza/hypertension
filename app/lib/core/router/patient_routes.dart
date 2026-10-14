@@ -1,6 +1,9 @@
 import '../../features/medications/presentation/medication_form_page.dart';
 import '../../features/medications/presentation/medications_page.dart';
 import '../../features/messaging/presentation/chat_thread_page.dart';
+import '../../features/settings/presentation/data_privacy_page.dart';
+import '../../features/settings/presentation/profile_pages.dart';
+import '../../features/settings/presentation/settings_page.dart';
 import '../../shared/models/health_models.dart';
 import '../../features/messaging/presentation/inbox_pages.dart';
 import '../../features/symptom_checker/data/symptom_repository.dart';
@@ -33,7 +36,7 @@ final List<RouteBase> patientFeatureRoutes = [
           note: 'Uploading and sharing your medical documents is coming soon.',
         ),
       ),
-      GoRoute(path: '/more', builder: (_, _) => const MorePage()),
+      GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
     ],
   ),
   GoRoute(path: '/vitals/log', builder: (_, _) => const LogVitalsPage()),
@@ -42,6 +45,11 @@ final List<RouteBase> patientFeatureRoutes = [
     redirect: (_, state) => state.extra is LoggedReading ? null : '/vitals',
     builder: (_, state) => ReadingSavedPage(reading: state.extra! as LoggedReading),
   ),
+  GoRoute(path: '/more', redirect: (_, _) => '/settings'),
+  GoRoute(path: '/settings/personal', builder: (_, _) => const PersonalInfoPage()),
+  GoRoute(path: '/settings/contact', builder: (_, _) => const ContactDetailsPage()),
+  GoRoute(path: '/settings/health', builder: (_, _) => const HealthProfilePage()),
+  GoRoute(path: '/settings/privacy', builder: (_, _) => const DataPrivacyPage()),
   GoRoute(path: '/medications/add', builder: (_, _) => const MedicationFormPage()),
   GoRoute(
     path: '/medications/edit',

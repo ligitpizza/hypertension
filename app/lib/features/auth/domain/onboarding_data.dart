@@ -63,6 +63,53 @@ class OnboardingData {
     },
   };
 
+  /// Settings (UC12.1 contact) request body.
+  Map<String, dynamic> toContactJson() => {
+    'phone': phone.trim(),
+    'emergencyContact': hasEmergencyContact
+        ? {
+            'name': emergencyName.trim(),
+            'phone': emergencyPhone.trim(),
+            'relationship': emergencyRelationship.trim(),
+          }
+        : null,
+  };
+
+  /// Settings (UC12.2 health profile) request body.
+  Map<String, dynamic> toHealthJson() {
+    final all = toApiJson();
+    return {
+      'heightCm': heightCm,
+      'weightKg': weightKg,
+      'medicalHistory': all['medicalHistory'],
+      'lifestyleFactors': all['lifestyleFactors'],
+    };
+  }
+
+  /// The stored profile (D-25 JSON strings in `health_profiles`) for editing in Settings.
+  factory OnboardingData.fromStored({
+    required Map<String, dynamic> personalInfo,
+    required Map<String, dynamic> medicalHistory,
+    required Map<String, dynamic> lifestyleFactors,
+    DateTime? dateOfBirth,
+    Gender? gender,
+  }) {
+    final emergency = personalInfo['emergencyContact'];
+    final e = emergency is Map ? emergency : const {};
+    return OnboardingData.fromDraftJson({
+        ...medicalHistory,
+        ...lifestyleFactors,
+        'heightCm': personalInfo['heightCm'],
+        'weightKg': personalInfo['weightKg'],
+        'phone': personalInfo['phone'],
+        'emergencyName': e['name'],
+        'emergencyPhone': e['phone'],
+        'emergencyRelationship': e['relationship'],
+      })
+      ..dateOfBirth = dateOfBirth
+      ..gender = gender;
+  }
+
   /// Draft persisted on the device so onboarding can resume (UC1.4 A1).
   Map<String, dynamic> toDraftJson() => {
     'dateOfBirth': dateOfBirth == null ? null : _isoDate(dateOfBirth!),

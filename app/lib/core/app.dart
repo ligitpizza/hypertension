@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/state/auth_providers.dart';
-import '../features/dashboard/state/dashboard_providers.dart';
 import '../features/medications/state/medication_providers.dart';
 import '../features/messaging/state/messaging_providers.dart';
 import 'constants/enums.dart';
@@ -35,8 +34,8 @@ class CareFlowApp extends ConsumerWidget {
     // D-43: keep this phone's dose reminders in step with the patient's medication list
     // (an empty list after sign-out cancels them, so a shared phone stops reminding).
     if (ref.watch(clientAppProvider) == ClientApp.patient) {
-      ref.listen(medicationsProvider, (_, next) {
-        final meds = next.value;
+      // D-45: the "Medication reminders" switch off means no local reminders.
+      ref.listen(reminderMedicationsProvider, (_, meds) {
         if (meds != null) ref.read(doseRemindersProvider).sync(meds).catchError((Object _) {});
       });
     }

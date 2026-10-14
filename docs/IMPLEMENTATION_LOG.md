@@ -695,3 +695,37 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Open point for Ping: the live risk score still flips `bp_medication` to 1 once any medicine
   is added (D-31), so a patient's displayed risk can rise slightly when they add their first
   medicine.
+
+### 2026-10-14 — Increment 3 — Module 12: Settings & Preferences
+- FRs implemented: FR-12.1 (profile, contact and health profile edits), FR-12.2 (data export
+  and account deletion).
+- Use-case flows: UC12.1 incl. E1 (client validation highlights the field; server 422 message
+  shown on the form), UC12.2 (re-runs UC9.1 only when a model input changed: date of birth,
+  gender, height, weight, conditions, family history, diagnosis year, smoking), UC12.3 incl.
+  E1 (failure snackbar with Retry), UC12.4 incl. step 2 export offer, A1 skip and E1
+  recurring-prescription warning.
+- API: `PUT /settings/profile|contact|health-profile|notifications`, `GET /settings/export
+  ?format=pdf|json`, `DELETE /settings/account?acknowledgeRecurring=`. Audits UPDATE_PROFILE,
+  UPDATE_HEALTH_PROFILE, UPDATE_NOTIFICATION_PREFS, EXPORT_DATA, REQUEST_ACCOUNT_DELETION and
+  (scheduler) DELETE_ACCOUNT. Contact and health edits merge into the D-25 JSON fields, so one
+  never overwrites the other.
+- D-45 notification preferences: two switches on `users.notificationPrefs`. The Notifier
+  skips muted pushes (dose/refill = medication reminders, all other non-urgent = health
+  updates); urgent pushes always go. The phone's local dose reminders are cancelled when
+  medication reminders are off.
+- D-46 deletion: deactivate + `deletionRequestedAt`, device tokens removed, refresh tokens
+  revoked, app signs out. The daily `deterioration` scheduler call also runs the purge after
+  7 days (docs/04 cascade + Firebase Auth login); recurring prescriptions set
+  `isRecurring = false`. Reactivation = clear both fields.
+- D-47 export: built on demand (fpdf2 PDF or JSON), shared through the Android share sheet
+  (share_plus, path_provider). Encrypted messages are not included.
+- Screens: Fig 4.3.11.1 `/settings` replaces the "More" tab (theme, family link code and
+  sign out moved here; `/more` redirects), `/settings/personal`, `/settings/contact`,
+  `/settings/health`, `/settings/privacy`.
+- Tests: backend 18; Flutter 17 (339 total).
+- Deviations vs Chapter 4: D-45, D-46 new user fields; mockup's "address" under contact
+  details is not stored (no address field; delivery address arrives with Module 13); the
+  sign-in email is shown read-only; "Patient ID" shows the first six characters of the uid.
+- Known limitations: an already-issued ID token keeps working for up to an hour after
+  deletion is requested (the app signs out at once; the API rejects settings changes for
+  deactivated accounts); Storage files for health records will join the purge with Module 6.

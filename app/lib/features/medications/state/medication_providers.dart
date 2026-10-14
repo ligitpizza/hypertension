@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/models/health_models.dart';
 import '../../../shared/providers/api_providers.dart';
+import '../../auth/state/auth_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
 import '../data/dose_reminders.dart';
 import '../data/medications_repository.dart';
@@ -36,4 +37,13 @@ final todaysDosesProvider = Provider<AsyncValue<List<ScheduledDose>>>((ref) {
     }
     return todaysDoses(list, logs, ref.watch(nowProvider)());
   });
+});
+
+/// What the phone should remind about (D-43, D-45): the medication list, or nothing when the
+/// patient turned medication reminders off. Null while loading.
+final reminderMedicationsProvider = Provider<List<Medication>?>((ref) {
+  final prefs = ref.watch(currentUserProvider).value?.notificationPrefs;
+  final meds = ref.watch(medicationsProvider).value;
+  if (prefs != null && !prefs.medicationReminders) return const [];
+  return meds;
 });
