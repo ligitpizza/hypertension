@@ -10,6 +10,7 @@ import '../../auth/state/auth_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
 import '../../provider_portal/domain/portal_models.dart';
 import '../domain/med_schedule.dart';
+import '../../../shared/widgets/prescription_style.dart';
 import '../domain/prescription_import.dart';
 import '../state/medication_providers.dart';
 
@@ -96,10 +97,15 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
         data: (list) {
           final prescriptions = ref.watch(myPrescriptionsProvider).value ?? const <Prescription>[];
           if (list.isEmpty && prescriptions.isEmpty) {
-            return const _Message(
-              key: Key('meds-empty'),
+            return _Message(
+              key: const Key('meds-empty'),
               icon: Icons.medication_outlined,
               text: 'No medications yet. Tap + to add your first one and get reminders.',
+              action: TextButton(
+                key: const Key('record-prescription'),
+                onPressed: () => context.push('/medications/prescription'),
+                child: const Text('Record a prescription from another clinic'),
+              ),
             );
           }
           final scheduled = doses.value ?? const <ScheduledDose>[];
@@ -151,16 +157,24 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
                 for (final m in list) _MedicineTile(med: m),
               ] else
                 const Text('No medicines on your reminder list yet.'),
-              if (prescriptions.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text('From your doctor', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                for (final p in prescriptions)
-                  _PrescriptionTile(
-                    prescription: p,
-                    tracked: alreadyTracked(p.medicationDetails, list.map((m) => m.name)),
-                  ),
-              ],
+              const SizedBox(height: 16),
+              Text('Prescriptions', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              for (final p in prescriptions)
+                _PrescriptionTile(
+                  prescription: p,
+                  tracked: alreadyTracked(p.medicationDetails, list.map((m) => m.name)),
+                ),
+              // D-50: prescriptions from other clinics, shown in green.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const Key('record-prescription'),
+                  onPressed: () => context.push('/medications/prescription'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Record a prescription from another clinic'),
+                ),
+              ),
             ],
           );
         },
@@ -340,7 +354,8 @@ class _BackgroundBanner extends ConsumerWidget {
   }
 }
 
-/// D-49: the doctor's prescriptions, which the patient can copy into their reminders.
+/// D-49/D-50: a prescription (doctor-issued blue, patient-reported green) that the
+/// patient can copy into their reminders; their own ones open for editing.
 class _PrescriptionTile extends StatelessWidget {
   const _PrescriptionTile({required this.prescription, required this.tracked});
 
@@ -351,15 +366,33 @@ class _PrescriptionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = prescription;
     final issued = toMyt(p.issuedAt);
+    final color = prescriptionColor(p);
     return Card(
       key: Key('rx-${p.id}'),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: color, width: 1.5),
+      ),
       child: ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.receipt_long_outlined)),
-        title: Text(p.medicationDetails),
-        subtitle: Text(
-          'Prescribed ${issued.day} ${_months[issued.month - 1]} ${issued.year}'
-          '${p.isRecurring ? ' • repeats monthly' : ''}',
+        leading: CircleAvatar(
+          backgroundColor: color.withValues(alpha: 0.15),
+          child: Icon(p.byPatient ? Icons.edit_note : Icons.receipt_long_outlined, color: color),
         ),
+        title: Text(p.medicationDetails),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${p.byPatient ? 'Recorded' : 'Prescribed'} ${issued.day} '
+              '${_months[issued.month - 1]} ${issued.year}'
+              '${p.isRecurring ? ' • repeats monthly' : ''}',
+            ),
+            const SizedBox(height: 4),
+            PrescriptionSourceChip(prescription: p, forDoctor: false),
+          ],
+        ),
+        isThreeLine: true,
+        onTap: p.byPatient ? () => context.push('/medications/prescription', extra: p) : null,
         trailing: tracked
             ? const Chip(label: Text('On your list'))
             : TextButton(

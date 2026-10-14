@@ -105,6 +105,8 @@ class Prescription {
     required this.medicationDetails,
     required this.isRecurring,
     required this.issuedAt,
+    this.doctorId,
+    this.source = PrescriptionSource.doctor,
   });
 
   final String id;
@@ -112,11 +114,19 @@ class Prescription {
   final bool isRecurring;
   final DateTime issuedAt;
 
+  /// Null for patient-reported prescriptions (D-50).
+  final String? doctorId;
+  final PrescriptionSource source;
+
+  bool get byPatient => source == PrescriptionSource.patient;
+
   factory Prescription.fromFirestore(String id, Map<String, dynamic> d) => Prescription(
     id: id,
     medicationDetails: d['medicationDetails'] as String? ?? '',
     isRecurring: d['isRecurring'] as bool? ?? false,
     issuedAt: _time(d['issuedAt']),
+    doctorId: d['doctorId'] as String?,
+    source: PrescriptionSource.fromValue(d['source'] as String?),
   );
 }
 

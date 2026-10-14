@@ -112,6 +112,12 @@ class FakeDoseLogs implements MedicationsRepository {
 
   @override
   Future<bool> confirmDose(String medicationId, {DateTime? scheduledTime}) async => false;
+
+  @override
+  Future<void> saveReportedPrescription(ReportedPrescription rx, {String? id}) async {}
+
+  @override
+  Future<void> deleteReportedPrescription(String id) async {}
 }
 
 final doseLogs = FakeDoseLogs();
@@ -128,6 +134,13 @@ class FakePortalRepository implements PortalRepository {
   List<Map<String, String>> interactionDetails = const [];
   MedicationEffect effect = const MedicationEffect(status: 'no_medication');
   int effectCalls = 0;
+
+  List<Prescription> rxList = const [];
+  final deletedRx = <String>[];
+
+  @override
+  Future<void> deletePrescription(String patientId, String prescriptionId) async =>
+      deletedRx.add(prescriptionId);
 
   @override
   Future<MedicationEffect> medicationEffect(String patientId) async {
@@ -159,7 +172,7 @@ class FakePortalRepository implements PortalRepository {
   Stream<List<ClinicalNote>> notes(String patientId) => Stream.value(notesList);
 
   @override
-  Stream<List<Prescription>> prescriptions(String patientId) => Stream.value(const []);
+  Stream<List<Prescription>> prescriptions(String patientId) => Stream.value(rxList);
 
   @override
   Stream<CarePlan?> carePlan(String patientId) => Stream.value(plan);
@@ -532,6 +545,43 @@ void main() {
       await openMeds(t);
       expect(find.byKey(const Key('effect-early')), findsOneWidget);
       expect(find.textContaining('showing BP only'), findsOneWidget);
+    });
+  });
+
+  group('D-50 prescriptions in the portal', () {
+    Prescription rx(
+      String id, {
+      String? doctorId,
+      PrescriptionSource source = PrescriptionSource.doctor,
+    }) => Prescription(
+      id: id,
+      medicationDetails: 'Med $id 5mg, Once daily',
+      isRecurring: false,
+      issuedAt: now,
+      doctorId: doctorId,
+      source: source,
+    );
+
+    tallTest('the issuing doctor can delete; others and patient-reported cannot', (t) async {
+      repo.rxList = [
+        rx('a', doctorId: 'u-doctor'),
+        rx('b', doctorId: 'someone-else'),
+        rx('c', source: PrescriptionSource.patient),
+      ];
+      addTearDown(() => repo.rxList = const []);
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Medications'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('rx-delete-a')), findsOneWidget);
+      expect(find.byKey(const Key('rx-delete-b')), findsNothing);
+      expect(find.byKey(const Key('rx-delete-c')), findsNothing);
+      expect(find.text('Reported by patient'), findsOneWidget);
+      await t.tap(find.byKey(const Key('rx-delete-a')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('rx-delete-confirm')));
+      await t.pumpAndSettle();
+      expect(repo.deletedRx, ['a']);
     });
   });
 

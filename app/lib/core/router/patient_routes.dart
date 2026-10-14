@@ -2,6 +2,8 @@ import '../../features/medications/data/medications_repository.dart';
 import '../../features/medications/presentation/medication_form_page.dart';
 import '../../features/medications/presentation/medications_page.dart';
 import '../../features/messaging/presentation/chat_thread_page.dart';
+import '../../features/prescriptions/presentation/reported_prescription_page.dart';
+import '../../features/provider_portal/domain/portal_models.dart';
 import '../../features/settings/presentation/data_privacy_page.dart';
 import '../../features/settings/presentation/profile_pages.dart';
 import '../../features/settings/presentation/settings_page.dart';
@@ -47,6 +49,13 @@ final List<RouteBase> patientFeatureRoutes = [
     builder: (_, state) => ReadingSavedPage(reading: state.extra! as LoggedReading),
   ),
   GoRoute(path: '/more', redirect: (_, _) => '/settings'),
+  // D-50: record or edit a prescription from another clinic.
+  GoRoute(
+    path: '/medications/prescription',
+    builder: (_, state) => ReportedPrescriptionPage(
+      existing: state.extra is Prescription ? state.extra! as Prescription : null,
+    ),
+  ),
   GoRoute(path: '/settings/personal', builder: (_, _) => const PersonalInfoPage()),
   GoRoute(path: '/settings/contact', builder: (_, _) => const ContactDetailsPage()),
   GoRoute(path: '/settings/health', builder: (_, _) => const HealthProfilePage()),

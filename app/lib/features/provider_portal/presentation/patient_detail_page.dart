@@ -19,6 +19,7 @@ import '../../symptom_checker/state/symptom_providers.dart';
 import '../state/portal_providers.dart';
 import 'dose_history.dart';
 import 'medication_effect_card.dart';
+import 'portal_prescription_tile.dart';
 import 'portal_widgets.dart';
 
 /// Fig 4.3.12.4 Patient Detail (FR-8.2; UC8.3): vitals, risk, BP trend, medications,
@@ -389,14 +390,7 @@ class _HistoryTabs extends ConsumerWidget {
                           builder: (p) => Column(
                             children: [
                               for (final x in p)
-                                ListTile(
-                                  dense: true,
-                                  title: Text(x.medicationDetails),
-                                  subtitle: Text(
-                                    'Issued ${formatDate(x.issuedAt)}'
-                                    '${x.isRecurring ? ' · recurring' : ''}',
-                                  ),
-                                ),
+                                PortalPrescriptionTile(prescription: x, patientId: patientId),
                             ],
                           ),
                         ),

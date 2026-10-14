@@ -31,6 +31,31 @@ class MedicationDraft {
   };
 }
 
+/// D-50: a prescription the patient got elsewhere (e.g. another clinic's paper slip).
+class ReportedPrescription {
+  const ReportedPrescription({
+    required this.medicationName,
+    required this.dosage,
+    required this.frequency,
+    this.duration,
+    this.clinic,
+  });
+
+  final String medicationName;
+  final String dosage;
+  final String frequency;
+  final String? duration;
+  final String? clinic;
+
+  Map<String, dynamic> toJson() => {
+    'medicationName': medicationName.trim(),
+    'dosage': dosage.trim(),
+    'frequency': frequency,
+    if (duration != null && duration!.trim().isNotEmpty) 'duration': duration!.trim(),
+    if (clinic != null && clinic!.trim().isNotEmpty) 'clinic': clinic!.trim(),
+  };
+}
+
 /// UC5.1 E1 duplicates and UC5.6 interactions the patient must review before saving.
 class MedicationWarnings implements Exception {
   const MedicationWarnings({required this.duplicates, required this.interactions});
@@ -54,6 +79,11 @@ abstract interface class MedicationsRepository {
 
   /// D-49: the doctor's prescriptions for this patient, newest first.
   Stream<List<Prescription>> prescriptions(String patientId);
+
+  /// D-50: record (id null) or edit a prescription from another clinic.
+  Future<void> saveReportedPrescription(ReportedPrescription rx, {String? id});
+
+  Future<void> deleteReportedPrescription(String id);
 
   /// Add (id null) or edit. Throws [MedicationWarnings] until [acknowledge] is true.
   Future<void> save(MedicationDraft draft, {String? id, bool acknowledge = false});
@@ -88,6 +118,16 @@ class ApiMedicationsRepository implements MedicationsRepository {
       .limit(50)
       .snapshots()
       .map((s) => [for (final d in s.docs) Prescription.fromFirestore(d.id, d.data())]);
+
+  @override
+  Future<void> saveReportedPrescription(ReportedPrescription rx, {String? id}) async {
+    id == null
+        ? await _api.reportPrescription(rx.toJson())
+        : await _api.updateReportedPrescription(id, rx.toJson());
+  }
+
+  @override
+  Future<void> deleteReportedPrescription(String id) => _api.deleteReportedPrescription(id);
 
   @override
   Future<void> save(MedicationDraft draft, {String? id, bool acknowledge = false}) async {

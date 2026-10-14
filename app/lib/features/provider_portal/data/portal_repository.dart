@@ -45,6 +45,9 @@ abstract interface class PortalRepository {
 
   /// D-44 risk before vs after starting medication.
   Future<MedicationEffect> medicationEffect(String patientId);
+
+  /// D-50: the issuing doctor deletes their own prescription.
+  Future<void> deletePrescription(String patientId, String prescriptionId);
 }
 
 class FirestorePortalRepository implements PortalRepository {
@@ -152,4 +155,8 @@ class FirestorePortalRepository implements PortalRepository {
   @override
   Future<MedicationEffect> medicationEffect(String patientId) async =>
       MedicationEffect.fromJson(await _api.medicationEffect(patientId));
+
+  @override
+  Future<void> deletePrescription(String patientId, String prescriptionId) =>
+      _api.deletePrescription(patientId, prescriptionId);
 }

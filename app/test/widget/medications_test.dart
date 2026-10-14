@@ -12,6 +12,7 @@ import 'package:hypertension/features/medications/data/medications_repository.da
 import 'package:hypertension/features/medications/presentation/medication_form_page.dart';
 import 'package:hypertension/features/medications/presentation/medications_page.dart';
 import 'package:hypertension/features/medications/state/medication_providers.dart';
+import 'package:hypertension/features/prescriptions/presentation/reported_prescription_page.dart';
 import 'package:hypertension/features/provider_portal/domain/portal_models.dart';
 import 'package:hypertension/shared/models/health_models.dart';
 import 'package:hypertension/shared/services/api/api_client.dart';
@@ -32,6 +33,16 @@ class FakeMedicationsRepository implements MedicationsRepository {
 
   @override
   Stream<List<Prescription>> prescriptions(String patientId) => Stream.value(rx);
+
+  final reported = <(String, String?)>[];
+  final deletedRx = <String>[];
+
+  @override
+  Future<void> saveReportedPrescription(ReportedPrescription rx, {String? id}) async =>
+      reported.add(('${rx.toJson()}', id));
+
+  @override
+  Future<void> deleteReportedPrescription(String id) async => deletedRx.add(id);
 
   @override
   Stream<List<DoseLog>> doseLogs(String medicationId, DateTime since) =>
@@ -139,6 +150,12 @@ Widget app(
       GoRoute(
         path: '/medications/edit',
         builder: (_, s) => MedicationFormPage(existing: s.extra! as Medication),
+      ),
+      GoRoute(
+        path: '/medications/prescription',
+        builder: (_, s) => ReportedPrescriptionPage(
+          existing: s.extra is Prescription ? s.extra! as Prescription : null,
+        ),
       ),
       GoRoute(
         path: '/chat/:id',
@@ -380,6 +397,78 @@ void main() {
       await t.scrollUntilVisible(find.byKey(const Key('rx-rx1')), 200);
       expect(find.text('On your list'), findsOneWidget);
       expect(find.byKey(const Key('rx-add-rx1')), findsNothing);
+    });
+  });
+
+  group('D-50 patient-reported prescriptions', () {
+    final doctorRx = Prescription(
+      id: 'rx1',
+      medicationDetails: 'Losartan 50mg, Once daily',
+      isRecurring: false,
+      issuedAt: DateTime.utc(2026, 10, 13),
+      doctorId: 'd1',
+    );
+    final mineRx = Prescription(
+      id: 'rx2',
+      medicationDetails: 'Metformin 500mg, Twice daily, from Klinik Setapak',
+      isRecurring: false,
+      issuedAt: DateTime.utc(2026, 10, 14),
+      source: PrescriptionSource.patient,
+    );
+
+    testWidgets('doctor and patient prescriptions are labelled apart', (t) async {
+      await t.pumpWidget(app(FakeMedicationsRepository()..rx = [doctorRx, mineRx], const []));
+      await t.pumpAndSettle();
+      expect(find.text('From your doctor'), findsOneWidget);
+      expect(find.text('Added by you'), findsOneWidget);
+      final doctorCard = t.widget<Card>(find.byKey(const Key('rx-rx1')));
+      final mineCard = t.widget<Card>(find.byKey(const Key('rx-rx2')));
+      Color side(Card c) => (c.shape! as RoundedRectangleBorder).side.color;
+      expect(side(doctorCard), isNot(side(mineCard)));
+    });
+
+    testWidgets('record a prescription from another clinic', (t) async {
+      final repo = FakeMedicationsRepository();
+      await t.pumpWidget(app(repo, const []));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('record-prescription')));
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const Key('reported-name')), 'Metformin');
+      await t.enterText(find.byKey(const Key('reported-dosage')), '500mg');
+      await t.tap(find.byKey(const Key('reported-frequency')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Twice daily').last);
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const Key('reported-clinic')), 'Klinik Setapak');
+      await t.tap(find.byKey(const Key('reported-save')));
+      await t.pumpAndSettle();
+      final (body, id) = repo.reported.single;
+      expect(id, isNull);
+      expect(body, contains('medicationName: Metformin'));
+      expect(body, contains('clinic: Klinik Setapak'));
+    });
+
+    testWidgets('their own prescription opens pre-filled and can be deleted', (t) async {
+      final repo = FakeMedicationsRepository()..rx = [mineRx];
+      await t.pumpWidget(app(repo, const []));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Metformin 500mg, Twice daily, from Klinik Setapak'));
+      await t.pumpAndSettle();
+      expect(find.text('Edit prescription'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Klinik Setapak'), findsOneWidget);
+      await t.tap(find.byKey(const Key('reported-delete')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('reported-delete-confirm')));
+      await t.pumpAndSettle();
+      expect(repo.deletedRx, ['rx2']);
+    });
+
+    testWidgets('a doctor prescription does not open for editing', (t) async {
+      await t.pumpWidget(app(FakeMedicationsRepository()..rx = [doctorRx], const []));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Losartan 50mg, Once daily'));
+      await t.pumpAndSettle();
+      expect(find.text('Edit prescription'), findsNothing);
     });
   });
 

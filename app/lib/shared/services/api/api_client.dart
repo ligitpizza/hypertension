@@ -198,6 +198,21 @@ class ApiClient {
   Future<Map<String, dynamic>> medicationEffect(String patientId) =>
       _get('/provider/patients/$patientId/medication-effect');
 
+  /// D-50: the issuing doctor deletes their own prescription.
+  Future<void> deletePrescription(String patientId, String prescriptionId) =>
+      _send('DELETE', '/provider/patients/$patientId/prescriptions/$prescriptionId', null);
+
+  // ---- D-50 patient-reported prescriptions ----
+
+  Future<Map<String, dynamic>> reportPrescription(Map<String, dynamic> body) =>
+      _post('/prescriptions/reported', body);
+
+  Future<Map<String, dynamic>> updateReportedPrescription(String id, Map<String, dynamic> body) =>
+      _send('PUT', '/prescriptions/reported/$id', body);
+
+  Future<void> deleteReportedPrescription(String id) =>
+      _send('DELETE', '/prescriptions/reported/$id', null);
+
   // ---- Module 5 medications (FR-5.1-5.4, D-43) ----
 
   /// UC5.1 / UC5.6: add; a MEDICATION_WARNINGS error carries duplicates and interactions

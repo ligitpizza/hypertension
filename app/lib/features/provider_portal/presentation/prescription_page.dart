@@ -4,18 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/services/api/api_client.dart';
 import '../../medications/domain/med_schedule.dart';
+import '../../prescriptions/domain/prescription_text.dart';
 import '../domain/portal_models.dart';
 import '../state/portal_providers.dart';
+import 'portal_prescription_tile.dart';
 import 'portal_widgets.dart';
-
-const frequencies = [
-  'Once daily',
-  'Once daily, morning',
-  'Once daily, evening',
-  'Twice daily',
-  'Three times daily',
-  'As needed',
-];
 
 /// Fig 4.3.12.7 Prescription Management (FR-8.3; UC8.4 and E1 interaction warning).
 class PrescriptionPage extends ConsumerStatefulWidget {
@@ -180,13 +173,7 @@ class _PrescriptionPageState extends ConsumerState<PrescriptionPage> {
             builder: (p) => Column(
               children: [
                 for (final x in p)
-                  ListTile(
-                    dense: true,
-                    title: Text(x.medicationDetails),
-                    subtitle: Text(
-                      'Issued ${formatDate(x.issuedAt)}${x.isRecurring ? ' · recurring' : ''}',
-                    ),
-                  ),
+                  PortalPrescriptionTile(prescription: x, patientId: widget.patientId),
               ],
             ),
           ),

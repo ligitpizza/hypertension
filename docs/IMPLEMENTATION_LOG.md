@@ -787,3 +787,17 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   line (name, dosage, times from the fixed frequency list); "On your list" when already tracked.
 - Also: prescription page shows readable dose times.
 - Tests: backend 4; Flutter 21 (370 total).
+
+### 2026-10-14 — Increment 3 — fixes and additions from Ping's second test round
+- **Reminders still not arriving:** on Ping's Honor phone `dumpsys alarm` showed no CareFlow
+  alarm at all (115 from other apps), with battery exemption granted and Medication
+  reminders on: scheduling failed and the error was discarded (Honor encrypts app logs, so
+  it could not be read). Each reminder is now scheduled separately, a refused exact alarm is
+  retried as inexact, and the Meds tab shows "Phone reminders set: …" or the actual error
+  with Try again.
+- **D-50 prescriptions:** `prescriptions.source`; the issuing doctor deletes their own
+  (confirm, audited); patients record prescriptions from other clinics
+  (`/prescriptions/reported`, with an optional clinic) and edit/delete them. Doctor-issued
+  shown blue ("From your doctor" / "Doctor-issued"), patient-reported green ("Added by you" /
+  "Reported by patient") on the Meds tab and in the portal. Frequency list shared by both
+  forms. Tests: backend 7; Flutter 8 (383 total).
