@@ -1,0 +1,427 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hypertension/core/constants/enums.dart';
+import 'package:hypertension/features/appointments/data/appointments_repository.dart';
+import 'package:hypertension/features/appointments/presentation/admin_assignments_page.dart';
+import 'package:hypertension/features/appointments/presentation/appointments_page.dart';
+import 'package:hypertension/features/appointments/presentation/booking_confirmed_page.dart';
+import 'package:hypertension/features/appointments/presentation/doctor_calendar_page.dart';
+import 'package:hypertension/features/appointments/presentation/pre_visit_summary_page.dart';
+import 'package:hypertension/features/appointments/presentation/reassignment_dialog.dart';
+import 'package:hypertension/features/appointments/state/appointment_providers.dart';
+import 'package:hypertension/features/auth/state/auth_providers.dart';
+import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
+import 'package:hypertension/features/provider_portal/domain/portal_models.dart';
+import 'package:hypertension/features/provider_portal/state/portal_providers.dart';
+import 'package:hypertension/shared/models/health_models.dart';
+
+import '../helpers/fakes.dart';
+
+// Module 7 screens (Figs 4.3.6.1, 4.3.6.2, 4.3.12.3; FR-7.1-7.4; UC7.1-UC7.5; D-53, D-54).
+
+/// Wed 14 Oct 2026, 09:00 Malaysia time.
+final now = DateTime.utc(2026, 10, 14, 1);
+DateTime myt(int d, int h, [int m = 0]) => DateTime.utc(2026, 10, d, h - 8, m);
+
+class FakeAppointmentsRepository implements AppointmentsRepository {
+  List<Appointment> upcoming = const [];
+  List<Appointment> history = const [];
+  List<AssignmentRequest> requests = const [];
+  List<AssignmentRequest> pending = const [];
+  bool noDoctor = false;
+  bool slotTaken = false;
+  final booked = <(DateTime, AppointmentType)>[];
+  final rescheduled = <(String, DateTime)>[];
+  final cancelled = <String>[];
+  final calls = <String>[];
+
+  @override
+  Stream<List<Appointment>> patientAppointments(String patientId, DateTime from) =>
+      Stream.value(upcoming);
+
+  @override
+  Stream<List<Appointment>> patientHistory(String patientId, DateTime before) =>
+      Stream.value(history);
+
+  @override
+  Stream<List<Appointment>> doctorAppointments(String d, DateTime s, DateTime e) => Stream.value([
+    for (final a in upcoming)
+      if (!a.dateTime.isBefore(s) && a.dateTime.isBefore(e)) a,
+  ]);
+
+  @override
+  Future<DaySlots> slots(DateTime day) async {
+    if (noDoctor) throw const NoDoctorException();
+    final weekend = day.weekday > 5;
+    return DaySlots(
+      doctor: const DoctorInfo(id: 'd1', name: 'Dr John', specialty: 'Cardiology'),
+      slots: weekend
+          ? const []
+          : [
+              Slot(time: myt(day.day, 10), period: 'morning', available: true),
+              Slot(time: myt(day.day, 10, 30), period: 'morning', available: false),
+              Slot(time: myt(day.day, 18), period: 'evening', available: true),
+            ],
+      alternatives: weekend ? [myt(19, 9)] : const [],
+    );
+  }
+
+  @override
+  Future<String> book(DateTime time, AppointmentType type) async {
+    if (slotTaken) throw SlotTakenException([myt(15, 11), myt(15, 11, 30)]);
+    booked.add((time, type));
+    return 'new1';
+  }
+
+  @override
+  Future<void> reschedule(String id, DateTime time) async => rescheduled.add((id, time));
+
+  @override
+  Future<void> cancel(String id) async => cancelled.add(id);
+
+  @override
+  Future<Map<String, dynamic>> preVisitSummary(String appointmentId) async => {
+    'dateTime': myt(16, 10).toIso8601String(),
+    'vitals': {
+      'count': 5,
+      'averageSystolic': 146,
+      'averageDiastolic': 92,
+      'highest': '158/98',
+      'latest': '140/90',
+      'averageHeartRate': 78,
+    },
+    'risk': null,
+    'medications': [
+      {'name': 'Losartan 50mg', 'adherenceRate': 62.0},
+    ],
+    'openItems': ['Low adherence: Losartan 50mg'],
+    'dataGaps': ['No risk assessment yet (needs three readings).'],
+    'carePlan': 'Walk daily',
+  };
+
+  @override
+  Stream<List<AssignmentRequest>> myRequests(String patientId) => Stream.value(requests);
+
+  @override
+  Future<void> requestDoctor() async => calls.add('requestDoctor');
+
+  @override
+  Future<void> requestReassignment(
+    String patientId, {
+    String? proposedDoctorId,
+    String? reason,
+  }) async => calls.add('reassign:$patientId:$proposedDoctorId:$reason');
+
+  @override
+  Stream<List<AssignmentRequest>> pendingRequests() => Stream.value(pending);
+
+  @override
+  Future<void> approve(String requestId, String doctorId) async =>
+      calls.add('approve:$requestId:$doctorId');
+
+  @override
+  Future<void> decline(String requestId, {String? reason}) async =>
+      calls.add('decline:$requestId:$reason');
+
+  @override
+  Stream<List<PersonName>> doctors() => Stream.value(const [
+    PersonName('d1', 'Dr John', role: 'doctor'),
+    PersonName('d2', 'Dr Aminah', role: 'doctor'),
+  ]);
+
+  @override
+  Future<PersonName?> person(String uid) async => switch (uid) {
+    'd1' => const PersonName('d1', 'Dr John'),
+    'p1' => const PersonName('p1', 'Siti Aminah'),
+    _ => null,
+  };
+}
+
+Appointment appt(String id, DateTime at, {AppointmentType type = AppointmentType.checkup}) =>
+    Appointment(
+      id: id,
+      patientId: 'p1',
+      doctorId: 'd1',
+      dateTime: at,
+      status: AppointmentStatus.booked,
+      type: type,
+    );
+
+Widget app(FakeAppointmentsRepository repo, {String initial = '/appointments', String uid = 'p1'}) {
+  final router = GoRouter(
+    initialLocation: initial,
+    routes: [
+      GoRoute(path: '/appointments', builder: (_, _) => const AppointmentsPage()),
+      GoRoute(
+        path: '/appointments/reschedule',
+        builder: (_, s) => AppointmentsPage(rescheduling: s.extra! as Appointment),
+      ),
+      GoRoute(
+        path: '/appointments/booked/:id',
+        builder: (_, s) => BookingConfirmedPage(appointmentId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/appointments/:id/summary',
+        builder: (_, s) => PreVisitSummaryPage(appointmentId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/calendar',
+        builder: (_, _) => const Scaffold(body: DoctorCalendarPage()),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (_, _) => const Scaffold(body: AdminAssignmentsPage()),
+      ),
+      GoRoute(
+        path: '/reassign',
+        builder: (_, _) => Scaffold(
+          body: Builder(
+            builder: (c) => TextButton(
+              onPressed: () => requestReassignment(c, 'p1', 'Siti'),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/patient/:id',
+        builder: (_, s) => Text('PATIENT ${s.pathParameters['id']}'),
+      ),
+    ],
+  );
+  return ProviderScope(
+    overrides: [
+      appointmentsRepositoryProvider.overrideWithValue(repo),
+      nowProvider.overrideWithValue(() => now),
+      authUidProvider.overrideWith((ref) => Stream.value(uid)),
+      assignedPatientsProvider.overrideWith(
+        (ref) => Stream.value(const [PortalPatient(uid: 'p1', name: 'Siti Aminah')]),
+      ),
+    ],
+    child: MaterialApp.router(routerConfig: router),
+  );
+}
+
+void main() {
+  late FakeAppointmentsRepository repo;
+  setUp(() => repo = FakeAppointmentsRepository());
+
+  group('Fig 4.3.6.1 booking (UC7.1)', () {
+    tallTest('pick a time, choose follow-up and book with the assigned doctor', (t) async {
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('booking-doctor')), findsOneWidget);
+      expect(find.textContaining('Dr John'), findsWidgets);
+      expect(find.text('Choose a time'), findsOneWidget);
+      await t.tap(find.text('Follow-up'));
+      await t.tap(find.byKey(const Key('slot-10:00 AM')));
+      await t.pump();
+      expect(find.textContaining('Book Today, 10:00 AM'), findsOneWidget);
+      await t.tap(find.byKey(const Key('book-appointment')));
+      await t.pumpAndSettle();
+      expect(repo.booked, [(myt(14, 10), AppointmentType.followUp)]);
+      expect(find.byKey(const Key('booking-confirmed')), findsOneWidget);
+    });
+
+    tallTest('taken slots are disabled; evening tab shows evening slots', (t) async {
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      final taken = t.widget<ChoiceChip>(find.byKey(const Key('slot-10:30 AM')));
+      expect(taken.onSelected, isNull);
+      await t.tap(find.byKey(const Key('period-evening')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('slot-6:00 PM')), findsOneWidget);
+      expect(find.byKey(const Key('slot-10:00 AM')), findsNothing);
+    });
+
+    tallTest('E1 a slot taken meanwhile offers the nearest alternatives', (t) async {
+      repo.slotTaken = true;
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('slot-10:00 AM')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('book-appointment')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('alternatives')), findsOneWidget);
+      await t.tap(find.text('Tomorrow, 11:00 AM'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Book Tomorrow, 11:00 AM'), findsOneWidget);
+    });
+
+    tallTest('weekends cannot be chosen', (t) async {
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      final saturday = t.widget<InkWell>(find.byKey(const Key('day-2026-10-17')));
+      expect(saturday.onTap, isNull);
+    });
+  });
+
+  group('D-54 no doctor yet', () {
+    tallTest('the patient requests a doctor; then sees it is waiting', (t) async {
+      repo.noDoctor = true;
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('no-doctor')), findsOneWidget);
+      await t.tap(find.byKey(const Key('request-doctor')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['requestDoctor']);
+    });
+
+    tallTest('a pending request shows instead of the button', (t) async {
+      repo
+        ..noDoctor = true
+        ..requests = [
+          AssignmentRequest(
+            id: 'r1',
+            patientId: 'p1',
+            requestedBy: 'p1',
+            kind: AssignmentRequestKind.newPatient,
+            status: AssignmentRequestStatus.pending,
+            createdAt: now,
+          ),
+        ];
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('doctor-request-pending')), findsOneWidget);
+      expect(find.byKey(const Key('request-doctor')), findsNothing);
+    });
+  });
+
+  group('UC7.2 next appointment', () {
+    tallTest('shows the doctor, time and summary link; cancel within 24 h warns', (t) async {
+      repo.upcoming = [appt('a1', myt(14, 18))];
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Upcoming · Today, 6:00 PM'), findsOneWidget);
+      expect(find.text('Dr John'), findsOneWidget);
+      await t.tap(find.byKey(const Key('cancel-a1')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('late-change-warning')), findsOneWidget);
+      await t.tap(find.byKey(const Key('late-change-continue')));
+      await t.pumpAndSettle();
+      expect(repo.cancelled, ['a1']);
+    });
+
+    tallTest('cancel later than 24 h asks a plain confirmation', (t) async {
+      repo.upcoming = [appt('a1', myt(20, 10))];
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('cancel-a1')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('late-change-warning')), findsNothing);
+      await t.tap(find.byKey(const Key('cancel-confirm')));
+      await t.pumpAndSettle();
+      expect(repo.cancelled, ['a1']);
+    });
+
+    tallTest('reschedule picks a new time for the same appointment', (t) async {
+      repo.upcoming = [appt('a1', myt(20, 10))];
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('reschedule-a1')));
+      await t.pumpAndSettle();
+      expect(find.text('Choose a new time'), findsOneWidget);
+      await t.tap(find.byKey(const Key('slot-10:00 AM')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('book-appointment')));
+      await t.pumpAndSettle();
+      expect(repo.rescheduled, [('a1', myt(14, 10))]);
+      expect(repo.booked, isEmpty);
+    });
+  });
+
+  tallTest('UC7.5 pre-visit summary with E1 data gaps', (t) async {
+    await t.pumpWidget(app(repo, initial: '/appointments/a1/summary'));
+    await t.pumpAndSettle();
+    expect(find.text('Average 146/92 mmHg (5 readings)'), findsOneWidget);
+    expect(find.textContaining('(estimate)'), findsOneWidget);
+    expect(find.byKey(const Key('summary-gaps')), findsOneWidget);
+    expect(find.text('Low adherence: Losartan 50mg'), findsOneWidget);
+  });
+
+  group('Fig 4.3.12.3 doctor calendar', () {
+    tallTest('month view counts and colours; daily agenda opens the summary', (t) async {
+      repo.upcoming = [
+        appt('a1', myt(16, 10)),
+        appt('a2', myt(16, 15), type: AppointmentType.emergency),
+        appt('a3', myt(20, 9), type: AppointmentType.followUp),
+      ];
+      await t.pumpWidget(app(repo, initial: '/calendar', uid: 'd1'));
+      await t.pumpAndSettle();
+      expect(find.text('October 2026'), findsOneWidget);
+      expect(find.text('3 scheduled appointments · 1 emergency'), findsOneWidget);
+      expect(find.text('10:00 AM S. Aminah'), findsOneWidget);
+      await t.tap(find.byKey(const Key('cal-day-16')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('agenda-a1')), findsOneWidget);
+      expect(find.byKey(const Key('agenda-a3')), findsNothing);
+      await t.tap(find.byKey(const Key('agenda-a2')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('appointment-details')), findsOneWidget);
+      expect(find.byKey(const Key('pre-visit-summary')), findsOneWidget);
+    });
+  });
+
+  group('D-54 admin and doctor', () {
+    final req = AssignmentRequest(
+      id: 'r1',
+      patientId: 'p1',
+      requestedBy: 'd1',
+      kind: AssignmentRequestKind.reassign,
+      status: AssignmentRequestStatus.pending,
+      createdAt: now,
+      proposedDoctorId: 'd2',
+      reason: 'Moving to Penang',
+    );
+
+    tallTest('admin approves with the suggested doctor preselected', (t) async {
+      repo.pending = [req];
+      await t.pumpWidget(app(repo, initial: '/admin', uid: 'admin'));
+      await t.pumpAndSettle();
+      expect(find.text('Reassignment requested'), findsOneWidget);
+      expect(find.text('Reason: Moving to Penang'), findsOneWidget);
+      await t.tap(find.byKey(const Key('approve-r1')));
+      await t.pumpAndSettle();
+      // The requesting doctor is not offered; the suggested one is preselected.
+      await t.tap(find.byKey(const Key('choose-doctor-confirm')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['approve:r1:d2']);
+    });
+
+    tallTest('admin declines with a message', (t) async {
+      repo.pending = [req];
+      await t.pumpWidget(app(repo, initial: '/admin', uid: 'admin'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('decline-r1')));
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const Key('decline-reason')), 'Please visit the clinic.');
+      await t.tap(find.byKey(const Key('decline-confirm')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['decline:r1:Please visit the clinic.']);
+    });
+
+    tallTest('no pending requests', (t) async {
+      await t.pumpWidget(app(repo, initial: '/admin', uid: 'admin'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('no-requests')), findsOneWidget);
+    });
+
+    tallTest('doctor asks for a reassignment, suggesting a colleague', (t) async {
+      await t.pumpWidget(app(repo, initial: '/reassign', uid: 'd1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('open'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('reassign-doctor')));
+      await t.pumpAndSettle();
+      expect(find.text('Dr John'), findsNothing); // not themselves
+      await t.tap(find.text('Dr Aminah').last);
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const Key('reassign-reason')), 'Specialist care');
+      await t.tap(find.byKey(const Key('reassign-send')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['reassign:p1:d2:Specialist care']);
+    });
+  });
+}

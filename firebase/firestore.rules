@@ -38,6 +38,8 @@ service cloud.firestore {
       allow read: if isSelf(uid)
         || isAdmin()
         || (hasRole('doctor') && resource.data.assignedDoctorId == request.auth.uid)
+        // D-54: doctors see colleagues (to suggest one when asking for a reassignment).
+        || (hasRole('doctor') && resource.data.role == 'doctor')
         // D-42: a patient reads their own assigned doctor (name + public key for messaging).
         || (hasRole('patient')
             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedDoctorId == uid);

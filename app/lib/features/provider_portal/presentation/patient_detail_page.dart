@@ -17,6 +17,7 @@ import '../domain/portal_models.dart';
 import '../../symptom_checker/data/symptom_repository.dart';
 import '../../symptom_checker/state/symptom_providers.dart';
 import '../state/portal_providers.dart';
+import '../../appointments/presentation/reassignment_dialog.dart';
 import 'dose_history.dart';
 import 'medication_effect_card.dart';
 import 'portal_prescription_tile.dart';
@@ -176,6 +177,13 @@ class _Header extends StatelessWidget {
               onPressed: () => context.go('/doctor/patient/${patient.uid}/care-plan'),
               icon: const Icon(Icons.assignment_outlined),
               label: const Text('Care plan'),
+            ),
+            // D-54: hand this patient to another doctor (the admin decides).
+            TextButton.icon(
+              key: const Key('action-reassign'),
+              onPressed: () => requestReassignment(context, patient.uid, patient.name),
+              icon: const Icon(Icons.swap_horiz),
+              label: const Text('Request reassignment'),
             ),
           ],
         ),

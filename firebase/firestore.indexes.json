@@ -38,6 +38,8 @@
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "dateTime", "order": "ASCENDING" } ] },
     { "collectionGroup": "appointments", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "doctorId", "order": "ASCENDING" }, { "fieldPath": "dateTime", "order": "ASCENDING" } ] },
+    { "collectionGroup": "appointments", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "dateTime", "order": "DESCENDING" } ] },
     { "collectionGroup": "messages", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "senderId", "order": "ASCENDING" }, { "fieldPath": "recipientId", "order": "ASCENDING" },
       { "fieldPath": "sentAt", "order": "ASCENDING" } ] },

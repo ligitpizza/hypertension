@@ -165,6 +165,7 @@ class Appointment {
     required this.dateTime,
     required this.status,
     this.doctorId,
+    this.type = AppointmentType.checkup,
   });
 
   final String id;
@@ -172,6 +173,9 @@ class Appointment {
   final String? doctorId;
   final DateTime dateTime;
   final AppointmentStatus status;
+
+  /// D-53.
+  final AppointmentType type;
 
   bool get isActive =>
       status == AppointmentStatus.booked || status == AppointmentStatus.rescheduled;
@@ -182,6 +186,7 @@ class Appointment {
     doctorId: d['doctorId'] as String?,
     dateTime: _time(d['dateTime']),
     status: AppointmentStatus.fromValue(d['status'] as String),
+    type: AppointmentType.fromValue(d['type'] as String?),
   );
 }
 

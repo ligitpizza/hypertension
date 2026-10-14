@@ -830,3 +830,44 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - **Prescription card layout:** the action button squeezed the text into a narrow column on
   phones; the action and the source chip now share a wrapping row under the full-width
   text. Widget test renders at 360 px and checks for no overflow.
+
+### 2026-10-15 — Increment 3 — Module 7: Appointment Scheduling (+ D-54 doctor assignment)
+- FRs implemented: FR-7.1 (book, reschedule, cancel), FR-7.2 (admin assigns a doctor, on
+  request: D-54), FR-7.3 (push + email reminders), FR-7.4 (pre-visit summary), FR-7.5 (High/
+  Critical prompts and the Emergency band now lead to a real booking).
+- Use-case flows: UC7.1 incl. A1 and E1 (nearest alternatives when a slot is taken or the
+  day is closed), UC7.2 incl. E1 (< 24 h warning before cancelling/rescheduling; doctor
+  pushed), UC7.3 incl. E1 (requests wait for the admin), UC7.4 (24 h and 1 h), UC7.5 incl. E1
+  (data gaps flagged).
+- D-53: Mon-Fri 09:00-21:00 MYT, 30-min slots, lunch 13:00-14:00 blocked, 1 h-60 days ahead;
+  `appointments.type` (checkup / follow_up / emergency) and `createdAt`; always with the
+  patient's assigned doctor; booking checked atomically in a Firestore transaction;
+  reminders and completion run inside the existing 15-minute job; an Emergency-band reading
+  auto-books the next free slot (urgent push to patient and doctor, mentions 999).
+- D-54: `doctor_assignment_requests`; patient "Request a doctor" (one pending), doctor
+  "Request reassignment" (optional suggested colleague + reason), admin Assignments page
+  approves (choose doctor) or declines. Approval moves future appointments, cancels clashes
+  with a "please rebook" push, and notifies patient and both doctors. Rules: admin reads
+  all, patient and requester their own, API-only writes; doctors may list colleagues.
+- API: `GET /appointments/slots`, `POST /appointments`, `PATCH /appointments/{id}`,
+  `GET /appointments/{id}/pre-visit-summary`, `POST /assignment-requests/new-doctor`,
+  `POST /provider/patients/{id}/reassignment-request`,
+  `POST /admin/assignment-requests/{id}/approve|decline`.
+- Screens: patient `/appointments` (Fig 4.3.6.1: next appointment card with pre-visit
+  summary, reschedule, cancel; month calendar, checkup/follow-up, Morning/Afternoon/Evening
+  slots), `/appointments/booked/:id` (Fig 4.3.6.2), `/appointments/:id/summary`,
+  `/appointments/history`; doctor `/doctor/calendar` (Fig 4.3.12.3 monthly/weekly/daily,
+  colour legend, tap for summary) and "Request reassignment" on the patient page; admin
+  `/admin/assignments`.
+- Indexes: appointments (patientId, dateTime desc) for history; assignment requests
+  (status, createdAt desc).
+- **Incident (fixed):** the first test run after adding emergency auto-booking had no fake
+  for it, and the test process fell back to the developer's gcloud credentials, creating one
+  test appointment in the live project. It was deleted with Ping's permission (verified:
+  none left). `tests/conftest.py` now forces emulator addresses so tests can never reach
+  production; the emulator integration tests still run only when emulators really started.
+- Tests: backend 26 (appointments 18, assignments 8); rules 7 new (175 total); Flutter 15
+  widget (421 total).
+- Deviations vs Chapter 4: D-53, D-54 (new collection). The mockup's location line shows the
+  clinic name only; "Complete intake form" is not built; docs/06's "reassign if the doctor
+  is unavailable" for emergencies is replaced by booking the personal doctor's next slot.

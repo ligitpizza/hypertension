@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/appointments/presentation/admin_assignments_page.dart';
+import '../../features/appointments/presentation/doctor_calendar_page.dart';
+
 import '../../features/admin/presentation/create_staff_page.dart';
 import '../../features/auth/presentation/forgot_password_page.dart';
 import '../../features/auth/presentation/login_page.dart';
@@ -136,6 +139,7 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             path: '/doctor',
             builder: (_, _) => const DoctorDashboardPage(),
             routes: [
+              GoRoute(path: 'calendar', builder: (_, _) => const DoctorCalendarPage()),
               // Module 10 (Fig 4.3.15.1 / 4.3.15.2 in the portal).
               GoRoute(
                 path: 'messages',
@@ -178,6 +182,7 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(path: '/admin/users', builder: (_, _) => const CreateStaffPage()),
+          GoRoute(path: '/admin/assignments', builder: (_, _) => const AdminAssignmentsPage()),
         ],
       ),
     ],

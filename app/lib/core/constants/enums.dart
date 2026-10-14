@@ -13,6 +13,7 @@ abstract final class Collections {
   static const doseLogs = 'dose_logs';
   static const healthRecords = 'health_records';
   static const appointments = 'appointments';
+  static const doctorAssignmentRequests = 'doctor_assignment_requests';
   static const clinicalNotes = 'clinical_notes';
   static const prescriptions = 'prescriptions';
   static const carePlans = 'care_plans';
@@ -37,6 +38,7 @@ abstract final class Collections {
     doseLogs,
     healthRecords,
     appointments,
+    doctorAssignmentRequests,
     clinicalNotes,
     prescriptions,
     carePlans,
@@ -382,4 +384,43 @@ enum PrescriptionSource {
   final String value;
   static PrescriptionSource fromValue(String? v) =>
       v == null ? doctor : enumFromValue(values, v, (e) => e.value);
+}
+
+/// `appointments.type` (D-53); absent means checkup.
+enum AppointmentType {
+  checkup('checkup'),
+  followUp('follow_up'),
+  emergency('emergency');
+
+  const AppointmentType(this.value);
+  final String value;
+  static AppointmentType fromValue(String? v) =>
+      v == null ? checkup : enumFromValue(values, v, (e) => e.value);
+
+  String get label => switch (this) {
+    checkup => 'Regular checkup',
+    followUp => 'Follow-up',
+    emergency => 'Emergency',
+  };
+}
+
+/// `doctor_assignment_requests.kind` (D-54).
+enum AssignmentRequestKind {
+  newPatient('new_patient'),
+  reassign('reassign');
+
+  const AssignmentRequestKind(this.value);
+  final String value;
+  static AssignmentRequestKind fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}
+
+/// `doctor_assignment_requests.status` (D-54).
+enum AssignmentRequestStatus {
+  pending('pending'),
+  approved('approved'),
+  declined('declined');
+
+  const AssignmentRequestStatus(this.value);
+  final String value;
+  static AssignmentRequestStatus fromValue(String v) => enumFromValue(values, v, (e) => e.value);
 }

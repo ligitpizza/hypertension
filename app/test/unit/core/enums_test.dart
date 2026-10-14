@@ -41,6 +41,9 @@ void main() {
     'clinical_alert_type': ClinicalAlertType.values.map((e) => e.value).toList(),
     'clinical_alert_status': ClinicalAlertStatus.values.map((e) => e.value).toList(),
     'prescription_source': PrescriptionSource.values.map((e) => e.value).toList(),
+    'appointment_type': AppointmentType.values.map((e) => e.value).toList(),
+    'assignment_request_kind': AssignmentRequestKind.values.map((e) => e.value).toList(),
+    'assignment_request_status': AssignmentRequestStatus.values.map((e) => e.value).toList(),
   };
 
   for (final entry in cases.entries) {

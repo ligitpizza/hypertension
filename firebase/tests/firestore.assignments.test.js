@@ -53,3 +53,25 @@ describe('writing', () => {
     }));
   });
 });
+
+describe('doctors list (reassignment suggestions)', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'users/u-doctor'), { role: 'doctor', name: 'Dr John' });
+      await setDoc(doc(db, 'users/d2'), { role: 'doctor', name: 'Dr Aminah' });
+      await setDoc(doc(db, 'users/u-other'), { role: 'patient', name: 'Ali', assignedDoctorId: 'd2' });
+    });
+  });
+  test('a doctor can list other doctors', async () => {
+    const db = as(env, 'doctor', 'u-doctor').firestore();
+    await assertSucceeds(getDocs(query(collection(db, 'users'), where('role', '==', 'doctor'))));
+  });
+  test('but not another doctor\'s patients', async () => {
+    await assertFails(getDoc(doc(as(env, 'doctor', 'u-doctor').firestore(), 'users/u-other')));
+  });
+  test('patients cannot list doctors', async () => {
+    const db = as(env, 'patient', 'u-patient').firestore();
+    await assertFails(getDocs(query(collection(db, 'users'), where('role', '==', 'doctor'))));
+  });
+});

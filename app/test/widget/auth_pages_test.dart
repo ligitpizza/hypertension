@@ -291,7 +291,10 @@ void main() {
       expect(staffHome(UserRole.doctor), '/doctor');
       expect(staffHome(UserRole.pharmacist), '/pharmacy');
       expect(staffHome(UserRole.admin), '/admin/users');
-      expect(staffDestinations(UserRole.admin).map((d) => d.path), ['/admin/users']);
+      expect(staffDestinations(UserRole.admin).map((d) => d.path), [
+        '/admin/users',
+        '/admin/assignments', // D-54
+      ]);
       expect(staffDestinations(UserRole.patient), isEmpty);
     });
   });

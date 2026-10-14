@@ -216,6 +216,49 @@ class ApiClient {
   Future<void> deleteReportedPrescription(String id) =>
       _send('DELETE', '/prescriptions/reported/$id', null);
 
+  // ---- Module 7 appointments (FR-7.1-7.4, D-53) and assignment requests (D-54) ----
+
+  Future<Map<String, dynamic>> appointmentSlots(String isoDate) =>
+      _getQuery('/appointments/slots', {'date': isoDate});
+
+  Future<Map<String, dynamic>> bookAppointment({
+    required DateTime dateTime,
+    required String type,
+  }) => _post('/appointments', {'dateTime': dateTime.toUtc().toIso8601String(), 'type': type});
+
+  /// UC7.2: a new time, or cancel.
+  Future<Map<String, dynamic>> changeAppointment(
+    String id, {
+    DateTime? dateTime,
+    bool cancel = false,
+  }) => _send('PATCH', '/appointments/$id', {
+    if (dateTime != null) 'dateTime': dateTime.toUtc().toIso8601String(),
+    if (cancel) 'cancel': true,
+  });
+
+  Future<Map<String, dynamic>> preVisitSummary(String appointmentId) =>
+      _get('/appointments/$appointmentId/pre-visit-summary');
+
+  Future<Map<String, dynamic>> requestDoctor() =>
+      _post('/assignment-requests/new-doctor', const {});
+
+  Future<Map<String, dynamic>> requestReassignment(
+    String patientId, {
+    String? proposedDoctorId,
+    String? reason,
+  }) => _post('/provider/patients/$patientId/reassignment-request', {
+    'proposedDoctorId': ?proposedDoctorId,
+    if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+  });
+
+  Future<Map<String, dynamic>> approveAssignment(String requestId, String doctorId) =>
+      _post('/admin/assignment-requests/$requestId/approve', {'doctorId': doctorId});
+
+  Future<Map<String, dynamic>> declineAssignment(String requestId, {String? reason}) => _post(
+    '/admin/assignment-requests/$requestId/decline',
+    {if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim()},
+  );
+
   // ---- Module 5 medications (FR-5.1-5.4, D-43) ----
 
   /// UC5.1 / UC5.6: add; a MEDICATION_WARNINGS error carries duplicates and interactions
@@ -282,6 +325,15 @@ class ApiClient {
   Future<Map<String, dynamic>> _get(String path) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(path);
+      return res.data ?? const {};
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> _getQuery(String path, Map<String, dynamic> query) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(path, queryParameters: query);
       return res.data ?? const {};
     } on DioException catch (e) {
       throw ApiException.fromDio(e);

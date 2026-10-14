@@ -15,6 +15,9 @@ import '../../features/symptom_checker/presentation/triage_result_page.dart';
 import '../../features/ai_agent/presentation/agent_page.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/appointments/presentation/appointments_page.dart';
+import '../../features/appointments/presentation/booking_confirmed_page.dart';
+import '../../features/appointments/presentation/pre_visit_summary_page.dart';
 import '../../features/charts/presentation/trends_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/dashboard/presentation/patient_shell.dart';
@@ -100,9 +103,20 @@ final List<RouteBase> patientFeatureRoutes = [
     builder: (_, state) =>
         AgentPage(quickReplies: state.extra is List<String> ? state.extra! as List<String> : null),
   ),
+  // Module 7 (D-53).
+  GoRoute(path: '/appointments', builder: (_, _) => const AppointmentsPage()),
+  GoRoute(path: '/appointments/history', builder: (_, _) => const AppointmentHistoryPage()),
   GoRoute(
-    path: '/appointments',
-    builder: (_, _) =>
-        const ComingSoonPage(title: 'Appointments', note: 'Appointment booking is coming soon.'),
+    path: '/appointments/reschedule',
+    redirect: (_, state) => state.extra is Appointment ? null : '/appointments',
+    builder: (_, state) => AppointmentsPage(rescheduling: state.extra! as Appointment),
+  ),
+  GoRoute(
+    path: '/appointments/booked/:id',
+    builder: (_, s) => BookingConfirmedPage(appointmentId: s.pathParameters['id']!),
+  ),
+  GoRoute(
+    path: '/appointments/:id/summary',
+    builder: (_, s) => PreVisitSummaryPage(appointmentId: s.pathParameters['id']!),
   ),
 ];
