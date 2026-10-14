@@ -103,6 +103,29 @@ def due_missed(
     return out
 
 
+# D-49 adherence concern: below this % over the last 7 days, or this many missed in a row.
+CONCERN_WINDOW = timedelta(days=7)
+CONCERN_RATE = 80.0
+CONCERN_MIN_DOSES = 3
+CONCERN_STREAK = 3
+
+
+def adherence_concern(logs: list[tuple[datetime, str]]) -> str | None:
+    """Why this medicine's last 7 days are a concern, or None. `logs` oldest first."""
+    statuses = [s for _, s in logs]
+    streak = statuses[-CONCERN_STREAK:]
+    if len(streak) == CONCERN_STREAK and all(s == DoseStatus.MISSED.value for s in streak):
+        return f"last {CONCERN_STREAK} doses missed"
+    rate = adherence_rate(statuses)
+    if rate is not None and len(statuses) >= CONCERN_MIN_DOSES and rate < CONCERN_RATE:
+        return f"{rate:.0f}% of doses taken in the last 7 days"
+    return None
+
+
+def same_myt_day(a: datetime, b: datetime) -> bool:
+    return a.astimezone(MYT).date() == b.astimezone(MYT).date()
+
+
 def due_now(times: list[time], now: datetime, window: timedelta) -> list[datetime]:
     """Dose times that fell in the last `window` (backup reminder slot)."""
     return [m for at in times if (m := dose_moment(now, at)) <= now and now - m < window]
@@ -137,6 +160,14 @@ class MedicationRepository(Protocol):
         ...
 
     def recent_statuses(self, medication_id: str, since: datetime) -> list[str]: ...
+
+    def recent_logs(self, medication_id: str, since: datetime) -> list[tuple[datetime, str]]:
+        """(scheduledTime, status) since `since`, oldest first."""
+        ...
+
+    def mark_taken_late(self, log_id: str, confirmed_at: datetime) -> bool:
+        """D-49: turn a `missed` log into `taken`; False if it isn't a missed log."""
+        ...
 
     def logged_ids(self, medication_id: str, since: datetime) -> set[str]: ...
 
@@ -197,6 +228,27 @@ class FirestoreMedicationRepository:
             .where(filter=firestore.FieldFilter("scheduledTime", ">=", since))
         )
         return [str(d.get("status")) for d in q.stream()]
+
+    def recent_logs(self, medication_id: str, since: datetime) -> list[tuple[datetime, str]]:
+        q = (
+            self._logs()
+            .where(filter=firestore.FieldFilter("medicationId", "==", medication_id))
+            .where(filter=firestore.FieldFilter("scheduledTime", ">=", since))
+            .order_by("scheduledTime")
+        )
+        return [(d.get("scheduledTime"), str(d.get("status"))) for d in q.stream()]
+
+    def mark_taken_late(self, log_id: str, confirmed_at: datetime) -> bool:
+        ref = self._logs().document(log_id)
+        snap = ref.get()
+        if not snap.exists or snap.get("status") != DoseStatus.MISSED.value:
+            return False
+        # Only if still missed when written (another device may have just corrected it).
+        ref.update(
+            {"status": DoseStatus.TAKEN.value, "confirmedAt": confirmed_at},
+            option=self._db.write_option(last_update_time=snap.update_time),
+        )
+        return True
 
     def logged_ids(self, medication_id: str, since: datetime) -> set[str]:
         q = (

@@ -175,7 +175,8 @@
     "deterioration",
     "medication_review",
     "triage",
-    "flagged_message"
+    "flagged_message",
+    "low_adherence"
   ],
   "clinical_alert_status": [
     "open",

@@ -521,6 +521,21 @@ class InMemoryMedicationRepository:
             if v["medicationId"] == medication_id and v["scheduledTime"] >= since
         ]
 
+    def recent_logs(self, medication_id: str, since: Any) -> list[tuple[Any, str]]:
+        mine = [
+            (v["scheduledTime"], v["status"])
+            for v in self.logs.values()
+            if v["medicationId"] == medication_id and v["scheduledTime"] >= since
+        ]
+        return sorted(mine, key=lambda x: x[0])
+
+    def mark_taken_late(self, log_id: str, confirmed_at: Any) -> bool:
+        log = self.logs.get(log_id)
+        if log is None or log["status"] != "missed":
+            return False
+        log.update({"status": "taken", "confirmedAt": confirmed_at})
+        return True
+
     def logged_ids(self, medication_id: str, since: Any) -> set[str]:
         return {
             k

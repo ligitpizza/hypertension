@@ -234,6 +234,7 @@ class ClinicalAlertType(StrEnum):
     MEDICATION_REVIEW = "medication_review"
     TRIAGE = "triage"
     FLAGGED_MESSAGE = "flagged_message"
+    LOW_ADHERENCE = "low_adherence"  # D-49
 
 
 class ClinicalAlertStatus(StrEnum):

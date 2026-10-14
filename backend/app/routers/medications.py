@@ -31,6 +31,7 @@ from app.services.medications import (
     get_medication_repository,
     parse_schedule,
     refresh_adherence,
+    same_myt_day,
 )
 from app.services.notifications import Notifier, get_notifier
 
@@ -196,7 +197,14 @@ def confirm_dose(
             "confirmedAt": now,
         },
     )
-    if not created:
+    # D-49: a dose already marked missed may be corrected as taken late, until midnight.
+    late = (
+        not created
+        and body.scheduledTime is not None
+        and same_myt_day(slot, now)
+        and repo.mark_taken_late(dose_id(medication_id, slot), now)
+    )
+    if not created and not late:
         raise ApiError(
             "DOSE_ALREADY_LOGGED", "This dose is already recorded.", status.HTTP_409_CONFLICT
         )
@@ -233,7 +241,7 @@ def confirm_dose(
     audit.log(
         user_id=user.uid,
         action="CONFIRM_DOSE",
-        details="Dose confirmed as taken.",
+        details="Dose confirmed as taken late." if late else "Dose confirmed as taken.",
         target_type=Collection.DOSE_LOGS.value,
         target_id=dose_id(medication_id, slot),
     )
@@ -242,4 +250,5 @@ def confirm_dose(
         "scheduledTime": slot.isoformat(),
         "adherenceRate": rate,
         "quantityOnHand": update.get("quantityOnHand", quantity),
+        "late": late,
     }

@@ -343,3 +343,118 @@ def test_escalation_job_still_reports_when_the_medication_sweep_fails(
     assert res.status_code == 200
     body = res.json()
     assert body["medicationSweep"] == "failed" and "alertsChecked" in body
+
+
+# ---------- D-49 late doses and adherence alerts ----------
+
+
+def missed_today(med_repo: InMemoryMedicationRepository, mid: str, at: time) -> None:
+    from app.services.medications import dose_moment
+
+    slot = dose_moment(datetime.now(UTC), at)
+    med_repo.logs[dose_id(mid, slot)] = {
+        "medicationId": mid,
+        "scheduledTime": slot,
+        "status": "missed",
+    }
+
+
+def test_d49_missed_dose_can_be_corrected_as_taken_late_the_same_day(
+    client: TestClient,
+    med_repo: InMemoryMedicationRepository,
+    daily_now: time,
+    audit: InMemoryAuditLogger,
+) -> None:
+    mid = add(client, schedule=daily_now.strftime("%H:%M"), quantityOnHand=10).json()["id"]
+    missed_today(med_repo, mid, daily_now)
+    res = client.post(
+        f"/api/v1/medications/{mid}/doses",
+        json={"scheduledTime": slot_today(daily_now)},
+        headers=PATIENT,
+    )
+    assert res.status_code == 201 and res.json()["late"] is True
+    [log] = med_repo.logs.values()
+    assert log["status"] == "taken" and log["confirmedAt"]
+    assert res.json()["adherenceRate"] == 100.0 and res.json()["quantityOnHand"] == 9
+    assert any("late" in e["details"] for e in audit.entries)
+    again = client.post(
+        f"/api/v1/medications/{mid}/doses",
+        json={"scheduledTime": slot_today(daily_now)},
+        headers=PATIENT,
+    )
+    assert again.status_code == 409  # a taken dose is not corrected twice
+
+
+def test_d49_concern_rules() -> None:
+    from app.services.medications import adherence_concern
+
+    t = datetime(2026, 10, 14, tzinfo=UTC)
+
+    def logs(*statuses: str) -> list[tuple[datetime, str]]:
+        return [(t + timedelta(hours=i), s) for i, s in enumerate(statuses)]
+
+    assert adherence_concern(logs("taken", "missed", "missed", "missed")) == "last 3 doses missed"
+    assert adherence_concern(logs("taken", "missed", "taken", "missed", "taken")) == (
+        "60% of doses taken in the last 7 days"
+    )
+    assert adherence_concern(logs("missed", "taken")) is None  # too few doses to judge
+    assert adherence_concern(logs(*["taken"] * 9, "missed")) is None  # 90%
+
+
+def test_d49_job_alerts_the_doctor_once_a_week(
+    med_repo: InMemoryMedicationRepository,
+    repo: InMemoryUserRepository,
+    alerts_repo: Any,
+    tokens: InMemoryTokenRepository,
+    audit: InMemoryAuditLogger,
+) -> None:
+    from app.integrations.email import ConsoleEmailClient
+    from app.services.escalation import Escalator
+
+    repo.users[P] = {"role": "patient", "name": "Siti", "assignedDoctorId": "u-doctor"}
+    tokens.add("u-doctor", "browser", "web")
+    push = LogPushClient()
+    notifier = Notifier(tokens, push)
+    job = MedicationJob(
+        med_repo,
+        notifier,
+        alerts_repo,
+        Escalator(alerts_repo, notifier, audit, ConsoleEmailClient()),
+    )
+    med_repo.meds["m1"] = {
+        "patientId": P,
+        "name": "Amlodipine",
+        "dosage": "5mg",
+        "schedule": "08:00",
+        "createdAt": datetime(2026, 10, 10, tzinfo=UTC),
+    }
+    now = datetime(2026, 10, 14, 4, 0, tzinfo=UTC)  # 12:00 MYT
+    # 12 Oct was already logged missed; the job adds 13 and 14 Oct -> 3 in a row.
+    earlier = datetime(2026, 10, 12, 0, 0, tzinfo=UTC)
+    med_repo.logs[dose_id("m1", earlier)] = {
+        "medicationId": "m1",
+        "scheduledTime": earlier,
+        "status": "missed",
+    }
+    out = job.run(now)
+    assert out["missedDosesLogged"] == 2 and out["adherenceAlerts"] == 1
+    [alert] = alerts_repo.alerts
+    assert alert["type"] == "low_adherence" and alert["severity"] == "moderate"
+    assert "Amlodipine 5mg: last 3 doses missed" in alert["message"]
+    assert alert["doctorId"] == "u-doctor"
+    assert [m.title for _, m in push.sent] == ["Patient alert"]
+    # Next day's miss: still within the week, so no second alert.
+    assert job.run(now + timedelta(days=1))["adherenceAlerts"] == 0
+
+
+def test_d49_patients_without_new_misses_are_not_checked(
+    med_repo: InMemoryMedicationRepository, alerts_repo: Any
+) -> None:
+    from unittest.mock import MagicMock
+
+    escalator = MagicMock()
+    job = MedicationJob(
+        med_repo, Notifier(InMemoryTokenRepository(), LogPushClient()), alerts_repo, escalator
+    )
+    assert job.run(datetime(2026, 10, 14, tzinfo=UTC))["adherenceAlerts"] == 0
+    escalator.apply.assert_not_called()
