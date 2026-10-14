@@ -5,6 +5,7 @@ Cloud Run URL directly with an OIDC token for the scheduler service account.
 Real jobs (missed doses, reminders, deterioration scan, ...) are added per module.
 """
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -19,6 +20,7 @@ from app.services.medication_job import MedicationJob, get_medication_job
 from app.services.unanswered import UnansweredAlertJob, get_unanswered_alert_job
 
 router = APIRouter(prefix="/internal/jobs", tags=["jobs"])
+log = logging.getLogger("careflow.jobs")
 
 OidcVerifier = Callable[[str, str], dict[str, Any]]
 
@@ -78,7 +80,13 @@ def run_deterioration(
     purge: AccountPurgeJob = Depends(get_account_purge_job),
 ) -> dict[str, Any]:
     """Daily: FR-9.6 30-day deterioration scan, and D-46 purge of deleted accounts."""
-    return {"job": "deterioration", "status": "ok", **job.run(), **purge.run()}
+    result = {"job": "deterioration", "status": "ok", **job.run()}
+    try:
+        result.update(purge.run())
+    except Exception:
+        log.exception("Account purge failed")
+        result["accountPurge"] = "failed"
+    return result
 
 
 @router.post("/escalation", dependencies=[Depends(verify_scheduler)])
@@ -88,7 +96,13 @@ def run_escalation(
 ) -> dict[str, Any]:
     """Every 15 minutes: D-37 unanswered-alert escalation, and D-43 medication sweep
     (missed doses, backup reminders) so no extra Cloud Scheduler job is needed."""
-    return {"job": "escalation", "status": "ok", **job.run(), **meds.run()}
+    result = {"job": "escalation", "status": "ok", **job.run()}
+    try:
+        result.update(meds.run())
+    except Exception:  # one sweep failing must not hide the other's result
+        log.exception("Medication sweep failed")
+        result["medicationSweep"] = "failed"
+    return result
 
 
 @router.post("/{job}", dependencies=[Depends(verify_scheduler)])

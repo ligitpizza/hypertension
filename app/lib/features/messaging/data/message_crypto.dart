@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// NFR-2.1 end-to-end message encryption (docs/06 section I; D-42).
@@ -23,22 +23,92 @@ abstract interface class KeyVault {
   Future<SimpleKeyPair> keyPair(String uid);
 }
 
-class SecureStorageKeyVault implements KeyVault {
-  SecureStorageKeyVault([FlutterSecureStorage? storage])
-    : _storage = storage ?? const FlutterSecureStorage();
+/// Minimal storage the vault needs; [FlutterSecureStorage] in the app, a map in tests.
+abstract interface class SecretStore {
+  Future<String?> read(String key);
+  Future<void> write(String key, String value);
+  Future<void> delete(String key);
+}
+
+class FlutterSecretStore implements SecretStore {
+  const FlutterSecretStore([this._storage = const FlutterSecureStorage()]);
 
   final FlutterSecureStorage _storage;
-  final _algorithm = X25519();
 
   @override
-  Future<SimpleKeyPair> keyPair(String uid) async {
+  Future<String?> read(String key) => _storage.read(key: key);
+
+  @override
+  Future<void> write(String key, String value) => _storage.write(key: key, value: value);
+
+  @override
+  Future<void> delete(String key) => _storage.delete(key: key);
+}
+
+class SecureStorageKeyVault implements KeyVault {
+  SecureStorageKeyVault([SecretStore? store]) : _store = store ?? const FlutterSecretStore();
+
+  final SecretStore _store;
+  final _algorithm = X25519();
+
+  // Shared by every vault in this app: one load per user, and one storage operation at a
+  // time. Without this, two first-time callers (key publishing and the inbox at start-up)
+  // each created a different key pair, and on the web the storage library's own first-use
+  // key could be overwritten, leaving the saved key unreadable.
+  static final Map<String, Future<SimpleKeyPair>> _loaded = {};
+  static Future<void> _queue = Future.value();
+
+  @visibleForTesting
+  static void resetForTest() {
+    _loaded.clear();
+    _queue = Future.value();
+  }
+
+  @override
+  Future<SimpleKeyPair> keyPair(String uid) {
+    final pending = _loaded[uid];
+    if (pending != null) return pending;
+    final load = _serialised(() => _load(uid));
+    _loaded[uid] = load;
+    // A failed load (e.g. storage unavailable) may be retried later.
+    load.then<void>(
+      (_) {},
+      onError: (Object _) {
+        _loaded.remove(uid);
+      },
+    );
+    return load;
+  }
+
+  Future<T> _serialised<T>(Future<T> Function() task) {
+    final result = _queue.then((_) => task());
+    _queue = result.then((_) {}, onError: (Object _) {});
+    return result;
+  }
+
+  Future<SimpleKeyPair> _load(String uid) async {
     final storageKey = 'careflow_x25519_$uid';
-    final saved = await _storage.read(key: storageKey);
+    String? saved;
+    try {
+      saved = await _store.read(storageKey);
+    } catch (e) {
+      // The saved key can no longer be read (on the web: its storage key was replaced).
+      // Start again with a new key pair; older messages show the "earlier device" notice
+      // (D-42 accepted key loss).
+      debugPrint('CareFlow: saved message key unreadable, creating a new one ($e)');
+      try {
+        await _store.delete(storageKey);
+      } catch (_) {}
+    }
     if (saved != null) {
-      return _algorithm.newKeyPairFromSeed(base64Decode(saved));
+      try {
+        return await _algorithm.newKeyPairFromSeed(base64Decode(saved));
+      } on FormatException {
+        debugPrint('CareFlow: saved message key corrupt, creating a new one');
+      }
     }
     final pair = await _algorithm.newKeyPair();
-    await _storage.write(key: storageKey, value: base64Encode(await pair.extractPrivateKeyBytes()));
+    await _store.write(storageKey, base64Encode(await pair.extractPrivateKeyBytes()));
     return pair;
   }
 }

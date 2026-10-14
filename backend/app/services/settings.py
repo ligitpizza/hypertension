@@ -223,32 +223,79 @@ def _latin1(text: object) -> str:
     return str(text).translate(_LATIN1_SUBS).encode("latin-1", "replace").decode("latin-1")
 
 
+_MYT = timedelta(hours=8)
+_RISK_NAMES = {
+    "stroke": "Stroke",
+    "cad": "Heart disease",
+    "heartFailure": "Heart failure",
+    "ckd": "Kidney disease",
+    "t2d": "Diabetes",
+}
+
+
+def _when(value: object, with_time: bool = True) -> str:
+    """ISO UTC text -> Malaysia time 'YYYY-MM-DD HH:MM' (the exports are read in Malaysia)."""
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except ValueError:
+        return str(value or "")
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(UTC) + _MYT
+    return moment.strftime("%Y-%m-%d %H:%M" if with_time else "%Y-%m-%d")
+
+
+def _words(value: object) -> str:
+    if isinstance(value, list):
+        return ", ".join(_words(v) for v in value) or "None"
+    if value is None or value == "":
+        return "-"
+    return str(value).replace("_", " ")
+
+
+def _health_lines(health: dict[str, dict[str, Any]]) -> list[str]:
+    p, h, life = (
+        health.get(k) or {} for k in ("personalInfo", "medicalHistory", "lifestyleFactors")
+    )
+    ec = p.get("emergencyContact") or {}
+    contact = f"{ec.get('name')} ({ec.get('relationship')}), {ec.get('phone')}" if ec else "-"
+    return [
+        f"Height: {_words(p.get('heightCm'))} cm    Weight: {_words(p.get('weightKg'))} kg",
+        f"Phone: {_words(p.get('phone'))}",
+        f"Emergency contact: {contact}",
+        f"Year diagnosed with high blood pressure: {_words(h.get('hypertensionDiagnosedYear'))}",
+        f"Conditions: {_words(h.get('conditions', []))}",
+        f"Family history: {_words(h.get('familyHistory', []))}",
+        f"Allergies: {_words(h.get('allergies'))}",
+        f"Smoking: {_words(life.get('smokingStatus'))}    Alcohol: {_words(life.get('alcohol'))}",
+        f"Exercise days per week: {_words(life.get('exerciseDaysPerWeek'))}    "
+        f"Salt intake: {_words(life.get('saltIntake'))}",
+    ]
+
+
 def _row(key: str, r: dict[str, Any]) -> str:
     match key:
         case "vital_readings":
             hr = f", HR {r['heartRate']} (estimate)" if r.get("heartRate") else ""
-            return (
-                f"{r.get('timestamp', '')[:16]}  {r.get('systolic')}/{r.get('diastolic')} mmHg{hr}"
-            )
+            bp = f"{r.get('systolic')}/{r.get('diastolic')} mmHg"
+            return f"{_when(r.get('timestamp'))}  {bp}{hr}"
         case "risk_scores":
             scores = r.get("scores") or {}
             parts = [
-                f"{k} {float(v.get('value', 0)) * 100:.1f}%"
+                f"{_RISK_NAMES.get(k, k)} {float(v.get('value', 0)) * 100:.1f}%"
                 for k, v in scores.items()
                 if isinstance(v, dict)
             ]
-            return f"{str(r.get('generatedAt', ''))[:16]}  " + ", ".join(parts)
+            return f"{_when(r.get('generatedAt'))}  " + ", ".join(parts)
         case "medications":
             return f"{r.get('name')} {r.get('dosage')}  ({r.get('schedule')})"
         case "dose_logs":
-            when = str(r.get("scheduledTime", ""))[:16]
-            return f"{when}  {r.get('status')}  ({r.get('medicationId')})"
+            return f"{_when(r.get('scheduledTime'))}  {r.get('status')}"
         case "triage_outcomes":
-            return f"{str(r.get('generatedAt', ''))[:16]}  {r.get('outcome')}"
+            return f"{_when(r.get('generatedAt'))}  {_words(r.get('outcome'))}"
         case "prescriptions":
-            return f"{str(r.get('issuedAt', ''))[:10]}  {r.get('medicationDetails')}"
+            return f"{_when(r.get('issuedAt'), False)}  {r.get('medicationDetails')}"
         case "clinical_notes":
-            return f"{str(r.get('createdAt', ''))[:10]}  {r.get('content')}"
+            return f"{_when(r.get('createdAt'), False)}  {r.get('content')}"
     return json.dumps(r)
 
 
@@ -262,17 +309,23 @@ def export_pdf(data: dict[str, Any]) -> bytes:
 
     def line(text: object, size: int = 10, style: str = "") -> None:
         pdf.set_font("Helvetica", style, size)
-        pdf.multi_cell(width, 5 if size <= 10 else 8, _latin1(text))
+        # Start every line back at the left margin (fpdf2 otherwise continues to the right).
+        pdf.multi_cell(width, 5 if size <= 10 else 8, _latin1(text), new_x="LMARGIN", new_y="NEXT")
 
     line("CareFlow health data export", 16, "B")
-    line(f"Exported {data['exportedAt'][:16].replace('T', ' ')} UTC")
+    line(f"Exported {_when(data['exportedAt'])} (Malaysia time)")
     pdf.ln(3)
+    profile = data["profile"]
     line("Profile", 13, "B")
-    for k, v in data["profile"].items():
-        line(f"{k}: {v}")
-    for section, fields in data["healthProfile"].items():
-        if fields:
-            line(f"{section}: {json.dumps(fields, ensure_ascii=False)}")
+    line(f"Name: {_words(profile.get('name'))}")
+    line(f"Email: {_words(profile.get('email'))}")
+    dob = profile.get("dateOfBirth")
+    line(f"Date of birth: {_when(dob, False) if dob else '-'}")
+    line(f"Gender: {_words(profile.get('gender'))}")
+    pdf.ln(2)
+    line("Health profile", 13, "B")
+    for text in _health_lines(data["healthProfile"]):
+        line(text)
     if data.get("carePlan"):
         pdf.ln(2)
         line("Care plan", 13, "B")

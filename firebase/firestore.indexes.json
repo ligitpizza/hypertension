@@ -30,6 +30,8 @@
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "generatedAt", "order": "DESCENDING" } ] },
     { "collectionGroup": "dose_logs", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "medicationId", "order": "ASCENDING" }, { "fieldPath": "scheduledTime", "order": "DESCENDING" } ] },
+    { "collectionGroup": "dose_logs", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "medicationId", "order": "ASCENDING" }, { "fieldPath": "scheduledTime", "order": "ASCENDING" } ] },
     { "collectionGroup": "appointments", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "dateTime", "order": "ASCENDING" } ] },
     { "collectionGroup": "appointments", "queryScope": "COLLECTION", "fields": [

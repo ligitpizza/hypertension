@@ -63,8 +63,12 @@ class FakePatientData implements DashboardRepository {
   final Map<String, RiskScore> risks = {};
   final Map<String, List<Medication>> meds = {};
 
+  /// When set, readings arrive live (a patient logging a new reading while the page is open).
+  StreamController<List<VitalReading>>? live;
+
   @override
   Stream<List<VitalReading>> recentReadings(String patientId, {int limit = 20}) =>
+      live?.stream.map((r) => r.take(limit).toList()) ??
       Stream.value((readings[patientId] ?? const []).take(limit).toList());
 
   @override
@@ -98,9 +102,13 @@ class FakePortalRepository implements PortalRepository {
   final rxCalls = <bool>[];
   List<Map<String, String>> interactionDetails = const [];
   MedicationEffect effect = const MedicationEffect(status: 'no_medication');
+  int effectCalls = 0;
 
   @override
-  Future<MedicationEffect> medicationEffect(String patientId) async => effect;
+  Future<MedicationEffect> medicationEffect(String patientId) async {
+    effectCalls++;
+    return effect;
+  }
 
   @override
   Stream<List<PortalPatient>> assignedPatients(String doctorId) => Stream.value(patients);
@@ -379,6 +387,21 @@ void main() {
       expect(find.descendant(of: ckd, matching: find.byIcon(Icons.remove)), findsOneWidget);
       expect(find.textContaining('Not proof that the medicine caused'), findsOneWidget);
       expect(find.byKey(const Key('effect-early')), findsNothing);
+    });
+
+    tallTest('a new reading while the page is open refreshes the comparison', (t) async {
+      data.live = StreamController<List<VitalReading>>.broadcast();
+      addTearDown(data.live!.close);
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pump();
+      data.live!.add([reading('p1', 150, 95)]);
+      await t.pumpAndSettle();
+      await t.tap(find.text('Medications'));
+      await t.pumpAndSettle();
+      final before = repo.effectCalls;
+      data.live!.add([reading('p1', 132, 84), reading('p1', 150, 95)]);
+      await t.pumpAndSettle();
+      expect(repo.effectCalls, greaterThan(before));
     });
 
     tallTest('explains why there is nothing to compare', (t) async {

@@ -56,7 +56,8 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
       _toBottom();
     } on RecipientNotReadyException {
       setState(() => _error = '${to.name} has not set up secure messaging yet.');
-    } catch (_) {
+    } catch (e) {
+      debugPrint('CareFlow: message send failed: $e');
       setState(() => _error = 'Could not send the message. Please try again.');
     } finally {
       if (mounted) setState(() => _sending = false);

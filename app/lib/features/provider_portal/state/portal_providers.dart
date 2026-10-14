@@ -111,7 +111,17 @@ final patientCarePlanProvider = StreamProvider.family<CarePlan?, String>(
 );
 
 /// D-44: computed by the API on demand (not stored); the card has its own Retry.
-final medicationEffectProvider = FutureProvider.autoDispose.family<MedicationEffect, String>(
-  (ref, id) => ref.watch(portalRepositoryProvider).medicationEffect(id),
-  retry: (_, _) => null,
-);
+/// Recomputed when the patient logs a reading or changes their medicines, so an open
+/// patient page never shows a stale comparison.
+final medicationEffectProvider = FutureProvider.autoDispose.family<MedicationEffect, String>((
+  ref,
+  id,
+) {
+  ref.watch(patientLatestReadingProvider(id).select((r) => r.value?.id));
+  ref.watch(
+    patientMedicationsProvider(
+      id,
+    ).select((m) => m.value?.map((x) => '${x.id}:${x.schedule}').join()),
+  );
+  return ref.watch(portalRepositoryProvider).medicationEffect(id);
+}, retry: (_, _) => null);

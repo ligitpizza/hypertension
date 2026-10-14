@@ -729,3 +729,23 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Known limitations: an already-issued ID token keeps working for up to an hour after
   deletion is requested (the app signs out at once; the API rejects settings changes for
   deactivated accounts); Storage files for health records will join the purge with Module 6.
+
+### 2026-10-14 — Increment 3 — fixes from Ping's live test of M10, M5, M12
+- **Messaging (D-42 key vault race):** at portal start-up, key publishing and the inbox asked
+  the vault for the key at the same moment; each created its own key pair (proved in a
+  release web build), and on the web the storage library's first-use key could be
+  overwritten too, leaving the saved key unreadable. Result live: the doctor's key was never
+  published ("has not opened CareFlow yet") and every doctor send failed. Fix: one load per
+  user and one storage operation at a time (shared across vault instances); an unreadable
+  or corrupt saved key is replaced with a new one (D-42 key loss), which also repairs
+  browsers already in the broken state; failures are now logged to the console.
+- **Dose confirm 500 / medication sweep:** `dose_logs (medicationId, scheduledTime ASC)`
+  index was missing (the emulator does not enforce indexes). Added it. A failed adherence
+  recount no longer reports a recorded dose as failed, and the medication sweep and account
+  purge can no longer fail the escalation / deterioration job they share a call with.
+- **Portal "Since starting medication"** was computed once per page; it now refetches when
+  the patient logs a reading or changes medicines.
+- **Export PDF:** fpdf2 `multi_cell` continued each line at the right edge, pushing text off
+  the page. Lines now restart at the left margin; health profile shown as labelled lines,
+  times in Malaysia time, readable complication names.
+- Tests: Flutter 6 vault + 1 portal refresh; backend 3 regression tests.

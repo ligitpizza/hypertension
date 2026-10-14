@@ -28,7 +28,10 @@ class CareFlowApp extends ConsumerWidget {
       ref.read(pushServiceProvider).register();
       // D-42: make sure this device's public key is published so others can message us.
       if (user.role == UserRole.patient || user.role == UserRole.doctor) {
-        ref.read(messagingRepositoryProvider).publishKey(user.uid).catchError((Object _) {});
+        ref
+            .read(messagingRepositoryProvider)
+            .publishKey(user.uid)
+            .catchError((Object e) => debugPrint('CareFlow: publishing message key failed: $e'));
       }
     });
     // D-43: keep this phone's dose reminders in step with the patient's medication list

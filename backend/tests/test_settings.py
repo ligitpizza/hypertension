@@ -281,3 +281,19 @@ def test_d46_reactivated_account_is_not_purged(
     repo.users[P].update({"isActive": True, "deletionRequestedAt": now - timedelta(days=30)})
     job = AccountPurgeJob(settings_repo, FakeIdentityProvider(), InMemoryAuditLogger())
     assert job.run(now) == {"accountsPurged": 0} and P in repo.users
+
+
+def test_d47_pdf_lines_all_start_at_the_left_margin(client: TestClient) -> None:
+    """Live bug: fpdf2 continued each line to the right, pushing text off the page."""
+    import re
+    import zlib
+
+    pdf = client.get("/api/v1/settings/export", headers=PATIENT).content
+    text = b"".join(
+        zlib.decompress(m.group(1))
+        for m in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.S)
+        if m.group(1)[:1] == b"x"
+    )
+    xs = {round(float(x)) for x in re.findall(rb"BT ([\d.]+) [\d.]+ Td", text)}
+    assert len(xs) == 1
+    assert b"Blood pressure readings (3)" in text.replace(rb"\(", b"(").replace(rb"\)", b")")

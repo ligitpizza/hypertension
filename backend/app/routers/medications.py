@@ -6,6 +6,7 @@ DELETE /medications/{id}
 POST   /medications/{id}/doses    confirm a dose: taken dose_log, stock, adherence, refill push
 """
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -34,6 +35,7 @@ from app.services.medications import (
 from app.services.notifications import Notifier, get_notifier
 
 router = APIRouter(prefix="/medications", tags=["medications"])
+log = logging.getLogger("careflow.medications")
 EARLY_CONFIRM = timedelta(hours=1)
 LATE_CONFIRM = timedelta(hours=26)
 patient_only = require_roles(UserRole.PATIENT)
@@ -220,7 +222,14 @@ def confirm_dose(
             )
     if update:
         repo.update(medication_id, update)
-    rate = refresh_adherence(repo, medication_id, now) if times is not None else None
+    rate = None
+    if times is not None:
+        # The dose is already recorded; a failed recount must not report the dose as failed.
+        try:
+            rate = refresh_adherence(repo, medication_id, now)
+        except Exception:
+            log.exception("Adherence recount failed for %s", medication_id)
+            rate = med.data.get("adherenceRate")
     audit.log(
         user_id=user.uid,
         action="CONFIRM_DOSE",

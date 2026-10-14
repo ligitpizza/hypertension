@@ -305,3 +305,41 @@ def test_job_sends_backup_reminder_for_a_dose_due_now(
 def test_escalation_endpoint_includes_the_medication_sweep(client: TestClient) -> None:
     body = client.post("/internal/jobs/escalation").json()
     assert {"alertsChecked", "missedDosesLogged", "remindersSent"} <= set(body)
+
+
+# ---------- resilience (live bugs 2026-10-14) ----------
+
+
+def test_dose_is_still_confirmed_when_the_adherence_recount_fails(
+    client: TestClient,
+    med_repo: InMemoryMedicationRepository,
+    daily_now: time,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing recount (e.g. a missing index) must not turn a recorded dose into a 500."""
+    mid = add(client, schedule=daily_now.strftime("%H:%M"), quantityOnHand=5).json()["id"]
+
+    def broken(*_: Any) -> list[str]:
+        raise RuntimeError("The query requires an index")
+
+    monkeypatch.setattr(med_repo, "recent_statuses", broken)
+    res = client.post(
+        f"/api/v1/medications/{mid}/doses",
+        json={"scheduledTime": slot_today(daily_now)},
+        headers=PATIENT,
+    )
+    assert res.status_code == 201 and res.json()["quantityOnHand"] == 4
+    assert len(med_repo.logs) == 1
+
+
+def test_escalation_job_still_reports_when_the_medication_sweep_fails(
+    client: TestClient, med_repo: InMemoryMedicationRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken() -> list[Any]:
+        raise RuntimeError("The query requires an index")
+
+    monkeypatch.setattr(med_repo, "all_scheduled", broken)
+    res = client.post("/internal/jobs/escalation")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["medicationSweep"] == "failed" and "alertsChecked" in body
