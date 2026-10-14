@@ -47,3 +47,9 @@ final reminderMedicationsProvider = Provider<List<Medication>?>((ref) {
   if (prefs != null && !prefs.medicationReminders) return const [];
   return meds;
 });
+
+/// Whether dose reminders can fire on the minute (Android "Alarms & reminders").
+final exactRemindersAllowedProvider = FutureProvider.autoDispose<bool>(
+  (ref) => ref.watch(doseRemindersProvider).exactAllowed(),
+  retry: (_, _) => null,
+);

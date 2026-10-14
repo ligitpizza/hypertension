@@ -749,3 +749,9 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   the page. Lines now restart at the left margin; health profile shown as labelled lines,
   times in Malaysia time, readable complication names.
 - Tests: Flutter 6 vault + 1 portal refresh; backend 3 regression tests.
+- **Reminders arriving late / not at all (D-43 revised):** inexact alarms can be deferred,
+  and Xiaomi-style phones delay them further. Reminders are now exact when the patient
+  allows Android's "Alarms & reminders" (`SCHEDULE_EXACT_ALARM`); the Meds screen shows an
+  "Allow" banner only when timed doses exist and permission is missing, and re-schedules
+  after it is granted. Inexact remains the fallback; the 15-minute backup push (fixed above)
+  is the safety net. Tests: 3 widget (349 total).

@@ -6,6 +6,7 @@ import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/auth/domain/app_user.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
+import 'package:hypertension/features/medications/data/dose_reminders.dart';
 import 'package:hypertension/features/medications/data/medications_repository.dart';
 import 'package:hypertension/features/medications/presentation/medication_form_page.dart';
 import 'package:hypertension/features/medications/presentation/medications_page.dart';
@@ -58,12 +59,33 @@ Medication med(String id, String name, String schedule, {double? qty, double? ra
 
 final pushed = <(String, Object?)>[];
 
+class FakeReminders implements DoseReminders {
+  FakeReminders({this.exact = true});
+
+  bool exact;
+  int requests = 0;
+  final synced = <int>[];
+
+  @override
+  Future<bool> exactAllowed() async => exact;
+
+  @override
+  Future<void> requestExact() async {
+    requests++;
+    exact = true; // the patient switched it on
+  }
+
+  @override
+  Future<void> sync(List<Medication> meds) async => synced.add(meds.length);
+}
+
 Widget app(
   FakeMedicationsRepository repo,
   List<Medication> meds, {
   String initial = '/medications',
   Object? extra,
   String? doctorId = 'd1',
+  FakeReminders? reminders,
 }) {
   final router = GoRouter(
     initialLocation: initial,
@@ -87,6 +109,7 @@ Widget app(
   return ProviderScope(
     overrides: [
       medicationsRepositoryProvider.overrideWithValue(repo),
+      doseRemindersProvider.overrideWithValue(reminders ?? FakeReminders()),
       medicationsProvider.overrideWith((ref) => Stream.value(meds)),
       nowProvider.overrideWithValue(() => now),
       currentUserProvider.overrideWith(
@@ -205,6 +228,38 @@ void main() {
     await t.pumpAndSettle();
     expect(pushed, isEmpty);
     expect(find.textContaining('No doctor is assigned'), findsOneWidget);
+  });
+
+  testWidgets('D-43 asks for exact reminders only when they are not allowed', (t) async {
+    final reminders = FakeReminders(exact: false);
+    await t.pumpWidget(
+      app(FakeMedicationsRepository(), [med('m1', 'Lisinopril', '20:00')], reminders: reminders),
+    );
+    await t.pumpAndSettle();
+    expect(find.text('Reminders may arrive late'), findsOneWidget);
+    await t.tap(find.byKey(const Key('allow-exact-reminders')));
+    await t.pumpAndSettle();
+    expect(reminders.requests, 1);
+    expect(reminders.synced, isNotEmpty); // re-scheduled with the new precision
+    expect(find.byKey(const Key('exact-reminders-banner')), findsNothing);
+  });
+
+  testWidgets('no banner when exact reminders are allowed', (t) async {
+    await t.pumpWidget(app(FakeMedicationsRepository(), [med('m1', 'Lisinopril', '20:00')]));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('exact-reminders-banner')), findsNothing);
+  });
+
+  testWidgets('no banner when nothing has a dose time', (t) async {
+    await t.pumpWidget(
+      app(
+        FakeMedicationsRepository(),
+        [med('m3', 'Ibuprofen', 'as_needed')],
+        reminders: FakeReminders(exact: false),
+      ),
+    );
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('exact-reminders-banner')), findsNothing);
   });
 
   group('UC5.1 add / edit form', () {

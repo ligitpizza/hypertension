@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Module 5 dose reminders (D-43): re-arm scheduled reminders after a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Exact dose reminders; the patient allows it under "Alarms & reminders" (D-43). -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>
     <application

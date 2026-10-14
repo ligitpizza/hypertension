@@ -11,6 +11,12 @@ import '../domain/med_schedule.dart';
 abstract interface class DoseReminders {
   /// Make the scheduled reminders match [meds] exactly (empty list = cancel all).
   Future<void> sync(List<Medication> meds);
+
+  /// Whether reminders can fire at the exact minute (Android "Alarms & reminders").
+  Future<bool> exactAllowed();
+
+  /// Opens the system screen where the patient allows exact reminders.
+  Future<void> requestExact();
 }
 
 class NoopDoseReminders implements DoseReminders {
@@ -18,6 +24,12 @@ class NoopDoseReminders implements DoseReminders {
 
   @override
   Future<void> sync(List<Medication> meds) async {}
+
+  @override
+  Future<bool> exactAllowed() async => true;
+
+  @override
+  Future<void> requestExact() async {}
 }
 
 const remindersChannel = AndroidNotificationChannel(
@@ -66,9 +78,27 @@ class LocalDoseReminders implements DoseReminders {
     return _myt = tz.getLocation('Asia/Kuala_Lumpur');
   }
 
+  AndroidFlutterLocalNotificationsPlugin? get _android =>
+      _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+  @override
+  Future<bool> exactAllowed() async {
+    await _start();
+    return await _android?.canScheduleExactNotifications() ?? true;
+  }
+
+  @override
+  Future<void> requestExact() async {
+    await _start();
+    await _android?.requestExactAlarmsPermission();
+  }
+
   @override
   Future<void> sync(List<Medication> meds) async {
     final myt = await _start();
+    // Exact when the patient allowed it; otherwise inexact (may be a few minutes late),
+    // with the server's 15-minute backup push as the safety net (D-43 as revised).
+    final exact = await exactAllowed();
     final planned = plannedReminders(meds);
     // Cancel ours that are no longer wanted (deleted medicine, changed time, signed out).
     for (final p in await _plugin.pendingNotificationRequests()) {
@@ -94,8 +124,9 @@ class LocalDoseReminders implements DoseReminders {
             priority: Priority.high,
           ),
         ),
-        // Inexact: no exact-alarm permission; Android may delay it by a few minutes.
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode: exact
+            ? AndroidScheduleMode.exactAllowWhileIdle
+            : AndroidScheduleMode.inexactAllowWhileIdle,
         matchDateTimeComponents: DateTimeComponents.time,
         payload: '$_payloadPrefix${med.id}',
       );

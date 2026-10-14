@@ -106,6 +106,7 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
             children: [
               _ScheduleHeader(now: now),
+              if (scheduled.isNotEmpty) const _ExactRemindersBanner(),
               if (scheduled.isNotEmpty) _ProgressCard(doses: scheduled),
               for (final period in DosePeriod.values.where((p) => p != DosePeriod.asNeeded))
                 if (scheduled.any((d) => d.period == period)) ...[
@@ -139,6 +140,36 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// D-43: without Android's "Alarms & reminders" permission, reminders may arrive late.
+class _ExactRemindersBanner extends ConsumerWidget {
+  const _ExactRemindersBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(exactRemindersAllowedProvider).value != false) return const SizedBox.shrink();
+    return Card(
+      key: const Key('exact-reminders-banner'),
+      child: ListTile(
+        leading: const Icon(Icons.alarm_off_outlined),
+        title: const Text('Reminders may arrive late'),
+        subtitle: const Text('Allow "Alarms & reminders" so CareFlow reminds you on time.'),
+        trailing: TextButton(
+          key: const Key('allow-exact-reminders'),
+          onPressed: () async {
+            final reminders = ref.read(doseRemindersProvider);
+            await reminders.requestExact();
+            ref.invalidate(exactRemindersAllowedProvider);
+            // Re-schedule so existing reminders use the new precision.
+            final meds = ref.read(reminderMedicationsProvider);
+            if (meds != null) await reminders.sync(meds);
+          },
+          child: const Text('Allow'),
+        ),
       ),
     );
   }
