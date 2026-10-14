@@ -17,6 +17,7 @@ import '../domain/portal_models.dart';
 import '../../symptom_checker/data/symptom_repository.dart';
 import '../../symptom_checker/state/symptom_providers.dart';
 import '../state/portal_providers.dart';
+import 'dose_history.dart';
 import 'medication_effect_card.dart';
 import 'portal_widgets.dart';
 
@@ -363,7 +364,7 @@ class _HistoryTabs extends ConsumerWidget {
                           emptyText: 'The patient has not added any medications.',
                           builder: (m) => Column(
                             children: [
-                              for (final x in m)
+                              for (final x in m) ...[
                                 ListTile(
                                   dense: true,
                                   title: Text('${x.name} ${x.dosage}'),
@@ -372,6 +373,8 @@ class _HistoryTabs extends ConsumerWidget {
                                       ? null
                                       : Text('Adherence ${x.adherenceRate!.round()}%'),
                                 ),
+                                DoseHistory(medication: x),
+                              ],
                             ],
                           ),
                         ),

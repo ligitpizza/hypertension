@@ -8,7 +8,9 @@ import '../../../shared/models/health_models.dart';
 import '../../../shared/services/api/api_client.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
+import '../../provider_portal/domain/portal_models.dart';
 import '../domain/med_schedule.dart';
+import '../domain/prescription_import.dart';
 import '../state/medication_providers.dart';
 
 /// Fig 4.3.5.1 Medications (FR-5.1, FR-5.2, FR-5.3, FR-5.4; UC5.2, UC5.3, UC5.5).
@@ -41,10 +43,16 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
     setState(() => _busy.add(key));
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref
+      final late = await ref
           .read(medicationsRepositoryProvider)
           .confirmDose(med.id, scheduledTime: scheduledTime);
-      messenger.showSnackBar(SnackBar(content: Text('${med.name} dose recorded.')));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            late ? '${med.name} recorded as taken late.' : '${med.name} dose recorded.',
+          ),
+        ),
+      );
     } on ApiException catch (e) {
       messenger.showSnackBar(
         SnackBar(
@@ -86,7 +94,8 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
           ),
         ),
         data: (list) {
-          if (list.isEmpty) {
+          final prescriptions = ref.watch(myPrescriptionsProvider).value ?? const <Prescription>[];
+          if (list.isEmpty && prescriptions.isEmpty) {
             return const _Message(
               key: Key('meds-empty'),
               icon: Icons.medication_outlined,
@@ -135,9 +144,22 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
                 for (final m in refills) _RefillCard(med: m),
               ],
               const SizedBox(height: 16),
-              Text('Your medicines', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              for (final m in list) _MedicineTile(med: m),
+              if (list.isNotEmpty) ...[
+                Text('Your medicines', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                for (final m in list) _MedicineTile(med: m),
+              ] else
+                const Text('No medicines on your reminder list yet.'),
+              if (prescriptions.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text('From your doctor', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                for (final p in prescriptions)
+                  _PrescriptionTile(
+                    prescription: p,
+                    tracked: alreadyTracked(p.medicationDetails, list.map((m) => m.name)),
+                  ),
+              ],
             ],
           );
         },
@@ -254,6 +276,41 @@ class _BackgroundBanner extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// D-49: the doctor's prescriptions, which the patient can copy into their reminders.
+class _PrescriptionTile extends StatelessWidget {
+  const _PrescriptionTile({required this.prescription, required this.tracked});
+
+  final Prescription prescription;
+  final bool tracked;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = prescription;
+    final issued = toMyt(p.issuedAt);
+    return Card(
+      key: Key('rx-${p.id}'),
+      child: ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.receipt_long_outlined)),
+        title: Text(p.medicationDetails),
+        subtitle: Text(
+          'Prescribed ${issued.day} ${_months[issued.month - 1]} ${issued.year}'
+          '${p.isRecurring ? ' • repeats monthly' : ''}',
+        ),
+        trailing: tracked
+            ? const Chip(label: Text('On your list'))
+            : TextButton(
+                key: Key('rx-add-${p.id}'),
+                onPressed: () => context.push(
+                  '/medications/add',
+                  extra: draftFromPrescription(p.medicationDetails),
+                ),
+                child: const Text('Add to my reminders'),
+              ),
       ),
     );
   }
@@ -395,9 +452,22 @@ class _DoseTile extends StatelessWidget {
     final taken = dose.state == DoseState.taken;
     final trailing = switch (dose.state) {
       DoseState.taken => Chip(
-        label: Text(dose.confirmedAt == null ? 'Taken' : 'Taken at ${_clock(dose.confirmedAt!)}'),
+        label: Text(
+          dose.confirmedAt == null
+              ? 'Taken'
+              : '${dose.isLate ? 'Taken late' : 'Taken'} at ${_clock(dose.confirmedAt!)}',
+        ),
       ),
-      DoseState.missed => Chip(label: const Text('Missed'), backgroundColor: scheme.errorContainer),
+      // D-49: a missed dose can still be recorded as taken late until midnight.
+      DoseState.missed =>
+        busy
+            ? const SizedBox.square(dimension: 24, child: CircularProgressIndicator())
+            : OutlinedButton(
+                key: Key('late-${med.id}-${dose.time.hhmm}'),
+                style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
+                onPressed: onTake,
+                child: const Text('Took it late'),
+              ),
       DoseState.upcoming => const Text('Upcoming'),
       DoseState.due =>
         busy
@@ -416,7 +486,10 @@ class _DoseTile extends StatelessWidget {
           med.name,
           style: taken ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
         ),
-        subtitle: Text('${med.dosage} • ${dose.time.label}'),
+        subtitle: Text(
+          '${med.dosage} • ${dose.time.label}'
+          '${dose.state == DoseState.missed ? ' • Missed' : ''}',
+        ),
         trailing: trailing,
       ),
     );

@@ -768,3 +768,22 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   Honor/Huawei "App launch" and Xiaomi "Autostart" steps and opens CareFlow's settings page
   (no app can flip those switches itself). Added `permission_handler` 12.0.1 (13.x needs
   Android SDK 37, not installed). Tests: 4 widget (353 total); patient APK build checked.
+
+### 2026-10-14 — Increment 3 — D-49 missed doses, adherence alerts, dose history, prescriptions
+- **Late doses:** the Meds tab still resets daily (today only). A missed dose shows "Took it
+  late" until midnight; the API turns the `missed` log into `taken` (only if still missed),
+  decrements stock and recounts adherence; "Taken late at …" when confirmed more than 2 h
+  after the dose time. No new field (lateness = `confirmedAt` − `scheduledTime`).
+- **Low-adherence alert:** new `clinical_alerts.type` `low_adherence` (moderate, push to the
+  doctor, at most one per patient per 7 days), raised by the 15-minute job for patients with a
+  newly missed dose when a scheduled medicine is below 80% over 7 days (≥3 doses) or its last
+  3 doses were missed. Shown as "Missed medication" in Priority alerts; the critical banner
+  adds "Combined with poor medication adherence" when such an alert is open (Fig 4.3.12.2).
+- **Doctor dose history:** under each medicine on the patient's Medications tab: last 14 days
+  summary (taken / late / missed), a dot per dose, the latest missed or late doses;
+  as-needed medicines show how often they were taken in the last 7 days.
+- **From your doctor:** the patient's Meds tab lists their prescriptions (also before any
+  medicine is added); "Add to my reminders" pre-fills the add form from the prescription
+  line (name, dosage, times from the fixed frequency list); "On your list" when already tracked.
+- Also: prescription page shows readable dose times.
+- Tests: backend 4; Flutter 21 (370 total).

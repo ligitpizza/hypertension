@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:hypertension/features/medications/state/medication_providers.dart';
+import 'package:hypertension/features/medications/data/medications_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -90,6 +92,29 @@ class FakePatientData implements DashboardRepository {
   Stream<List<Appointment>> upcomingAppointments(String patientId, DateTime from) =>
       Stream.value(const []);
 }
+
+/// D-49 dose history reads dose_logs through the medications repository.
+class FakeDoseLogs implements MedicationsRepository {
+  final logs = <String, List<DoseLog>>{};
+
+  @override
+  Stream<List<DoseLog>> doseLogs(String medicationId, DateTime since) =>
+      Stream.value(logs[medicationId] ?? const []);
+
+  @override
+  Stream<List<Prescription>> prescriptions(String patientId) => Stream.value(const []);
+
+  @override
+  Future<void> save(MedicationDraft draft, {String? id, bool acknowledge = false}) async {}
+
+  @override
+  Future<void> delete(String id) async {}
+
+  @override
+  Future<bool> confirmDose(String medicationId, {DateTime? scheduledTime}) async => false;
+}
+
+final doseLogs = FakeDoseLogs();
 
 class FakePortalRepository implements PortalRepository {
   List<PortalPatient> patients = const [];
@@ -206,6 +231,7 @@ Widget portal(FakePortalRepository repo, FakePatientData data, String location) 
   return ProviderScope(
     overrides: [
       portalRepositoryProvider.overrideWithValue(repo),
+      medicationsRepositoryProvider.overrideWithValue(doseLogs),
       symptomRepositoryProvider.overrideWithValue(symptoms),
       dashboardRepositoryProvider.overrideWithValue(data),
       trendsRepositoryProvider.overrideWithValue(
@@ -315,6 +341,33 @@ void main() {
       ]);
     });
 
+    tallTest('D-49 critical banner mentions poor adherence when that alert is open', (t) async {
+      ClinicalAlert alert(String id, ClinicalAlertType type, RiskLevel level) => ClinicalAlert(
+        id: id,
+        patientId: 'p1',
+        type: type,
+        severity: level,
+        message: type == ClinicalAlertType.lowAdherence
+            ? 'Low medication adherence. Losartan 50mg: last 3 doses missed.'
+            : 'EMERGENCY: Siti Aminah logged 185/112 mmHg.',
+        status: ClinicalAlertStatus.open,
+        createdAt: now,
+      );
+      repo.alerts = [alert('a1', ClinicalAlertType.threshold, RiskLevel.critical)];
+      await t.pumpWidget(portal(repo, data, '/doctor'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('banner-adherence')), findsNothing);
+      repo.alerts = [
+        alert('a1', ClinicalAlertType.threshold, RiskLevel.critical),
+        alert('a3', ClinicalAlertType.lowAdherence, RiskLevel.moderate),
+      ];
+      await t.pumpWidget(Container());
+      await t.pumpWidget(portal(repo, data, '/doctor'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('banner-adherence')), findsOneWidget);
+      expect(find.textContaining('Missed medication'), findsOneWidget);
+    });
+
     tallTest('UC8.3 tapping a patient opens their record', (t) async {
       await t.pumpWidget(portal(repo, data, '/doctor'));
       await t.pumpAndSettle();
@@ -402,6 +455,57 @@ void main() {
       data.live!.add([reading('p1', 132, 84), reading('p1', 150, 95)]);
       await t.pumpAndSettle();
       expect(repo.effectCalls, greaterThan(before));
+    });
+
+    tallTest('D-49 doctor sees the last 14 days of each medicine', (t) async {
+      final at = now.toUtc().subtract(const Duration(days: 1));
+      data.meds['p1'] = const [
+        Medication(id: 'm1', patientId: 'p1', name: 'Losartan', dosage: '50mg', schedule: '08:00'),
+        Medication(
+          id: 'm2',
+          patientId: 'p1',
+          name: 'Ibuprofen',
+          dosage: '400mg',
+          schedule: 'as_needed',
+        ),
+      ];
+      doseLogs.logs
+        ..['m1'] = [
+          DoseLog(id: 'a', medicationId: 'm1', scheduledTime: at, status: 'missed'),
+          DoseLog(
+            id: 'b',
+            medicationId: 'm1',
+            scheduledTime: at.subtract(const Duration(days: 1)),
+            status: 'taken',
+            confirmedAt: at.subtract(const Duration(days: 1)).add(const Duration(hours: 3)),
+          ),
+          DoseLog(
+            id: 'c',
+            medicationId: 'm1',
+            scheduledTime: at.subtract(const Duration(days: 2)),
+            status: 'taken',
+            confirmedAt: at.subtract(const Duration(days: 2)),
+          ),
+        ]
+        ..['m2'] = [
+          for (var i = 0; i < 4; i++)
+            DoseLog(
+              id: 'p$i',
+              medicationId: 'm2',
+              scheduledTime: at.subtract(Duration(hours: i)),
+              status: 'taken',
+              confirmedAt: at.subtract(Duration(hours: i)),
+            ),
+        ];
+      addTearDown(() {
+        data.meds.remove('p1');
+        doseLogs.logs.clear();
+      });
+      await openMeds(t);
+      expect(find.text('Last 14 days: 2 taken (1 late) · 1 missed'), findsOneWidget);
+      expect(find.textContaining('taken 3 h late'), findsOneWidget);
+      expect(find.textContaining(': missed'), findsOneWidget);
+      expect(find.textContaining('As needed: taken 4× in the last 7 days'), findsOneWidget);
     });
 
     tallTest('explains why there is nothing to compare', (t) async {

@@ -1,3 +1,4 @@
+import '../../features/medications/data/medications_repository.dart';
 import '../../features/medications/presentation/medication_form_page.dart';
 import '../../features/medications/presentation/medications_page.dart';
 import '../../features/messaging/presentation/chat_thread_page.dart';
@@ -50,7 +51,13 @@ final List<RouteBase> patientFeatureRoutes = [
   GoRoute(path: '/settings/contact', builder: (_, _) => const ContactDetailsPage()),
   GoRoute(path: '/settings/health', builder: (_, _) => const HealthProfilePage()),
   GoRoute(path: '/settings/privacy', builder: (_, _) => const DataPrivacyPage()),
-  GoRoute(path: '/medications/add', builder: (_, _) => const MedicationFormPage()),
+  GoRoute(
+    path: '/medications/add',
+    // Optional draft from a doctor's prescription (D-49 "Add to my reminders").
+    builder: (_, state) => MedicationFormPage(
+      prefill: state.extra is MedicationDraft ? state.extra! as MedicationDraft : null,
+    ),
+  ),
   GoRoute(
     path: '/medications/edit',
     redirect: (_, state) => state.extra is Medication ? null : '/medications',

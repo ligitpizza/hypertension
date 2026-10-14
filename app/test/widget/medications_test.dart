@@ -27,15 +27,21 @@ class FakeMedicationsRepository implements MedicationsRepository {
   final deleted = <String>[];
   Object? confirmError;
   MedicationWarnings? warnings;
+  bool late = false;
+  List<Prescription> rx = const [];
+
+  @override
+  Stream<List<Prescription>> prescriptions(String patientId) => Stream.value(rx);
 
   @override
   Stream<List<DoseLog>> doseLogs(String medicationId, DateTime since) =>
       Stream.value(logs[medicationId] ?? const []);
 
   @override
-  Future<void> confirmDose(String medicationId, {DateTime? scheduledTime}) async {
+  Future<bool> confirmDose(String medicationId, {DateTime? scheduledTime}) async {
     if (confirmError != null) throw confirmError!;
     confirmed.add((medicationId, scheduledTime));
+    return late;
   }
 
   @override
@@ -121,7 +127,12 @@ Widget app(
     initialExtra: extra,
     routes: [
       GoRoute(path: '/medications', builder: (_, _) => const MedicationsPage()),
-      GoRoute(path: '/medications/add', builder: (_, _) => const MedicationFormPage()),
+      GoRoute(
+        path: '/medications/add',
+        builder: (_, s) => MedicationFormPage(
+          prefill: s.extra is MedicationDraft ? s.extra! as MedicationDraft : null,
+        ),
+      ),
       GoRoute(
         path: '/medications/edit',
         builder: (_, s) => MedicationFormPage(existing: s.extra! as Medication),
@@ -141,6 +152,7 @@ Widget app(
       doseRemindersProvider.overrideWithValue(reminders ?? FakeReminders()),
       backgroundAccessProvider.overrideWithValue(background ?? FakeBackground()),
       medicationsProvider.overrideWith((ref) => Stream.value(meds)),
+      authUidProvider.overrideWith((ref) => Stream.value('p1')),
       nowProvider.overrideWithValue(() => now),
       currentUserProvider.overrideWith(
         (ref) => Stream.value(
@@ -288,6 +300,84 @@ void main() {
     );
     await t.pumpAndSettle();
     expect(find.byKey(const Key('exact-reminders-banner')), findsNothing);
+  });
+
+  group('D-49 late doses', () {
+    testWidgets('a missed dose offers "Took it late" and records it', (t) async {
+      final at = DateTime.utc(2026, 10, 14, 0); // 08:00 MYT, missed by noon
+      final repo = FakeMedicationsRepository()
+        ..late = true
+        ..logs['m1'] = [
+          DoseLog(id: 'm1_202610140800', medicationId: 'm1', scheduledTime: at, status: 'missed'),
+        ];
+      await t.pumpWidget(app(repo, [med('m1', 'Lisinopril', '08:00')]));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Missed'), findsOneWidget);
+      await t.tap(find.byKey(const Key('late-m1-08:00')));
+      await t.pumpAndSettle();
+      expect(repo.confirmed, [('m1', at)]);
+      expect(find.text('Lisinopril recorded as taken late.'), findsOneWidget);
+    });
+
+    testWidgets('a dose taken late says so', (t) async {
+      final at = DateTime.utc(2026, 10, 14, 0);
+      final repo = FakeMedicationsRepository()
+        ..logs['m1'] = [
+          DoseLog(
+            id: 'm1_202610140800',
+            medicationId: 'm1',
+            scheduledTime: at,
+            status: 'taken',
+            confirmedAt: at.add(const Duration(hours: 3)),
+          ),
+        ];
+      await t.pumpWidget(app(repo, [med('m1', 'Lisinopril', '08:00')]));
+      await t.pumpAndSettle();
+      expect(find.text('Taken late at 11:00 AM'), findsOneWidget);
+    });
+  });
+
+  group('D-49 From your doctor', () {
+    final losartan = Prescription(
+      id: 'rx1',
+      medicationDetails: 'Losartan 50mg, Twice daily, for 3 months',
+      isRecurring: true,
+      issuedAt: DateTime.utc(2026, 10, 13, 15),
+    );
+
+    testWidgets('shown even before the patient adds any medicine', (t) async {
+      final repo = FakeMedicationsRepository()..rx = [losartan];
+      await t.pumpWidget(app(repo, const []));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('meds-empty')), findsNothing);
+      expect(find.text('Losartan 50mg, Twice daily, for 3 months'), findsOneWidget);
+      expect(find.textContaining('repeats monthly'), findsOneWidget);
+    });
+
+    testWidgets('Add to my reminders pre-fills the form', (t) async {
+      final repo = FakeMedicationsRepository()..rx = [losartan];
+      await t.pumpWidget(app(repo, const []));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('rx-add-rx1')));
+      await t.pumpAndSettle();
+      expect(find.text('Add medication'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Losartan'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '50mg'), findsOneWidget);
+      expect(find.byKey(const Key('time-08:00')), findsOneWidget);
+      expect(find.byKey(const Key('time-20:00')), findsOneWidget);
+      await t.tap(find.byKey(const Key('save-medication')));
+      await t.pumpAndSettle();
+      expect(repo.saved.single.$1.schedule, '08:00,20:00');
+    });
+
+    testWidgets('a prescription already on the list is marked', (t) async {
+      final repo = FakeMedicationsRepository()..rx = [losartan];
+      await t.pumpWidget(app(repo, [med('m1', 'Losartan', '08:00')]));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const Key('rx-rx1')), 200);
+      expect(find.text('On your list'), findsOneWidget);
+      expect(find.byKey(const Key('rx-add-rx1')), findsNothing);
+    });
   });
 
   group('battery saving prompt', () {

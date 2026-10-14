@@ -11,10 +11,13 @@ import '../state/medication_providers.dart';
 
 /// UC5.1 add / edit a medication, with UC5.1 E1 duplicate and UC5.6 interaction warnings.
 class MedicationFormPage extends ConsumerStatefulWidget {
-  const MedicationFormPage({super.key, this.existing});
+  const MedicationFormPage({super.key, this.existing, this.prefill});
 
   /// Null when adding.
   final Medication? existing;
+
+  /// D-49: values copied from a doctor's prescription ("Add to my reminders").
+  final MedicationDraft? prefill;
 
   @override
   ConsumerState<MedicationFormPage> createState() => _MedicationFormPageState();
@@ -22,18 +25,20 @@ class MedicationFormPage extends ConsumerStatefulWidget {
 
 class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
   final _form = GlobalKey<FormState>();
-  late final _name = TextEditingController(text: widget.existing?.name);
-  late final _dosage = TextEditingController(text: widget.existing?.dosage);
+  late final _name = TextEditingController(text: widget.existing?.name ?? widget.prefill?.name);
+  late final _dosage = TextEditingController(
+    text: widget.existing?.dosage ?? widget.prefill?.dosage,
+  );
+  late final String? _initialSchedule = widget.existing?.schedule ?? widget.prefill?.schedule;
   late final _quantity = TextEditingController(
     text: widget.existing?.quantityOnHand?.toStringAsFixed(0),
   );
   late final _threshold = TextEditingController(
     text: '${widget.existing?.refillThresholdDays ?? 7}',
   );
-  late bool _asNeeded =
-      widget.existing != null && tryParseSchedule(widget.existing!.schedule) == null;
+  late bool _asNeeded = _initialSchedule != null && tryParseSchedule(_initialSchedule) == null;
   late final List<DoseTime> _times = [
-    ...?(widget.existing == null ? null : tryParseSchedule(widget.existing!.schedule)),
+    ...?(_initialSchedule == null ? null : tryParseSchedule(_initialSchedule)),
   ];
   bool _saving = false;
   String? _error;

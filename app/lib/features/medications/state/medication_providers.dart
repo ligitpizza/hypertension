@@ -6,6 +6,7 @@ import '../../../shared/models/health_models.dart';
 import '../../../shared/providers/api_providers.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
+import '../../provider_portal/domain/portal_models.dart';
 import '../data/background_access.dart';
 import '../data/dose_reminders.dart';
 import '../data/medications_repository.dart';
@@ -63,4 +64,11 @@ final backgroundAccessProvider = Provider<BackgroundAccess>(
 final backgroundPromptProvider = FutureProvider.autoDispose<bool>((ref) async {
   final access = ref.watch(backgroundAccessProvider);
   return !await access.unrestricted() && !await access.dismissed();
+}, retry: (_, _) => null);
+
+/// D-49 "From your doctor": the signed-in patient's prescriptions.
+final myPrescriptionsProvider = StreamProvider<List<Prescription>>((ref) {
+  final uid = ref.watch(authUidProvider).value;
+  if (uid == null) return Stream.value(const []);
+  return ref.watch(medicationsRepositoryProvider).prescriptions(uid);
 }, retry: (_, _) => null);

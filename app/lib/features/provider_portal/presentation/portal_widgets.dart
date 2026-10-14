@@ -128,6 +128,7 @@ String alertTypeLabel(ClinicalAlertType t) => switch (t) {
   ClinicalAlertType.medicationReview => 'Medication review',
   ClinicalAlertType.triage => 'Symptom triage',
   ClinicalAlertType.flaggedMessage => 'Flagged message',
+  ClinicalAlertType.lowAdherence => 'Missed medication',
 };
 
 /// "Raised 14 Oct 2026, 11:32 PM · Acknowledged 14 Oct 2026, 11:40 PM" (history tab).

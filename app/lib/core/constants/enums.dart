@@ -354,7 +354,8 @@ enum ClinicalAlertType {
   deterioration('deterioration'),
   medicationReview('medication_review'),
   triage('triage'),
-  flaggedMessage('flagged_message');
+  flaggedMessage('flagged_message'),
+  lowAdherence('low_adherence'); // D-49
 
   const ClinicalAlertType(this.value);
   final String value;

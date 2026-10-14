@@ -52,13 +52,17 @@ abstract interface class MedicationsRepository {
   /// dose_logs for one medication since [since] (UC5.3, UC5.5).
   Stream<List<DoseLog>> doseLogs(String medicationId, DateTime since);
 
+  /// D-49: the doctor's prescriptions for this patient, newest first.
+  Stream<List<Prescription>> prescriptions(String patientId);
+
   /// Add (id null) or edit. Throws [MedicationWarnings] until [acknowledge] is true.
   Future<void> save(MedicationDraft draft, {String? id, bool acknowledge = false});
 
   Future<void> delete(String id);
 
-  /// Throws [ApiException] (e.g. DOSE_ALREADY_LOGGED).
-  Future<void> confirmDose(String medicationId, {DateTime? scheduledTime});
+  /// Throws [ApiException] (e.g. DOSE_ALREADY_LOGGED). True when a missed dose was
+  /// corrected as taken late (D-49).
+  Future<bool> confirmDose(String medicationId, {DateTime? scheduledTime});
 }
 
 class ApiMedicationsRepository implements MedicationsRepository {
@@ -77,6 +81,15 @@ class ApiMedicationsRepository implements MedicationsRepository {
       .map((s) => [for (final d in s.docs) DoseLog.fromFirestore(d.id, d.data())]);
 
   @override
+  Stream<List<Prescription>> prescriptions(String patientId) => _db
+      .collection(Collections.prescriptions)
+      .where('patientId', isEqualTo: patientId)
+      .orderBy('issuedAt', descending: true)
+      .limit(50)
+      .snapshots()
+      .map((s) => [for (final d in s.docs) Prescription.fromFirestore(d.id, d.data())]);
+
+  @override
   Future<void> save(MedicationDraft draft, {String? id, bool acknowledge = false}) async {
     final body = draft.toJson(acknowledgeWarnings: acknowledge);
     try {
@@ -91,6 +104,6 @@ class ApiMedicationsRepository implements MedicationsRepository {
   Future<void> delete(String id) => _api.deleteMedication(id);
 
   @override
-  Future<void> confirmDose(String medicationId, {DateTime? scheduledTime}) =>
-      _api.confirmDose(medicationId, scheduledTime: scheduledTime);
+  Future<bool> confirmDose(String medicationId, {DateTime? scheduledTime}) async =>
+      (await _api.confirmDose(medicationId, scheduledTime: scheduledTime))['late'] == true;
 }

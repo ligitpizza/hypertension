@@ -55,6 +55,10 @@ class _DoctorDashboardPageState extends ConsumerState<DoctorDashboardPage> {
         _CriticalBanner(
           alert: banner,
           patientName: names[banner.patientId],
+          // Fig 4.3.12.2 / D-49: very high readings with poor adherence.
+          poorAdherence: (alerts.value ?? const []).any(
+            (a) => a.patientId == banner.patientId && a.type == ClinicalAlertType.lowAdherence,
+          ),
           onReview: () => context.go('/doctor/patient/${banner.patientId}'),
           onDismiss: () => _close(banner, ClinicalAlertStatus.dismissed),
         ),
@@ -249,10 +253,12 @@ class _CriticalBanner extends StatelessWidget {
     required this.patientName,
     required this.onReview,
     required this.onDismiss,
+    this.poorAdherence = false,
   });
 
   final ClinicalAlert alert;
   final String? patientName;
+  final bool poorAdherence;
   final VoidCallback onReview;
   final VoidCallback onDismiss;
 
@@ -282,6 +288,15 @@ class _CriticalBanner extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(alert.message, style: const TextStyle(color: Colors.white)),
+            if (poorAdherence)
+              const Padding(
+                key: Key('banner-adherence'),
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                  'Combined with poor medication adherence (missed doses).',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,

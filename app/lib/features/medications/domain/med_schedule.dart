@@ -10,6 +10,14 @@ const asNeeded = 'as_needed';
 /// A dose may be confirmed up to an hour early (matches the API's EARLY_CONFIRM).
 const earlyConfirm = Duration(hours: 1);
 
+/// After this, an unconfirmed dose is missed (the API's MISSED_WINDOW); taking it later
+/// counts as "taken late" (D-49).
+const missedWindow = Duration(hours: 2);
+
+/// D-49: confirmed after the missed window.
+bool takenLate(DateTime scheduled, DateTime? confirmedAt) =>
+    confirmedAt != null && confirmedAt.difference(scheduled) > missedWindow;
+
 class DoseTime implements Comparable<DoseTime> {
   const DoseTime(this.hour, this.minute);
 
@@ -130,6 +138,8 @@ class ScheduledDose {
   final DateTime? confirmedAt;
 
   DosePeriod get period => DosePeriod.of(time);
+
+  bool get isLate => takenLate(moment, confirmedAt);
 }
 
 /// Today's scheduled doses (MYT), sorted by time, with their state from dose_logs.
