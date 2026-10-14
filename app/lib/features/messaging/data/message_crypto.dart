@@ -151,15 +151,33 @@ class MessageCrypto {
     required String recipientId,
     required String recipientPublicKey,
   }) async {
+    final sealed = await encryptBytes(
+      bytes: utf8.encode(text),
+      senderId: senderId,
+      recipientId: recipientId,
+      recipientPublicKey: recipientPublicKey,
+    );
+    return (encryptedText: base64Encode(sealed.bytes), senderPublicKey: sealed.senderPublicKey);
+  }
+
+  /// D-52: the same AES-256-GCM sealing for an attachment's bytes. [purpose] goes into
+  /// the authenticated data, so a file can't be swapped in for a text and vice versa.
+  Future<({Uint8List bytes, String senderPublicKey})> encryptBytes({
+    required List<int> bytes,
+    required String senderId,
+    required String recipientId,
+    required String recipientPublicKey,
+    String purpose = '',
+  }) async {
     final mine = await _vault.keyPair(senderId);
     final key = await _conversationKey(mine, recipientPublicKey, senderId, recipientId);
     final box = await _aes.encrypt(
-      utf8.encode(text),
+      bytes,
       secretKey: key,
-      aad: utf8.encode('$senderId>$recipientId'),
+      aad: utf8.encode('$senderId>$recipientId$purpose'),
     );
     final packed = Uint8List.fromList([...box.nonce, ...box.cipherText, ...box.mac.bytes]);
-    return (encryptedText: base64Encode(packed), senderPublicKey: await publicKey(senderId));
+    return (bytes: packed, senderPublicKey: await publicKey(senderId));
   }
 
   /// Decrypts a stored message for [me] (sender or recipient). Throws
@@ -171,6 +189,25 @@ class MessageCrypto {
     required String encryptedText,
     required String senderPublicKey,
     required String recipientPublicKey,
+  }) async => utf8.decode(
+    await decryptBytes(
+      me: me,
+      senderId: senderId,
+      recipientId: recipientId,
+      bytes: base64Decode(encryptedText),
+      senderPublicKey: senderPublicKey,
+      recipientPublicKey: recipientPublicKey,
+    ),
+  );
+
+  Future<List<int>> decryptBytes({
+    required String me,
+    required String senderId,
+    required String recipientId,
+    required List<int> bytes,
+    required String senderPublicKey,
+    required String recipientPublicKey,
+    String purpose = '',
   }) async {
     final mine = await _vault.keyPair(me);
     final myPublic = base64Encode((await mine.extractPublicKey()).bytes);
@@ -180,18 +217,12 @@ class MessageCrypto {
     }
     final other = iAmSender ? recipientPublicKey : senderPublicKey;
     final key = await _conversationKey(mine, other, senderId, recipientId);
-    final bytes = base64Decode(encryptedText);
     final nonceLength = _aes.nonceLength;
     final box = SecretBox(
       bytes.sublist(nonceLength, bytes.length - 16),
       nonce: bytes.sublist(0, nonceLength),
       mac: Mac(bytes.sublist(bytes.length - 16)),
     );
-    final clear = await _aes.decrypt(
-      box,
-      secretKey: key,
-      aad: utf8.encode('$senderId>$recipientId'),
-    );
-    return utf8.decode(clear);
+    return _aes.decrypt(box, secretKey: key, aad: utf8.encode('$senderId>$recipientId$purpose'));
   }
 }

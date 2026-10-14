@@ -105,3 +105,36 @@ describe('UC10.3 E1 dismissing a flag', () => {
     await assertFails(updateDoc(doc(doctor(), 'messages/m1'), { encryptedText: 'x' }));
   });
 });
+
+describe('D-52 attachments', () => {
+  const withFile = (id, extra = {}) =>
+    msg(P, DOCTOR, {
+      attachmentPath: `message_attachments/${P}/${DOCTOR}/${id}`,
+      attachmentType: 'image',
+      attachmentSize: 2048,
+      attachmentName: 'encrypted-name',
+      encryptedText: '',
+      ...extra,
+    });
+
+  test('a photo message with its file in the sender->recipient folder', async () => {
+    await assertSucceeds(setDoc(doc(patient(), 'messages/f1'), withFile('f1')));
+  });
+  test('a PDF from the doctor to their patient', async () => {
+    const m = msg(DOCTOR, P, {
+      attachmentPath: `message_attachments/${DOCTOR}/${P}/f2`,
+      attachmentType: 'pdf', attachmentSize: 50000, attachmentName: 'n',
+    });
+    await assertSucceeds(setDoc(doc(doctor(), 'messages/f2'), m));
+  });
+  test('the file must be under this message id and the sender folder', async () => {
+    await assertFails(setDoc(doc(patient(), 'messages/f3'), withFile('other-id')));
+    await assertFails(setDoc(doc(patient(), 'messages/f4'), {
+      ...withFile('f4'), attachmentPath: `message_attachments/${DOCTOR}/${P}/f4`,
+    }));
+  });
+  test('only images and PDFs up to 10 MB', async () => {
+    await assertFails(setDoc(doc(patient(), 'messages/f5'), withFile('f5', { attachmentType: 'exe' })));
+    await assertFails(setDoc(doc(patient(), 'messages/f6'), withFile('f6', { attachmentSize: 10485761 })));
+  });
+});

@@ -188,10 +188,12 @@ def slot_today(at: time) -> str:
 
 @pytest.fixture
 def daily_now(med_repo: InMemoryMedicationRepository) -> time:
-    """A dose time just before 'now' (MYT), so it can be confirmed."""
+    """A dose time just before 'now' (MYT), so it can be confirmed, and always on today's
+    Malaysian date (just after midnight it is 00:00, not yesterday's 23:55)."""
     from app.services.medications import MYT
 
-    local = datetime.now(UTC).astimezone(MYT) - timedelta(minutes=5)
+    now = datetime.now(UTC).astimezone(MYT)
+    local = max(now - timedelta(minutes=5), now.replace(hour=0, minute=0, second=0, microsecond=0))
     return time(local.hour, local.minute)
 
 

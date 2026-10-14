@@ -96,3 +96,26 @@ def test_only_the_sender_can_notify(
 def test_unknown_message_is_404(client: TestClient) -> None:
     res = client.post("/api/v1/messages/nope/notify", headers=bearer("patient-token"))
     assert res.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("kind", "body"), [("image", "Sent you a photo."), ("pdf", "Sent you a document.")]
+)
+def test_d52_attachment_push_says_what_was_sent_but_not_what_it_is(
+    client: TestClient,
+    message_repo: InMemoryMessageRepository,
+    push: LogPushClient,
+    kind: str,
+    body: str,
+) -> None:
+    stored(
+        message_repo,
+        "m1",
+        encryptedText="",
+        attachmentPath=f"message_attachments/{P}/{D}/m1",
+        attachmentType=kind,
+        attachmentName="b64-encrypted-name",
+    )
+    client.post("/api/v1/messages/m1/notify", headers=bearer("patient-token"))
+    [(_, msg)] = push.sent
+    assert msg.body == body and "b64" not in msg.body

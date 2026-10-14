@@ -809,3 +809,17 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   and gender from it; Settings → Personal information lets existing patients add it (and
   updates DOB/gender). The portal shows it masked (900101-**-**77); the export includes it.
   Family members are not asked. Tests: backend 9; Flutter 12 (394 total).
+- **D-52 message attachments:** paperclip in the chat (patient app and doctor portal):
+  photo from gallery, camera (phone only; asks for camera permission) or PDF, up to 10 MB
+  (photos resized to 1920 px / quality 80, location metadata not kept). The file and its
+  name are encrypted on the device with the conversation key (AES-256-GCM, separate
+  authenticated purpose so a file can never pass as text), uploaded to Storage
+  `message_attachments/{sender}/{recipient}/{messageId}` as opaque bytes, then the message
+  is stored with `attachmentPath/Type/Size/Name`; any typed text becomes the caption (still
+  keyword-scanned). Photos display in the thread (tap to zoom); PDFs open via the share
+  sheet (download on the web). Push says "Sent you a photo/document." Rules: Firestore
+  checks the path matches sender/recipient/message id, type and size; Storage lets only the
+  sender create (no overwrite or delete), octet-stream only, ≤ 10 MB, read by the two
+  people only. Attachments need a connection (text still queues offline).
+  Tests: rules 8 new (168 total); backend 2; Flutter 7 (401 total). Packages: file_picker,
+  image_picker.

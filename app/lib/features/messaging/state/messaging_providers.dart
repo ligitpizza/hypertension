@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../shared/providers/api_providers.dart';
+import '../data/attachment_picker.dart';
 import '../data/message_crypto.dart';
 import '../data/messaging_repository.dart';
 import '../domain/keyword_scanner.dart';
@@ -27,6 +28,16 @@ final messagingRepositoryProvider = Provider<MessagingRepository>(
     ref.watch(keywordScannerProvider.future),
   ),
 );
+
+/// D-52 photo / PDF chooser.
+final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => DeviceAttachmentPicker());
+
+/// (me, attachment) -> decrypted bytes; kept while shown so scrolling doesn't re-download.
+final attachmentBytesProvider = FutureProvider.autoDispose
+    .family<Uint8List, (String, ChatAttachment)>(
+      (ref, key) => ref.watch(messagingRepositoryProvider).openAttachment(key.$1, key.$2),
+      retry: _noRetry,
+    );
 
 final contactProvider = StreamProvider.family<Contact?, String>(
   (ref, uid) => ref.watch(messagingRepositoryProvider).contact(uid),

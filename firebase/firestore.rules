@@ -162,6 +162,17 @@ service cloud.firestore {
              == request.auth.uid);
     }
 
+    // D-52: an attachment must live in the sender->recipient folder under this message's id.
+    function validAttachment(d, messageId) {
+      return !('attachmentPath' in d)
+        || (d.attachmentPath == 'message_attachments/' + d.senderId + '/' + d.recipientId
+                                 + '/' + messageId
+            && d.attachmentType in ['image', 'pdf']
+            && d.attachmentSize is int && d.attachmentSize > 0
+            && d.attachmentSize <= 10485760
+            && d.attachmentName is string && d.attachmentName.size() < 2000);
+    }
+
     match /messages/{messageId} {
       allow read: if signedIn()
         && (resource.data.senderId == request.auth.uid
@@ -169,7 +180,9 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['senderId', 'recipientId', 'encryptedText',
-             'isFlagged', 'sentAt', 'senderPublicKey', 'recipientPublicKey'])
+             'isFlagged', 'sentAt', 'senderPublicKey', 'recipientPublicKey',
+             'attachmentPath', 'attachmentType', 'attachmentSize', 'attachmentName'])
+        && validAttachment(request.resource.data, messageId)
         && request.resource.data.senderId == request.auth.uid
         && request.resource.data.encryptedText is string
         && request.resource.data.encryptedText.size() < 20000

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,10 +10,13 @@ import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/auth/domain/app_user.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
+import 'package:hypertension/features/messaging/data/attachment_picker.dart';
 import 'package:hypertension/features/messaging/data/messaging_repository.dart';
 import 'package:hypertension/features/messaging/presentation/chat_thread_page.dart';
 import 'package:hypertension/features/messaging/presentation/inbox_pages.dart';
 import 'package:hypertension/features/messaging/state/messaging_providers.dart';
+import 'package:hypertension/features/settings/data/settings_repository.dart';
+import 'package:hypertension/features/settings/state/settings_providers.dart';
 import 'package:hypertension/features/staff_shell/staff_shell.dart';
 import 'package:hypertension/shared/models/health_models.dart';
 
@@ -48,7 +52,134 @@ class FakeMessagingRepository implements MessagingRepository {
 
   @override
   Future<void> clearFlag(String messageId) async => cleared.add(messageId);
+
+  final attachments = <(String name, AttachmentType type, String caption)>[];
+  Uint8List fileBytes = Uint8List.fromList(_png);
+
+  @override
+  Future<bool> sendAttachment({
+    required String me,
+    required Contact to,
+    required Uint8List bytes,
+    required String fileName,
+    required AttachmentType type,
+    String caption = '',
+  }) async {
+    if (bytes.length > maxAttachmentBytes) throw const AttachmentTooLargeException();
+    attachments.add((fileName, type, caption));
+    return false;
+  }
+
+  @override
+  Future<Uint8List> openAttachment(String me, ChatAttachment attachment) async => fileBytes;
 }
+
+/// A 1x1 transparent PNG, so Image.memory can decode it in tests.
+const _png = <int>[
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1F,
+  0x15,
+  0xC4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x78,
+  0x9C,
+  0x63,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0x0D,
+  0x0A,
+  0x2D,
+  0xB4,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4E,
+  0x44,
+  0xAE,
+  0x42,
+  0x60,
+  0x82,
+];
+
+class FakePicker implements AttachmentPicker {
+  PickedAttachment? next;
+
+  @override
+  bool get hasCamera => true;
+
+  @override
+  Future<PickedAttachment?> photo({required bool camera}) async => next;
+
+  @override
+  Future<PickedAttachment?> pdf() async => next;
+}
+
+class FakeSharer implements FileSharer {
+  final shared = <String>[];
+
+  @override
+  Future<void> share(Uint8List bytes, {required String fileName, required String mimeType}) async =>
+      shared.add('$fileName|$mimeType');
+}
+
+final picker = FakePicker();
+final sharer = FakeSharer();
+
+ChatAttachment attachment(String path, AttachmentType type, {String? name = 'lab.pdf'}) =>
+    ChatAttachment(
+      path: path,
+      type: type,
+      size: 52000,
+      name: name,
+      senderId: 'd1',
+      recipientId: 'p1',
+      senderPublicKey: 'a',
+      recipientPublicKey: 'b',
+    );
 
 ChatMessage msg(String id, String text, {bool mine = false, bool flagged = false, int min = 0}) =>
     ChatMessage(
@@ -84,6 +215,8 @@ Widget chatApp(FakeMessagingRepository repo, AppUser me, String location) {
   return ProviderScope(
     overrides: [
       messagingRepositoryProvider.overrideWithValue(repo),
+      attachmentPickerProvider.overrideWithValue(picker),
+      fileSharerProvider.overrideWithValue(sharer),
       authUidProvider.overrideWith((ref) => Stream.value(me.uid)),
       currentUserProvider.overrideWith((ref) => Stream.value(me)),
       carePlanProvider.overrideWith(
@@ -98,6 +231,8 @@ void main() {
   late FakeMessagingRepository repo;
   setUp(() {
     repo = FakeMessagingRepository();
+    picker.next = null;
+    sharer.shared.clear();
     SharedPreferences.setMockInitialValues({}); // per-device unread state (D-42)
   });
 
@@ -202,5 +337,100 @@ void main() {
     final d = staffDestinations(UserRole.doctor);
     expect(d[selectedDestination(d, '/doctor/messages/p1')].label, 'Messages');
     expect(d[selectedDestination(d, '/doctor/patient/p1')].label, 'Patients');
+  });
+
+  group('D-52 attachments', () {
+    Future<void> openChat(WidgetTester t) async {
+      await t.pumpWidget(chatApp(repo, user(UserRole.patient, doctor: 'd1'), '/chat/d1'));
+      await t.pumpAndSettle();
+    }
+
+    tallTest('a photo is sent with the typed text as its caption', (t) async {
+      picker.next = PickedAttachment(
+        bytes: Uint8List.fromList(_png),
+        name: 'rash.jpg',
+        type: AttachmentType.image,
+      );
+      await openChat(t);
+      await t.enterText(find.byKey(const Key('chat-input')), 'Is this a reaction?');
+      await t.tap(find.byKey(const Key('chat-attach')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('attach-camera')), findsOneWidget);
+      await t.tap(find.byKey(const Key('attach-gallery')));
+      await t.pumpAndSettle();
+      expect(repo.attachments, [('rash.jpg', AttachmentType.image, 'Is this a reaction?')]);
+      expect(find.widgetWithText(TextField, 'Is this a reaction?'), findsNothing);
+    });
+
+    tallTest('a PDF over 10 MB is refused with a clear message', (t) async {
+      picker.next = PickedAttachment(
+        bytes: Uint8List(maxAttachmentBytes + 1),
+        name: 'scan.pdf',
+        type: AttachmentType.pdf,
+      );
+      await openChat(t);
+      await t.tap(find.byKey(const Key('chat-attach')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('attach-pdf')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('larger than 10 MB'), findsOneWidget);
+      expect(repo.attachments, isEmpty);
+    });
+
+    tallTest('cancelling the picker sends nothing', (t) async {
+      await openChat(t);
+      await t.tap(find.byKey(const Key('chat-attach')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('attach-gallery')));
+      await t.pumpAndSettle();
+      expect(repo.attachments, isEmpty);
+      expect(find.byKey(const Key('chat-error')), findsNothing);
+    });
+
+    tallTest('received photos show in the thread; PDFs open with their name', (t) async {
+      repo.history = [
+        ChatMessage(
+          id: 'm1',
+          fromMe: false,
+          text: '',
+          isFlagged: false,
+          sentAt: now,
+          attachment: attachment('p/1', AttachmentType.image, name: 'xray.jpg'),
+        ),
+        ChatMessage(
+          id: 'm2',
+          fromMe: false,
+          text: 'Your lab results',
+          isFlagged: false,
+          sentAt: now,
+          attachment: attachment('p/2', AttachmentType.pdf),
+        ),
+      ];
+      await openChat(t);
+      expect(
+        find.descendant(of: find.byKey(const Key('attachment-p/1')), matching: find.byType(Image)),
+        findsOneWidget,
+      );
+      expect(find.text('lab.pdf · 51 KB'), findsOneWidget);
+      expect(find.text('Your lab results'), findsOneWidget);
+      await t.tap(find.byKey(const Key('attachment-p/2')));
+      await t.pumpAndSettle();
+      expect(sharer.shared, ['lab.pdf|application/pdf']);
+    });
+
+    tallTest('a file for an earlier device says so', (t) async {
+      repo.history = [
+        ChatMessage(
+          id: 'm1',
+          fromMe: false,
+          text: '',
+          isFlagged: false,
+          sentAt: now,
+          attachment: attachment('p/1', AttachmentType.pdf, name: null),
+        ),
+      ];
+      await openChat(t);
+      expect(find.textContaining('encrypted for an earlier device'), findsOneWidget);
+    });
   });
 }

@@ -87,4 +87,56 @@ void main() {
     final intruder = MessageCrypto(MemoryKeyVault());
     expect(() => read(intruder, 'd1', m), throwsA(isA<EarlierDeviceException>()));
   });
+
+  group('D-52 attachments', () {
+    test('a file decrypts to the same bytes at both ends', () async {
+      final doctorKey = await doctor.publicKey('d1');
+      final file = List<int>.generate(5000, (i) => i % 256);
+      final sealed = await patient.encryptBytes(
+        bytes: file,
+        senderId: 'p1',
+        recipientId: 'd1',
+        recipientPublicKey: doctorKey,
+        purpose: '|file',
+      );
+      expect(sealed.bytes, isNot(file));
+      for (final (who, me) in [(doctor, 'd1'), (patient, 'p1')]) {
+        final clear = await who.decryptBytes(
+          me: me,
+          senderId: 'p1',
+          recipientId: 'd1',
+          bytes: sealed.bytes,
+          senderPublicKey: sealed.senderPublicKey,
+          recipientPublicKey: doctorKey,
+          purpose: '|file',
+        );
+        expect(clear, file);
+      }
+    });
+
+    test(
+      'a file cannot be passed off as a text message (different authenticated purpose)',
+      () async {
+        final doctorKey = await doctor.publicKey('d1');
+        final sealed = await patient.encryptBytes(
+          bytes: utf8.encode('hello'),
+          senderId: 'p1',
+          recipientId: 'd1',
+          recipientPublicKey: doctorKey,
+          purpose: '|file',
+        );
+        expect(
+          () => doctor.decrypt(
+            me: 'd1',
+            senderId: 'p1',
+            recipientId: 'd1',
+            encryptedText: base64Encode(sealed.bytes),
+            senderPublicKey: sealed.senderPublicKey,
+            recipientPublicKey: doctorKey,
+          ),
+          throwsA(anything),
+        );
+      },
+    );
+  });
 }

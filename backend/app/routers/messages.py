@@ -27,7 +27,7 @@ router = APIRouter(prefix="/messages", tags=["messages"])
 
 class MessageRepository(Protocol):
     def message(self, message_id: str) -> dict[str, Any] | None:
-        """Metadata only is used (senderId, recipientId, isFlagged); never the text."""
+        """Metadata only (senderId, recipientId, isFlagged, attachmentType); never the text."""
         ...
 
     def user(self, uid: str) -> dict[str, Any] | None: ...
@@ -70,7 +70,10 @@ def notify(
         recipient_id,
         PushMessage(
             f"New message from {name}",
-            "Open CareFlow to read it.",  # E2E: the server cannot include the text
+            # E2E: the server cannot include the text; it only knows a file was attached (D-52).
+            {"image": "Sent you a photo.", "pdf": "Sent you a document."}.get(
+                str(msg.get("attachmentType")), "Open CareFlow to read it."
+            ),
             {"type": "message", "from": user.uid},
             urgent=bool(msg.get("isFlagged")),
         ),

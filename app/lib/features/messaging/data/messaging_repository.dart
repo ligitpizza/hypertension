@@ -1,6 +1,10 @@
 import 'dart:async';
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../../core/constants/enums.dart';
 import '../../../shared/services/api/api_client.dart';
@@ -26,6 +30,56 @@ class Contact {
   );
 }
 
+/// D-52 attachment kinds.
+enum AttachmentType {
+  image('image'),
+  pdf('pdf');
+
+  const AttachmentType(this.value);
+  final String value;
+
+  static AttachmentType? fromValue(Object? v) => values.where((e) => e.value == v).firstOrNull;
+}
+
+/// Largest attachment accepted (D-52), before encryption.
+const maxAttachmentBytes = 10 * 1024 * 1024;
+
+class AttachmentTooLargeException implements Exception {
+  const AttachmentTooLargeException();
+}
+
+/// An encrypted file in Storage plus what is needed to decrypt it (D-52).
+class ChatAttachment {
+  const ChatAttachment({
+    required this.path,
+    required this.type,
+    required this.size,
+    required this.name,
+    required this.senderId,
+    required this.recipientId,
+    required this.senderPublicKey,
+    required this.recipientPublicKey,
+  });
+
+  final String path;
+  final AttachmentType type;
+  final int size;
+
+  /// Decrypted file name; null when it could not be decrypted (earlier device).
+  final String? name;
+  final String senderId;
+  final String recipientId;
+  final String senderPublicKey;
+  final String recipientPublicKey;
+
+  // One file per storage path; lets providers cache by attachment.
+  @override
+  bool operator ==(Object other) => other is ChatAttachment && other.path == path;
+
+  @override
+  int get hashCode => path.hashCode;
+}
+
 /// One decrypted message (Table 4.2.3.13 + D-42 key fields).
 class ChatMessage {
   const ChatMessage({
@@ -35,7 +89,11 @@ class ChatMessage {
     required this.isFlagged,
     required this.sentAt,
     this.pending = false,
+    this.attachment,
   });
+
+  /// D-52; the text is then an optional caption.
+  final ChatAttachment? attachment;
 
   final String id;
   final bool fromMe;
@@ -61,7 +119,17 @@ class StoredMessage {
     required this.isFlagged,
     required this.sentAt,
     required this.pending,
+    this.attachmentPath,
+    this.attachmentType,
+    this.attachmentSize,
+    this.attachmentName,
   });
+
+  /// D-52 (all null for a text message); [attachmentName] is encrypted.
+  final String? attachmentPath;
+  final AttachmentType? attachmentType;
+  final int? attachmentSize;
+  final String? attachmentName;
 
   final String id;
   final String senderId;
@@ -86,6 +154,10 @@ class StoredMessage {
       // A local write has no server time yet; show it as "now".
       sentAt: (m['sentAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       pending: d.metadata.hasPendingWrites,
+      attachmentPath: m['attachmentPath'] as String?,
+      attachmentType: AttachmentType.fromValue(m['attachmentType']),
+      attachmentSize: (m['attachmentSize'] as num?)?.toInt(),
+      attachmentName: m['attachmentName'] as String?,
     );
   }
 }
@@ -107,12 +179,38 @@ abstract interface class MessagingRepository {
 
   /// UC10.3 E1: the doctor clears a false-positive flag.
   Future<void> clearFlag(String messageId);
+
+  /// D-52: encrypt and upload a photo or PDF (needs a connection), then store the message.
+  /// Throws [AttachmentTooLargeException] above 10 MB. Returns true when the caption was
+  /// flagged by the keyword scan.
+  Future<bool> sendAttachment({
+    required String me,
+    required Contact to,
+    required Uint8List bytes,
+    required String fileName,
+    required AttachmentType type,
+    String caption = '',
+  });
+
+  /// D-52: download and decrypt an attachment for [me].
+  Future<Uint8List> openAttachment(String me, ChatAttachment attachment);
 }
 
 class FirestoreMessagingRepository implements MessagingRepository {
-  FirestoreMessagingRepository(this._db, this._api, this._crypto, this._scanner);
+  FirestoreMessagingRepository(
+    this._db,
+    this._api,
+    this._crypto,
+    this._scanner, {
+    FirebaseStorage? storage,
+  }) : _storageOverride = storage;
 
   final FirebaseFirestore _db;
+  final FirebaseStorage? _storageOverride;
+  FirebaseStorage get _storage => _storageOverride ?? FirebaseStorage.instance;
+
+  static const _filePurpose = '|file';
+  static const _namePurpose = '|name';
   final ApiClient _api;
   final MessageCrypto _crypto;
   final Future<KeywordScanner> _scanner;
@@ -182,6 +280,79 @@ class FirestoreMessagingRepository implements MessagingRepository {
   @override
   Future<void> clearFlag(String messageId) =>
       _db.collection(Collections.messages).doc(messageId).update({'isFlagged': false});
+
+  @override
+  Future<bool> sendAttachment({
+    required String me,
+    required Contact to,
+    required Uint8List bytes,
+    required String fileName,
+    required AttachmentType type,
+    String caption = '',
+  }) async {
+    final key = to.publicKey;
+    if (key == null) throw const RecipientNotReadyException();
+    if (bytes.length > maxAttachmentBytes) throw const AttachmentTooLargeException();
+    final flagged = caption.trim().isNotEmpty && (await _scanner).isHighRisk(caption);
+    final text = await _crypto.encrypt(
+      text: caption.trim(),
+      senderId: me,
+      recipientId: to.uid,
+      recipientPublicKey: key,
+    );
+    final file = await _crypto.encryptBytes(
+      bytes: bytes,
+      senderId: me,
+      recipientId: to.uid,
+      recipientPublicKey: key,
+      purpose: _filePurpose,
+    );
+    final name = await _crypto.encryptBytes(
+      bytes: utf8.encode(fileName),
+      senderId: me,
+      recipientId: to.uid,
+      recipientPublicKey: key,
+      purpose: _namePurpose,
+    );
+    final ref = _db.collection(Collections.messages).doc();
+    final path = 'message_attachments/$me/${to.uid}/${ref.id}';
+    // Opaque bytes: Storage never sees the file type or contents.
+    await _storage
+        .ref(path)
+        .putData(file.bytes, SettableMetadata(contentType: 'application/octet-stream'));
+    await ref.set({
+      'senderId': me,
+      'recipientId': to.uid,
+      'encryptedText': text.encryptedText,
+      'isFlagged': flagged,
+      'sentAt': FieldValue.serverTimestamp(),
+      'senderPublicKey': text.senderPublicKey,
+      'recipientPublicKey': key,
+      'attachmentPath': path,
+      'attachmentType': type.value,
+      'attachmentSize': bytes.length,
+      'attachmentName': base64Encode(name.bytes),
+    });
+    unawaited(_api.notifyMessage(ref.id).catchError((Object _) {}));
+    return flagged;
+  }
+
+  @override
+  Future<Uint8List> openAttachment(String me, ChatAttachment a) async {
+    final data = await _storage.ref(a.path).getData(maxAttachmentBytes + 1024);
+    if (data == null) throw StateError('Attachment not found');
+    return Uint8List.fromList(
+      await _crypto.decryptBytes(
+        me: me,
+        senderId: a.senderId,
+        recipientId: a.recipientId,
+        bytes: data,
+        senderPublicKey: a.senderPublicKey,
+        recipientPublicKey: a.recipientPublicKey,
+        purpose: _filePurpose,
+      ),
+    );
+  }
 }
 
 class RecipientNotReadyException implements Exception {
@@ -202,6 +373,35 @@ Future<ChatMessage> decryptFor(MessageCrypto crypto, String me, StoredMessage m)
   } catch (_) {
     text = null; // earlier device or damaged: shown as a notice, never as garbage
   }
+  ChatAttachment? attachment;
+  if (m.attachmentPath != null && m.attachmentType != null) {
+    String? name;
+    try {
+      name = utf8.decode(
+        await crypto.decryptBytes(
+          me: me,
+          senderId: m.senderId,
+          recipientId: m.recipientId,
+          bytes: base64Decode(m.attachmentName ?? ''),
+          senderPublicKey: m.senderPublicKey,
+          recipientPublicKey: m.recipientPublicKey,
+          purpose: FirestoreMessagingRepository._namePurpose,
+        ),
+      );
+    } catch (_) {
+      name = null;
+    }
+    attachment = ChatAttachment(
+      path: m.attachmentPath!,
+      type: m.attachmentType!,
+      size: m.attachmentSize ?? 0,
+      name: name,
+      senderId: m.senderId,
+      recipientId: m.recipientId,
+      senderPublicKey: m.senderPublicKey,
+      recipientPublicKey: m.recipientPublicKey,
+    );
+  }
   return ChatMessage(
     id: m.id,
     fromMe: m.senderId == me,
@@ -209,6 +409,7 @@ Future<ChatMessage> decryptFor(MessageCrypto crypto, String me, StoredMessage m)
     isFlagged: m.isFlagged,
     sentAt: m.sentAt,
     pending: m.pending,
+    attachment: attachment,
   );
 }
 

@@ -9,6 +9,7 @@ import '../../auth/state/auth_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
 import '../data/messaging_repository.dart';
 import '../state/messaging_providers.dart';
+import '../../settings/state/settings_providers.dart';
 
 /// Fig 4.3.15.2 Chat Thread / 4.3.15.3 Flagged Message (FR-10.1, FR-10.3, FR-14.4;
 /// UC10.1, UC10.3; NFR-2.1). Used by the patient app and the doctor portal.
@@ -59,6 +60,74 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
     } catch (e) {
       debugPrint('CareFlow: message send failed: $e');
       setState(() => _error = 'Could not send the message. Please try again.');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  /// D-52: choose a photo or PDF and send it, with any typed text as its caption.
+  Future<void> _attach(String me, Contact to) async {
+    final picker = ref.read(attachmentPickerProvider);
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const Key('attach-gallery'),
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Photo'),
+              onTap: () => Navigator.of(c).pop('gallery'),
+            ),
+            if (picker.hasCamera)
+              ListTile(
+                key: const Key('attach-camera'),
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Take a photo'),
+                onTap: () => Navigator.of(c).pop('camera'),
+              ),
+            ListTile(
+              key: const Key('attach-pdf'),
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: const Text('PDF document'),
+              onTap: () => Navigator.of(c).pop('pdf'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      final picked = choice == 'pdf'
+          ? await picker.pdf()
+          : await picker.photo(camera: choice == 'camera');
+      if (picked == null) return;
+      await ref
+          .read(messagingRepositoryProvider)
+          .sendAttachment(
+            me: me,
+            to: to,
+            bytes: picked.bytes,
+            fileName: picked.name,
+            type: picked.type,
+            caption: _input.text,
+          );
+      _input.clear();
+      _toBottom();
+    } on AttachmentTooLargeException {
+      setState(() => _error = 'That file is larger than 10 MB. Please choose a smaller one.');
+    } on RecipientNotReadyException {
+      setState(() => _error = '${to.name} has not set up secure messaging yet.');
+    } catch (e) {
+      debugPrint('CareFlow: attachment send failed: $e');
+      setState(
+        () => _error = 'Could not send the file. Please check your connection and try again.',
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -170,6 +239,7 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
                       itemBuilder: (_, i) => Column(
                         children: [
                           _MessageBubble(
+                            me: me,
                             message: list[i],
                             showFlag: isDoctor && list[i].isFlagged && !list[i].fromMe,
                             onDismissFlag: () =>
@@ -216,6 +286,14 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
               child: Row(
                 children: [
+                  IconButton(
+                    key: const Key('chat-attach'),
+                    tooltip: 'Attach a photo or PDF',
+                    onPressed: contact?.publicKey == null || _sending
+                        ? null
+                        : () => _attach(me, contact!),
+                    icon: const Icon(Icons.attach_file),
+                  ),
                   Expanded(
                     child: TextField(
                       key: const Key('chat-input'),
@@ -253,11 +331,13 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
 
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
+    required this.me,
     required this.message,
     required this.showFlag,
     required this.onDismissFlag,
   });
 
+  final String me;
   final ChatMessage message;
   final bool showFlag;
   final VoidCallback onDismissFlag;
@@ -304,13 +384,15 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 ],
               ),
+            if (message.attachment != null)
+              _AttachmentView(me: me, attachment: message.attachment!, color: fg),
             if (message.text == null)
               Text(
                 'This message was encrypted for an earlier device and cannot be shown here.',
                 key: Key('earlier-device-${message.id}'),
                 style: TextStyle(color: fg, fontStyle: FontStyle.italic),
               )
-            else
+            else if (message.text!.isNotEmpty || message.attachment == null)
               SelectableText(message.text!, style: TextStyle(color: fg)),
             const SizedBox(height: 4),
             Text(
@@ -319,6 +401,92 @@ class _MessageBubble extends StatelessWidget {
               style: TextStyle(color: fg.withValues(alpha: 0.7), fontSize: 11),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// D-52: a photo shown in the bubble (tap to enlarge) or a PDF row (tap to open/save).
+class _AttachmentView extends ConsumerWidget {
+  const _AttachmentView({required this.me, required this.attachment, required this.color});
+
+  final String me;
+  final ChatAttachment attachment;
+  final Color color;
+
+  static String _size(int bytes) => bytes >= 1024 * 1024
+      ? '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB'
+      : '${(bytes / 1024).ceil()} KB';
+
+  Future<void> _openPdf(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final bytes = await ref.read(attachmentBytesProvider((me, attachment)).future);
+      await ref
+          .read(fileSharerProvider)
+          .share(bytes, fileName: attachment.name ?? 'document.pdf', mimeType: 'application/pdf');
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('Could not open the document.')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final a = attachment;
+    if (a.name == null) {
+      return Text(
+        'This file was encrypted for an earlier device and cannot be shown here.',
+        style: TextStyle(color: color, fontStyle: FontStyle.italic),
+      );
+    }
+    if (a.type == AttachmentType.pdf) {
+      return InkWell(
+        key: Key('attachment-${a.path}'),
+        onTap: () => _openPdf(context, ref),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.picture_as_pdf, color: color),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '${a.name} · ${_size(a.size)}',
+                  style: TextStyle(color: color, decoration: TextDecoration.underline),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final bytes = ref.watch(attachmentBytesProvider((me, a)));
+    return Padding(
+      key: Key('attachment-${a.path}'),
+      padding: const EdgeInsets.only(bottom: 4),
+      child: bytes.when(
+        loading: () => const SizedBox(
+          width: 160,
+          height: 120,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (_, _) => Text('Photo could not be loaded.', style: TextStyle(color: color)),
+        data: (data) => GestureDetector(
+          onTap: () => showDialog<void>(
+            context: context,
+            builder: (c) => Dialog(
+              child: InteractiveViewer(child: Image.memory(data, fit: BoxFit.contain)),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220, maxWidth: 260),
+              child: Image.memory(data, fit: BoxFit.cover, semanticLabel: a.name),
+            ),
+          ),
         ),
       ),
     );
