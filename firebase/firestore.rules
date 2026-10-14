@@ -87,11 +87,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // medications, appointments: read-only until Modules 5 and 7 add their write paths.
+    // ---- Module 5 medications (FR-5.1-5.4; D-43) ----
+    // Written only through FastAPI (/medications): duplicate and interaction checks,
+    // stock, adherence and audit happen server-side.
     match /medications/{medicationId} {
       allow read: if canReadPatientData(resource.data.patientId);
       allow write: if false;
     }
+
+    // dose_logs carry no patientId (docs/04 Table 4.2.3.7): access follows the parent
+    // medication. Clients query with medicationId == X so the rule can be evaluated.
+    match /dose_logs/{logId} {
+      allow read: if canReadPatientData(
+        get(/databases/$(database)/documents/medications/$(resource.data.medicationId)).data.patientId);
+      allow write: if false;
+    }
+
+    // appointments: read-only until Module 7 adds its write paths.
 
     match /appointments/{appointmentId} {
       allow read: if canReadPatientData(resource.data.patientId)

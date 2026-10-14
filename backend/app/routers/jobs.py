@@ -14,6 +14,7 @@ from app.core.audit import SYSTEM_SCHEDULER_USER, AuditLogger, get_audit_logger
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.services.deterioration import DeteriorationJob, get_deterioration_job
+from app.services.medication_job import MedicationJob, get_medication_job
 from app.services.unanswered import UnansweredAlertJob, get_unanswered_alert_job
 
 router = APIRouter(prefix="/internal/jobs", tags=["jobs"])
@@ -77,9 +78,13 @@ def run_deterioration(job: DeteriorationJob = Depends(get_deterioration_job)) ->
 
 
 @router.post("/escalation", dependencies=[Depends(verify_scheduler)])
-def run_escalation(job: UnansweredAlertJob = Depends(get_unanswered_alert_job)) -> dict[str, Any]:
-    """D-37: escalate high alerts the doctor has not answered within 2 hours."""
-    return {"job": "escalation", "status": "ok", **job.run()}
+def run_escalation(
+    job: UnansweredAlertJob = Depends(get_unanswered_alert_job),
+    meds: MedicationJob = Depends(get_medication_job),
+) -> dict[str, Any]:
+    """Every 15 minutes: D-37 unanswered-alert escalation, and D-43 medication sweep
+    (missed doses, backup reminders) so no extra Cloud Scheduler job is needed."""
+    return {"job": "escalation", "status": "ok", **job.run(), **meds.run()}
 
 
 @router.post("/{job}", dependencies=[Depends(verify_scheduler)])

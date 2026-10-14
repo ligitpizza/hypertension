@@ -21,6 +21,7 @@ from app.services.agent_context import get_agent_data_repository
 from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
+from app.services.medications import MedicationDoc, get_medication_repository
 from app.services.notifications import Notifier, get_notifier, get_token_repository
 from app.services.provider import get_provider_repository
 from app.services.risk import get_risk_data_repository
@@ -392,6 +393,56 @@ class InMemoryMessageRepository:
         return self._users.users.get(uid)
 
 
+class InMemoryMedicationRepository:
+    def __init__(self) -> None:
+        from datetime import UTC, datetime
+
+        self.meds: dict[str, dict[str, Any]] = {}
+        self.logs: dict[str, dict[str, Any]] = {}
+        self.now = datetime.now(UTC)
+
+    def list_for(self, patient_id: str) -> list[MedicationDoc]:
+        return [MedicationDoc(k, v) for k, v in self.meds.items() if v["patientId"] == patient_id]
+
+    def get(self, medication_id: str) -> MedicationDoc | None:
+        m = self.meds.get(medication_id)
+        return MedicationDoc(medication_id, m) if m else None
+
+    def create(self, data: dict[str, Any]) -> str:
+        mid = f"med{len(self.meds) + 1}"
+        self.meds[mid] = {**data, "createdAt": self.now}
+        return mid
+
+    def update(self, medication_id: str, data: dict[str, Any]) -> None:
+        self.meds[medication_id].update(data)
+
+    def delete(self, medication_id: str) -> None:
+        del self.meds[medication_id]
+
+    def all_scheduled(self) -> list[MedicationDoc]:
+        return [MedicationDoc(k, v) for k, v in self.meds.items() if v["schedule"] != "as_needed"]
+
+    def log_dose(self, log_id: str, data: dict[str, Any]) -> bool:
+        if log_id in self.logs:
+            return False
+        self.logs[log_id] = data
+        return True
+
+    def recent_statuses(self, medication_id: str, since: Any) -> list[str]:
+        return [
+            v["status"]
+            for v in self.logs.values()
+            if v["medicationId"] == medication_id and v["scheduledTime"] >= since
+        ]
+
+    def logged_ids(self, medication_id: str, since: Any) -> set[str]:
+        return {
+            k
+            for k, v in self.logs.items()
+            if v["medicationId"] == medication_id and v["scheduledTime"] >= since
+        }
+
+
 class FailingEmailClient:
     def send(self, message: EmailMessage) -> bool:
         raise RuntimeError("provider down")
@@ -522,6 +573,11 @@ def message_repo(repo: InMemoryUserRepository) -> InMemoryMessageRepository:
 
 
 @pytest.fixture
+def med_repo() -> InMemoryMedicationRepository:
+    return InMemoryMedicationRepository()
+
+
+@pytest.fixture
 def limiter() -> RateLimiter:
     return RateLimiter(max_events=3)
 
@@ -546,6 +602,7 @@ def make_client(
     agent_limiter: RateLimiter,
     triage_repo: InMemoryTriageRepository,
     message_repo: InMemoryMessageRepository,
+    med_repo: InMemoryMedicationRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -570,6 +627,7 @@ def make_client(
         app.dependency_overrides[get_agent_limiter] = lambda: agent_limiter
         app.dependency_overrides[get_triage_repository] = lambda: triage_repo
         app.dependency_overrides[get_message_repository] = lambda: message_repo
+        app.dependency_overrides[get_medication_repository] = lambda: med_repo
         return TestClient(app)
 
     return _make

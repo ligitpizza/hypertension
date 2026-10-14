@@ -238,7 +238,7 @@ def test_d37_unanswered_high_alert_escalates_once(
 ) -> None:
     stale(alerts_repo, 3)
     first = client.post("/internal/jobs/escalation").json()
-    assert first == {"job": "escalation", "status": "ok", "alertsChecked": 1, "alertsEscalated": 1}
+    assert first["alertsChecked"] == 1 and first["alertsEscalated"] == 1
     critical = [a for a in alerts_repo.alerts if a["severity"] == "critical"]
     assert len(critical) == 1 and critical[0]["message"].startswith("ESCALATED: no response")
     titles = {m.title for _, m in push.sent}
