@@ -636,3 +636,44 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   older messages on that device; a message sent while offline that never syncs before the app
   is closed is sent on the next launch but its push is skipped; keyword scanning has residual
   false positives/negatives (doctor dismiss covers false positives).
+
+### 2026-10-14 — Increment 3 — Module 5: Medication Management
+- FRs implemented: FR-5.1 (add / edit / delete medications with schedule), FR-5.2 (refill
+  alert when supply drops below the threshold), FR-5.3 (dose confirmation and adherence,
+  docs/06 algorithm C), FR-5.4 (dose reminders and missed-dose logging).
+- Use-case flows: UC5.1 incl. E1 (duplicate warning, save anyway), UC5.2 (one refill push when
+  stock crosses below the threshold; "Request refill" opens a pre-filled chat to the assigned
+  doctor until Module 13), UC5.3 (local reminder, Take button, backup push), UC5.4 (missed
+  after 2 h, logged by the 15-minute job), UC5.5 incl. E1 (30-day adherence, "no history yet"),
+  UC5.6 incl. E1 (interaction warning reuses the Module 8 interactions.json).
+- Schedule (D-43): `schedule` stays a String: "08:00,20:00" (Malaysia time, sorted, max 8) or
+  "as_needed". As-needed doses log stock but have no adherence rate. Older free-text values
+  still display as written and are treated as as-needed.
+- API: `POST /api/v1/medications`, `PUT/DELETE /medications/{id}` (409 MEDICATION_WARNINGS with
+  duplicates + interactions until `acknowledgeWarnings`), `POST /medications/{id}/doses`
+  (dose_log id = medication + MYT yyyyMMddHHmm, so retries never double-log; 409
+  DOSE_ALREADY_LOGGED; a slot must be a scheduled time between 1 h ahead and 26 h ago).
+  Audits ADD/EDIT/DELETE_MEDICATION and CONFIRM_DOSE.
+- Job: the existing `/internal/jobs/escalation` (every 15 min) also runs the medication sweep:
+  missed dose_logs for today/yesterday after `createdAt`, adherence recomputed, backup "Time to
+  take X" push for doses due in the last 15 minutes. No new Cloud Scheduler job.
+- Phone reminders: flutter_local_notifications `zonedSchedule`, daily, Asia/Kuala_Lumpur
+  (`timezone` package), inexact mode (no exact-alarm permission; may arrive a few minutes
+  late). Synced from the live medication list; an empty list after sign-out cancels them.
+  Boot receivers added so reminders survive a restart.
+- Rules: medications and dose_logs client-write denied (API only); dose_logs readable when the
+  parent medication's patient is the caller, their assigned doctor or admin (get() on the
+  parent; clients query with medicationId ==). Existing index (medicationId, scheduledTime desc).
+- Screens: `/medications` (Fig 4.3.5.1: progress card, Morning/Afternoon/Evening/As-needed
+  groups, Taken at / Missed / Upcoming / Take, Action needed refill card, Your medicines with
+  adherence and stock), `/medications/add`, `/medications/edit` (time chips, as-needed toggle,
+  doses on hand, refill days, delete). Dashboard Today's Plan shows readable times.
+- Tests: backend 27 (unit + API + job); rules 6 new (156 total); Flutter 14 unit + 12 widget
+  (319 total).
+- Deviations / additions vs Chapter 4: D-43 (`createdAt`, `updatedAt`, D-05 `quantityOnHand`,
+  `refillThresholdDays`; schedule format). Mockup's "Request Refill from Pharmacy" reads
+  "Request refill from doctor" until Module 13 adds pharmacy orders. Afternoon group added
+  (mockup shows morning/evening/as-needed only).
+- Known limitations: reminders use the phone's alarm in inexact mode; missed doses are only
+  back-filled for today and yesterday (the job runs every 15 minutes, so gaps only happen if
+  it is down for over a day).

@@ -194,6 +194,24 @@ class ApiClient {
   /// After a message is stored: push the recipient; escalate if the scan flagged it.
   Future<void> notifyMessage(String messageId) => _post('/messages/$messageId/notify', const {});
 
+  // ---- Module 5 medications (FR-5.1-5.4, D-43) ----
+
+  /// UC5.1 / UC5.6: add; a MEDICATION_WARNINGS error carries duplicates and interactions
+  /// until the patient resends with `acknowledgeWarnings`.
+  Future<Map<String, dynamic>> addMedication(Map<String, dynamic> body) =>
+      _post('/medications', body);
+
+  Future<Map<String, dynamic>> updateMedication(String id, Map<String, dynamic> body) =>
+      _send('PUT', '/medications/$id', body);
+
+  Future<void> deleteMedication(String id) => _send('DELETE', '/medications/$id', null);
+
+  /// UC5.3 step 3: confirm a scheduled dose, or (no time) an as-needed dose taken now.
+  Future<Map<String, dynamic>> confirmDose(String id, {DateTime? scheduledTime}) => _post(
+    '/medications/$id/doses',
+    {if (scheduledTime != null) 'scheduledTime': scheduledTime.toUtc().toIso8601String()},
+  );
+
   // ---- Module 9 push notifications (D-33) ----
 
   Future<void> registerFcmToken({required String token, required String platform}) =>
@@ -210,6 +228,19 @@ class ApiClient {
   Future<Map<String, dynamic>> _get(String path) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(path);
+      return res.data ?? const {};
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> _send(String method, String path, Map<String, dynamic>? body) async {
+    try {
+      final res = await _dio.request<Map<String, dynamic>>(
+        path,
+        data: body,
+        options: Options(method: method),
+      );
       return res.data ?? const {};
     } on DioException catch (e) {
       throw ApiException.fromDio(e);

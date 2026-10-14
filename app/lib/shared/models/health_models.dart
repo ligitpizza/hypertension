@@ -100,14 +100,24 @@ class Medication {
     required this.dosage,
     required this.schedule,
     this.adherenceRate,
+    this.quantityOnHand,
+    this.refillThresholdDays = 7,
+    this.createdAt,
   });
 
   final String id;
   final String patientId;
   final String name;
   final String dosage;
+
+  /// D-43: "08:00,20:00" (Malaysia time) or "as_needed".
   final String schedule;
   final double? adherenceRate;
+
+  /// D-05: doses left; null when the patient doesn't track stock.
+  final double? quantityOnHand;
+  final int refillThresholdDays;
+  final DateTime? createdAt;
 
   factory Medication.fromFirestore(String id, Map<String, dynamic> d) => Medication(
     id: id,
@@ -116,6 +126,34 @@ class Medication {
     dosage: d['dosage'] as String? ?? '',
     schedule: d['schedule'] as String? ?? '',
     adherenceRate: (d['adherenceRate'] as num?)?.toDouble(),
+    quantityOnHand: (d['quantityOnHand'] as num?)?.toDouble(),
+    refillThresholdDays: (d['refillThresholdDays'] as num?)?.toInt() ?? 7,
+    createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+  );
+}
+
+/// `dose_logs` (docs/04 Table 4.2.3.7). Written only by the API (D-43).
+class DoseLog {
+  const DoseLog({
+    required this.id,
+    required this.medicationId,
+    required this.scheduledTime,
+    required this.status,
+    this.confirmedAt,
+  });
+
+  final String id;
+  final String medicationId;
+  final DateTime scheduledTime;
+  final String status; // taken | missed
+  final DateTime? confirmedAt;
+
+  factory DoseLog.fromFirestore(String id, Map<String, dynamic> d) => DoseLog(
+    id: id,
+    medicationId: d['medicationId'] as String? ?? '',
+    scheduledTime: _time(d['scheduledTime']),
+    status: d['status'] as String? ?? '',
+    confirmedAt: (d['confirmedAt'] as Timestamp?)?.toDate(),
   );
 }
 

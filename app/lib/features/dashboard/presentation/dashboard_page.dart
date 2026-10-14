@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../medications/domain/med_schedule.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../../../core/utils/risk_style.dart';
 import '../../../shared/models/health_models.dart';
@@ -154,7 +155,7 @@ class _TodaysPlanCard extends ConsumerWidget {
                         _PlanTile(
                           icon: Icons.medication,
                           title: '${m.name} ${m.dosage}'.trim(),
-                          subtitle: m.schedule,
+                          subtitle: describeSchedule(m.schedule),
                         ),
                     ],
                   ),

@@ -1,0 +1,434 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../shared/models/health_models.dart';
+import '../../../shared/services/api/api_client.dart';
+import '../../auth/state/auth_providers.dart';
+import '../../dashboard/state/dashboard_providers.dart';
+import '../domain/med_schedule.dart';
+import '../state/medication_providers.dart';
+
+/// Fig 4.3.5.1 Medications (FR-5.1, FR-5.2, FR-5.3, FR-5.4; UC5.2, UC5.3, UC5.5).
+class MedicationsPage extends ConsumerStatefulWidget {
+  const MedicationsPage({super.key});
+
+  @override
+  ConsumerState<MedicationsPage> createState() => _MedicationsPageState();
+}
+
+class _MedicationsPageState extends ConsumerState<MedicationsPage> {
+  Timer? _tick;
+  final _busy = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    // Upcoming doses become "Take" an hour before their time.
+    _tick = Timer.periodic(const Duration(minutes: 1), (_) => ref.invalidate(todaysDosesProvider));
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _confirm(Medication med, {DateTime? scheduledTime}) async {
+    final key = '${med.id}@$scheduledTime';
+    setState(() => _busy.add(key));
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(medicationsRepositoryProvider)
+          .confirmDose(med.id, scheduledTime: scheduledTime);
+      messenger.showSnackBar(SnackBar(content: Text('${med.name} dose recorded.')));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            e.code == 'DOSE_ALREADY_LOGGED' ? 'That dose is already recorded.' : e.message,
+          ),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not record the dose. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy.remove(key));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final meds = ref.watch(medicationsProvider);
+    final doses = ref.watch(todaysDosesProvider);
+    final now = ref.watch(nowProvider)();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Meds')),
+      floatingActionButton: FloatingActionButton(
+        key: const Key('add-medication'),
+        tooltip: 'Add medication',
+        onPressed: () => context.push('/medications/add'),
+        child: const Icon(Icons.add),
+      ),
+      body: meds.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, _) => _Message(
+          icon: Icons.cloud_off,
+          text: 'Could not load your medications.',
+          action: TextButton(
+            onPressed: () => ref.invalidate(medicationsProvider),
+            child: const Text('Retry'),
+          ),
+        ),
+        data: (list) {
+          if (list.isEmpty) {
+            return const _Message(
+              key: Key('meds-empty'),
+              icon: Icons.medication_outlined,
+              text: 'No medications yet. Tap + to add your first one and get reminders.',
+            );
+          }
+          final scheduled = doses.value ?? const <ScheduledDose>[];
+          final prn = [
+            for (final m in list)
+              if (tryParseSchedule(m.schedule) == null) m,
+          ];
+          final refills = [
+            for (final m in list)
+              if (needsRefill(m)) m,
+          ];
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            children: [
+              _ScheduleHeader(now: now),
+              if (scheduled.isNotEmpty) _ProgressCard(doses: scheduled),
+              for (final period in DosePeriod.values.where((p) => p != DosePeriod.asNeeded))
+                if (scheduled.any((d) => d.period == period)) ...[
+                  _PeriodHeader(period: period),
+                  for (final d in scheduled.where((d) => d.period == period))
+                    _DoseTile(
+                      dose: d,
+                      busy: _busy.contains('${d.medication.id}@${d.moment}'),
+                      onTake: () => _confirm(d.medication, scheduledTime: d.moment),
+                    ),
+                ],
+              if (prn.isNotEmpty) ...[
+                const _PeriodHeader(period: DosePeriod.asNeeded),
+                for (final m in prn)
+                  _AsNeededTile(
+                    med: m,
+                    busy: _busy.contains('${m.id}@null'),
+                    onLog: () => _confirm(m),
+                  ),
+              ],
+              if (refills.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text('Action needed', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                for (final m in refills) _RefillCard(med: m),
+              ],
+              const SizedBox(height: 16),
+              Text('Your medicines', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              for (final m in list) _MedicineTile(med: m),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Message extends StatelessWidget {
+  const _Message({super.key, required this.icon, required this.text, this.action});
+
+  final IconData icon;
+  final String text;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 48),
+          const SizedBox(height: 12),
+          Text(text, textAlign: TextAlign.center),
+          ?action,
+        ],
+      ),
+    ),
+  );
+}
+
+const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', //
+];
+
+String _clock(DateTime instant) {
+  final l = toMyt(instant);
+  return DoseTime(l.hour, l.minute).label;
+}
+
+class _ScheduleHeader extends StatelessWidget {
+  const _ScheduleHeader({required this.now});
+
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = toMyt(now);
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(child: Text("Today's Schedule", style: theme.textTheme.titleMedium)),
+          Text(
+            '${_weekdays[l.weekday - 1]}, ${_months[l.month - 1]} ${l.day}',
+            style: TextStyle(color: theme.colorScheme.primary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgressCard extends StatelessWidget {
+  const _ProgressCard({required this.doses});
+
+  final List<ScheduledDose> doses;
+
+  @override
+  Widget build(BuildContext context) {
+    final taken = doses.where((d) => d.state == DoseState.taken).length;
+    final left = doses.length - taken;
+    final scheme = Theme.of(context).colorScheme;
+    final text = left == 0
+        ? 'All done for today. Well done!'
+        : taken == 0
+        ? '$left ${left == 1 ? 'dose' : 'doses'} to take today.'
+        : 'Great progress! $left ${left == 1 ? 'dose' : 'doses'} left for today.';
+    return Card(
+      key: const Key('meds-progress'),
+      color: scheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: scheme.surface,
+              child: Text('$taken/${doses.length}', style: const TextStyle(fontSize: 16)),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(text, style: TextStyle(color: scheme.onPrimaryContainer)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PeriodHeader extends StatelessWidget {
+  const _PeriodHeader({required this.period});
+
+  final DosePeriod period;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = switch (period) {
+      DosePeriod.morning => Icons.wb_sunny_outlined,
+      DosePeriod.afternoon => Icons.wb_cloudy_outlined,
+      DosePeriod.evening => Icons.nightlight_outlined,
+      DosePeriod.asNeeded => Icons.water_drop_outlined,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          Text(period.label.toUpperCase(), style: Theme.of(context).textTheme.labelLarge),
+        ],
+      ),
+    );
+  }
+}
+
+class _DoseTile extends StatelessWidget {
+  const _DoseTile({required this.dose, required this.busy, required this.onTake});
+
+  final ScheduledDose dose;
+  final bool busy;
+  final VoidCallback onTake;
+
+  @override
+  Widget build(BuildContext context) {
+    final med = dose.medication;
+    final scheme = Theme.of(context).colorScheme;
+    final taken = dose.state == DoseState.taken;
+    final trailing = switch (dose.state) {
+      DoseState.taken => Chip(
+        label: Text(dose.confirmedAt == null ? 'Taken' : 'Taken at ${_clock(dose.confirmedAt!)}'),
+      ),
+      DoseState.missed => Chip(label: const Text('Missed'), backgroundColor: scheme.errorContainer),
+      DoseState.upcoming => const Text('Upcoming'),
+      DoseState.due =>
+        busy
+            ? const SizedBox.square(dimension: 24, child: CircularProgressIndicator())
+            : FilledButton(
+                key: Key('take-${med.id}-${dose.time.hhmm}'),
+                onPressed: onTake,
+                child: const Text('Take'),
+              ),
+    };
+    return Card(
+      key: Key('dose-${med.id}-${dose.time.hhmm}'),
+      child: ListTile(
+        leading: CircleAvatar(child: Icon(taken ? Icons.check_circle : Icons.medication_outlined)),
+        title: Text(
+          med.name,
+          style: taken ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
+        ),
+        subtitle: Text('${med.dosage} • ${dose.time.label}'),
+        trailing: trailing,
+      ),
+    );
+  }
+}
+
+class _AsNeededTile extends ConsumerWidget {
+  const _AsNeededTile({required this.med, required this.busy, required this.onLog});
+
+  final Medication med;
+  final bool busy;
+  final VoidCallback onLog;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final logs = ref.watch(todaysDoseLogsProvider(med.id)).value ?? const <DoseLog>[];
+    final last = logs.isEmpty ? null : logs.first.confirmedAt ?? logs.first.scheduledTime;
+    return Card(
+      key: Key('prn-${med.id}'),
+      child: ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.healing_outlined)),
+        title: Text(med.name),
+        subtitle: Text(
+          last == null
+              ? med.dosage
+              : '${med.dosage} • taken ${logs.length}× today, last at ${_clock(last)}',
+        ),
+        trailing: busy
+            ? const SizedBox.square(dimension: 24, child: CircularProgressIndicator())
+            : FilledButton.tonal(
+                key: Key('log-${med.id}'),
+                onPressed: onLog,
+                child: const Text('Log dose'),
+              ),
+      ),
+    );
+  }
+}
+
+class _RefillCard extends ConsumerWidget {
+  const _RefillCard({required this.med});
+
+  final Medication med;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final days = daysOfSupply(med)!.floor();
+    final doctorId = ref.watch(currentUserProvider).value?.assignedDoctorId;
+    return Card(
+      key: Key('refill-${med.id}'),
+      color: scheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: scheme.onErrorContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Refill required\n${med.name} (${med.dosage})',
+                    style: TextStyle(color: scheme.onErrorContainer),
+                  ),
+                ),
+                Chip(label: Text(days == 1 ? '1 day left' : '$days days left')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Until Module 13 (pharmacy orders), a refill request goes to the doctor (D-43).
+            FilledButton(
+              key: Key('request-refill-${med.id}'),
+              style: FilledButton.styleFrom(backgroundColor: scheme.error),
+              onPressed: doctorId == null || doctorId.trim().isEmpty
+                  ? () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'No doctor is assigned to you yet, so a refill '
+                          'cannot be requested in the app.',
+                        ),
+                      ),
+                    )
+                  : () => context.push(
+                      '/chat/${doctorId.trim()}',
+                      extra:
+                          'Hello doctor, I am running low on ${med.name} ${med.dosage} '
+                          '(about $days days left). Could you please renew my prescription?',
+                    ),
+              child: const Text('Request refill from doctor'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MedicineTile extends StatelessWidget {
+  const _MedicineTile({required this.med});
+
+  final Medication med;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheduled = tryParseSchedule(med.schedule) != null;
+    final rate = med.adherenceRate;
+    // UC5.5 E1: no doses logged yet -> no rate.
+    final adherence = !scheduled
+        ? 'As needed'
+        : rate == null
+        ? 'Adherence: no history yet'
+        : 'Adherence (30 days): ${rate.toStringAsFixed(0)}%';
+    final stock = med.quantityOnHand == null
+        ? ''
+        : ' • ${med.quantityOnHand!.toStringAsFixed(0)} left';
+    return Card(
+      key: Key('medicine-${med.id}'),
+      child: ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.medication)),
+        title: Text('${med.name} ${med.dosage}'.trim()),
+        subtitle: Text('${describeSchedule(med.schedule)}\n$adherence$stock'),
+        isThreeLine: true,
+        trailing: const Icon(Icons.edit_outlined),
+        onTap: () => context.push('/medications/edit', extra: med),
+      ),
+    );
+  }
+}

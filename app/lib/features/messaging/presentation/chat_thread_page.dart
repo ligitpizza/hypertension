@@ -13,18 +13,21 @@ import '../state/messaging_providers.dart';
 /// Fig 4.3.15.2 Chat Thread / 4.3.15.3 Flagged Message (FR-10.1, FR-10.3, FR-14.4;
 /// UC10.1, UC10.3; NFR-2.1). Used by the patient app and the doctor portal.
 class ChatThreadPage extends ConsumerStatefulWidget {
-  const ChatThreadPage({super.key, required this.otherId, this.backPath});
+  const ChatThreadPage({super.key, required this.otherId, this.backPath, this.draft});
 
   /// The other participant's uid (route `:threadId` / `:patientId`).
   final String otherId;
   final String? backPath;
+
+  /// Pre-filled text the patient can edit before sending (e.g. a refill request).
+  final String? draft;
 
   @override
   ConsumerState<ChatThreadPage> createState() => _ChatThreadPageState();
 }
 
 class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
-  final _input = TextEditingController();
+  late final _input = TextEditingController(text: widget.draft);
   final _scroll = ScrollController();
   bool _sending = false;
   String? _error;

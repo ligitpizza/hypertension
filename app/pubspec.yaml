@@ -50,6 +50,7 @@ dependencies:
   url_launcher: ^6.3.3
   cryptography: ^2.9.0
   flutter_secure_storage: ^11.2.0
+  timezone: ^0.11.2
 
 dev_dependencies:
   flutter_test:

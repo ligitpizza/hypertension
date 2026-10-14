@@ -1,4 +1,7 @@
+import '../../features/medications/presentation/medication_form_page.dart';
+import '../../features/medications/presentation/medications_page.dart';
 import '../../features/messaging/presentation/chat_thread_page.dart';
+import '../../shared/models/health_models.dart';
 import '../../features/messaging/presentation/inbox_pages.dart';
 import '../../features/symptom_checker/data/symptom_repository.dart';
 import '../../features/symptom_checker/presentation/symptom_checker_page.dart';
@@ -22,13 +25,7 @@ final List<RouteBase> patientFeatureRoutes = [
     routes: [
       GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
       GoRoute(path: '/vitals', builder: (_, _) => const VitalsPage()),
-      GoRoute(
-        path: '/medications',
-        builder: (_, _) => const ComingSoonPage(
-          title: 'Medications',
-          note: 'Medication reminders and tracking are coming soon.',
-        ),
-      ),
+      GoRoute(path: '/medications', builder: (_, _) => const MedicationsPage()),
       GoRoute(
         path: '/records',
         builder: (_, _) => const ComingSoonPage(
@@ -45,6 +42,12 @@ final List<RouteBase> patientFeatureRoutes = [
     redirect: (_, state) => state.extra is LoggedReading ? null : '/vitals',
     builder: (_, state) => ReadingSavedPage(reading: state.extra! as LoggedReading),
   ),
+  GoRoute(path: '/medications/add', builder: (_, _) => const MedicationFormPage()),
+  GoRoute(
+    path: '/medications/edit',
+    redirect: (_, state) => state.extra is Medication ? null : '/medications',
+    builder: (_, state) => MedicationFormPage(existing: state.extra! as Medication),
+  ),
   GoRoute(path: '/trends', builder: (_, _) => const TrendsPage()),
   GoRoute(path: '/symptom', builder: (_, _) => const SymptomCheckerPage()),
   GoRoute(
@@ -60,7 +63,10 @@ final List<RouteBase> patientFeatureRoutes = [
       // :threadId = the other participant's uid (the assigned doctor).
       GoRoute(
         path: ':threadId',
-        builder: (_, s) => ChatThreadPage(otherId: s.pathParameters['threadId']!),
+        builder: (_, s) => ChatThreadPage(
+          otherId: s.pathParameters['threadId']!,
+          draft: s.extra is String ? s.extra! as String : null,
+        ),
       ),
     ],
   ),
