@@ -78,3 +78,4 @@ ml/data/processed/
 ml/artifacts/*_rf.joblib
 ml/artifacts/*_xgb.joblib
 firebase/firebase-export-*/
+sample-documents/
