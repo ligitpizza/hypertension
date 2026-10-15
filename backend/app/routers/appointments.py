@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
+from app.core.config import get_settings
 from app.core.enums import AppointmentStatus, Collection, UserRole
 from app.core.errors import ApiError
 from app.integrations.push import PushMessage
@@ -67,6 +68,11 @@ def _iso(moments: list[datetime]) -> list[str]:
     return [m.isoformat() for m in moments]
 
 
+def _any_time() -> bool:
+    """D-57 testing aid: DEV_APPOINTMENT_TIMES lets patients book any time."""
+    return get_settings().dev_appointment_times
+
+
 @router.get("/slots")
 def slots(
     day: date = Query(alias="date"),
@@ -86,6 +92,7 @@ def slots(
             "specialty": doctor.get("specialty"),
         },
         "date": day.isoformat(),
+        "customTimes": _any_time(),
         "slots": [
             {"time": s.isoformat(), "period": period(s), "available": s in free} for s in all_slots
         ],
@@ -121,7 +128,7 @@ def book(
     now = datetime.now(UTC)
     doctor_id, doctor = _doctor_of(repo, user.uid)
     moment = body.dateTime.astimezone(UTC)
-    if not is_bookable(moment, now):
+    if not is_bookable(moment, now, any_time=_any_time()):
         raise ApiError(
             "INVALID_SLOT",
             "Please choose one of the available times.",
@@ -324,7 +331,7 @@ def change(
                 status.HTTP_409_CONFLICT,
             )
         moment = body.dateTime.astimezone(UTC)
-        if not is_bookable(moment, now):
+        if not is_bookable(moment, now, any_time=_any_time()):
             raise ApiError(
                 "INVALID_SLOT",
                 "Please choose one of the available times.",

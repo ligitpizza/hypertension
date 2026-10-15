@@ -70,8 +70,15 @@ def day_slots(day: date) -> list[datetime]:
     return out
 
 
-def is_bookable(moment: datetime, now: datetime) -> bool:
-    """A real slot start, at least MIN_LEAD ahead and at most MAX_AHEAD."""
+DEV_PAST = timedelta(days=1)
+
+
+def is_bookable(moment: datetime, now: datetime, any_time: bool = False) -> bool:
+    """A real slot start, at least MIN_LEAD ahead and at most MAX_AHEAD. With [any_time]
+    (D-57 testing aid) any whole minute from a day ago up to MAX_AHEAD."""
+    if any_time:
+        whole_minute = moment.second == 0 and moment.microsecond == 0
+        return whole_minute and now - DEV_PAST <= moment <= now + MAX_AHEAD
     local = moment.astimezone(MYT)
     return (
         moment.astimezone(UTC) in day_slots(local.date())

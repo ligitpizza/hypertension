@@ -282,3 +282,30 @@ def test_d56_outcome_rules(
     assert res.status_code == 403
     res = client.post(url(other, "/outcome"), json={"outcome": "maybe"}, headers=ADMIN)
     assert res.status_code == 422
+
+
+# ---------- D-57 testing aid: any time ----------
+
+
+def test_d57_any_time_only_when_switched_on(
+    client: TestClient,
+    appointment_repo: InMemoryAppointmentRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    odd = (datetime.now(UTC) + timedelta(minutes=3)).replace(second=0, microsecond=0)
+    body = {"dateTime": odd.isoformat()}
+    res = client.post("/api/v1/appointments", json=body, headers=PATIENT)
+    assert res.status_code == 422  # not a slot, under 1 h ahead
+    assert (
+        client.get(
+            "/api/v1/appointments/slots", params={"date": odd.date().isoformat()}, headers=PATIENT
+        ).json()["customTimes"]
+        is False
+    )
+    monkeypatch.setattr("app.routers.appointments._any_time", lambda: True)
+    res = client.post("/api/v1/appointments", json=body, headers=PATIENT)
+    assert res.status_code == 201
+    past = (datetime.now(UTC) - timedelta(hours=2)).replace(second=0, microsecond=0)
+    appointment_repo.appointments[res.json()["id"]]["status"] = "completed"
+    res = client.post("/api/v1/appointments", json={"dateTime": past.isoformat()}, headers=PATIENT)
+    assert res.status_code == 201  # a started visit, to try Complete / No-show at once

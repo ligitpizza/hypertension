@@ -355,6 +355,8 @@ def task_deploy_backend() -> None:
             "ML_ARTIFACTS_DIR=/srv/ml_artifacts",
             "FCM_ENABLED=true",
             f"GEMINI_MODEL={_local_env('GEMINI_MODEL') or 'gemini-3.1-flash-lite'}",
+            # D-57 testing aid; set DEV_APPOINTMENT_TIMES=false in backend/.env for real use.
+            f"DEV_APPOINTMENT_TIMES={_local_env('DEV_APPOINTMENT_TIMES') or 'false'}",
         ]
     )
     cmd = [

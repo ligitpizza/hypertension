@@ -30,10 +30,18 @@ class DoctorInfo {
 }
 
 class DaySlots {
-  const DaySlots({required this.doctor, required this.slots, this.alternatives = const []});
+  const DaySlots({
+    required this.doctor,
+    required this.slots,
+    this.alternatives = const [],
+    this.customTimes = false,
+  });
 
   final DoctorInfo doctor;
   final List<Slot> slots;
+
+  /// D-57 testing aid: the backend accepts any time (DEV_APPOINTMENT_TIMES).
+  final bool customTimes;
 
   /// UC7.1 E1: nearest free times when this day has none.
   final List<DateTime> alternatives;
@@ -220,6 +228,7 @@ class ApiAppointmentsRepository implements AppointmentsRepository {
             ),
         ],
         alternatives: _times(res['alternatives']),
+        customTimes: res['customTimes'] == true,
       );
     } on ApiException catch (e) {
       if (e.code == 'NO_DOCTOR') throw const NoDoctorException();

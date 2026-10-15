@@ -909,3 +909,8 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   not load the summary"), and Appointments has a back button that returns home when
   opened after booking.
 - Tests: backend 7 new (D-56); Flutter 7 new (439 total).
+- **D-57 testing aid:** `DEV_APPOINTMENT_TIMES=true` in `backend/.env` (copied to Cloud Run
+  by deploy-backend) lets the patient pick any date and minute, including the past day, via
+  "Pick any time (testing)" on the booking screen, so Complete / No-show, "Not completed",
+  reminders and lapses can be tried at once. Tests force it off. Set it to false before the
+  final demo and redeploy.

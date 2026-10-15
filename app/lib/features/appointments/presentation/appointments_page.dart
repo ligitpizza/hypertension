@@ -59,6 +59,34 @@ class _AppointmentsPageState extends ConsumerState<AppointmentsPage> {
     });
   }
 
+  /// D-57 testing aid: any Malaysia date and time, picked freely.
+  Future<void> _pickAnyTime() async {
+    final now = toMyt(ref.read(nowProvider)());
+    final today = DateTime(now.year, now.month, now.day);
+    final date = await showDatePicker(
+      context: context,
+      initialDate: today,
+      firstDate: today.subtract(const Duration(days: 1)),
+      lastDate: today.add(const Duration(days: 60)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
+    );
+    if (time == null) return;
+    setState(() {
+      _slot = DateTime.utc(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      ).subtract(mytOffset);
+      _alternatives = const [];
+    });
+  }
+
   Future<void> _submit() async {
     final slot = _slot;
     if (slot == null) return;
@@ -223,6 +251,16 @@ class _AppointmentsPageState extends ConsumerState<AppointmentsPage> {
                     selected: _slot,
                     onSelect: (t) => setState(() => _slot = t),
                   ),
+                  if (day.customTimes)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: OutlinedButton.icon(
+                        key: const Key('pick-any-time'),
+                        icon: const Icon(Icons.bug_report_outlined),
+                        onPressed: _pickAnyTime,
+                        label: const Text('Pick any time (testing)'),
+                      ),
+                    ),
                   if (day.slots.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),

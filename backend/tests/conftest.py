@@ -16,6 +16,8 @@ for _var, _host in (
     ("FIREBASE_STORAGE_EMULATOR_HOST", "localhost:9199"),
 ):
     os.environ.setdefault(_var, _host)
+# The D-57 testing aid in a developer's backend/.env must not change test behaviour.
+os.environ["DEV_APPOINTMENT_TIMES"] = "false"
 
 from collections.abc import Callable
 from datetime import datetime

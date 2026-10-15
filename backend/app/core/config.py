@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     jobs_oidc_audience: str = ""
     jobs_service_account: str = ""
 
+    # Testing aid (D-57): patients may book any time, even a past one, so the doctor's
+    # Complete / No-show and the reminders can be tried without waiting. Off for real use.
+    dev_appointment_times: bool = False
+
     @property
     def is_dev(self) -> bool:
         return self.app_env == "dev"

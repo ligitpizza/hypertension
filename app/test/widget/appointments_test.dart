@@ -56,11 +56,14 @@ class FakeAppointmentsRepository implements AppointmentsRepository {
       if (!a.dateTime.isBefore(s) && a.dateTime.isBefore(e)) a,
   ]);
 
+  bool customTimes = false;
+
   @override
   Future<DaySlots> slots(DateTime day) async {
     if (noDoctor) throw const NoDoctorException();
     final weekend = day.weekday > 5;
     return DaySlots(
+      customTimes: customTimes,
       doctor: const DoctorInfo(id: 'd1', name: 'Dr John', specialty: 'Cardiology'),
       slots: weekend
           ? const []
@@ -774,6 +777,29 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byKey(const Key('admin-appt-a2')), findsOneWidget);
       expect(find.textContaining('no-show'), findsOneWidget);
+    });
+  });
+
+  group('D-57 testing aid', () {
+    tallTest('hidden unless the backend allows any time', (t) async {
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('pick-any-time')), findsNothing);
+    });
+
+    tallTest('pick any date and time, then book it', (t) async {
+      repo.customTimes = true;
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('pick-any-time')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('OK')); // today
+      await t.pumpAndSettle();
+      await t.tap(find.text('OK')); // the time now
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('book-appointment')));
+      await t.pumpAndSettle();
+      expect(repo.booked.single.$1, myt(14, 9));
     });
   });
 }
