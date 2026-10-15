@@ -1015,3 +1015,18 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
     D-46 cascade now, staff/family by removing login and account; refused for a doctor
     with patients or upcoming visits, for oneself and the last admin.
   - Tests: backend 13 (`test_admin_d60.py`); Flutter 7 new (488 total).
+- **D-61 admin detail pages:** User Management rows open `/admin/users/{uid}` showing the
+  account (role, status, join date, masked IC, gender, health-profile status; doctors'
+  specialty and caseload) with Edit / Deactivate / Delete (now shared with the list in
+  `user_actions.dart`), and by role: patient — assigned doctor, latest reading, readings in
+  30 days, risk level, medications with adherence, appointments (incl. Admin assigned),
+  records uploaded/shared, linked family; doctor — assigned patients by risk (each opens
+  its own page), upcoming appointments, completed visits, open alerts; pharmacist — orders
+  arrive with Module 13. Every role lists 30 days of audited activity. Served by
+  `GET /admin/users/{uid}`.
+- **Portal caching fix:** Ping deployed D-60 but kept seeing the old portal; Hosting
+  served the new build, the browser kept the old one (`max-age=3600` plus Flutter's
+  service worker). `firebase.json` now sends `Cache-Control: no-cache` for index.html,
+  main.dart.js, the Flutter bootstrap/service-worker files, version.json and the manifest,
+  so each deploy shows on the next load (unchanged files still come from cache via ETag).
+- Tests: backend 4 (`test_admin_detail.py`); Flutter 5 new (493 total).

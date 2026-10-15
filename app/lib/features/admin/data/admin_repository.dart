@@ -238,6 +238,9 @@ abstract interface class AdminRepository {
 
   Future<void> deleteUser(String uid);
 
+  /// D-61: the detail page payload (user, profile, patient / doctor / pharmacist, activity).
+  Future<Map<String, dynamic>> userDetail(String uid);
+
   Future<HospitalAnalytics> hospitalAnalytics({int months = 6});
 
   Future<SystemAnalytics> systemAnalytics({int days = 7});
@@ -324,4 +327,7 @@ class ApiAdminRepository implements AdminRepository {
 
   @override
   Future<void> deleteUser(String uid) => _api.adminDeleteUser(uid);
+
+  @override
+  Future<Map<String, dynamic>> userDetail(String uid) => _api.adminUserDetail(uid);
 }

@@ -39,3 +39,9 @@ final systemAnalyticsProvider = FutureProvider.autoDispose.family<SystemAnalytic
   (ref, days) => ref.watch(adminRepositoryProvider).systemAnalytics(days: days),
   retry: _noRetry,
 );
+
+/// D-61: uid -> detail page payload.
+final adminUserDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
+  (ref, uid) => ref.watch(adminRepositoryProvider).userDetail(uid),
+  retry: _noRetry,
+);

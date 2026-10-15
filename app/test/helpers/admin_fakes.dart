@@ -109,4 +109,9 @@ class FakeAdminRepository implements AdminRepository {
     if (error != null) throw error!;
     calls.add('delete:$uid');
   }
+
+  Map<String, Map<String, dynamic>> details = {};
+
+  @override
+  Future<Map<String, dynamic>> userDetail(String uid) async => details[uid]!;
 }

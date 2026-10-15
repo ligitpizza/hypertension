@@ -343,6 +343,10 @@ class ApiClient {
     required String icNumber,
   }) => _post('/admin/patients', {'name': name, 'email': email, 'icNumber': icNumber});
 
+  /// D-61: one user with role-specific details.
+  Future<Map<String, dynamic>> adminUserDetail(String uid) =>
+      _getQuery('/admin/users/$uid', const {});
+
   /// D-60: permanent removal.
   Future<void> adminDeleteUser(String uid) => _send('DELETE', '/admin/users/$uid', null);
 

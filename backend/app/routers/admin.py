@@ -5,6 +5,7 @@ GET   /admin/users          list / search / filter all users (FR-11.1, UC11.1)
 PATCH /admin/users/{uid}    edit name, specialty, caseload limit; deactivate / reactivate
 POST  /admin/patients       create a patient account (D-60)
 DELETE /admin/users/{uid}   permanently delete a user (D-60)
+GET   /admin/users/{uid}    detail page for a patient, doctor or pharmacist (D-61)
 """
 
 import html
@@ -25,7 +26,14 @@ from app.schemas.auth import (
     CreateStaffResponse,
     UpdateUserRequest,
 )
-from app.services.appointments import AppointmentRepository, get_appointment_repository
+from app.services.analytics import AnalyticsSource, get_analytics_source, overall_level
+from app.services.appointments import (
+    AppointmentRepository,
+    booked_by,
+    get_appointment_repository,
+)
+from app.services.audit_view import AuditReader, get_audit_reader
+from app.services.ic import mask_ic
 from app.services.identity import (
     EmailAlreadyRegisteredError,
     IdentityProvider,
@@ -390,3 +398,186 @@ def delete_user(
         target_id=uid,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------- D-61: user detail pages ----------------
+
+
+def _iso_or_none(v: Any) -> str | None:
+    return v.isoformat() if isinstance(v, datetime) else None
+
+
+def _appointment_rows(
+    appts: list[dict[str, Any]], names: dict[str, str], key: str, limit: int
+) -> list[dict[str, Any]]:
+    rows = sorted(
+        (a for a in appts if isinstance(a.get("dateTime"), datetime)),
+        key=lambda a: a["dateTime"],
+        reverse=True,
+    )[:limit]
+    return [
+        {
+            "dateTime": a["dateTime"].isoformat(),
+            "status": a.get("status"),
+            "type": a.get("type"),
+            "bookedBy": booked_by(a),
+            "other": names.get(str(a.get(key)), "Unknown"),
+            "changeReason": a.get("changeReason"),
+        }
+        for a in rows
+    ]
+
+
+@router.get("/users/{uid}")
+def user_detail(
+    uid: str,
+    _: CurrentUser = Depends(admin_only),
+    repo: UserRepository = Depends(get_user_repository),
+    src: AnalyticsSource = Depends(get_analytics_source),
+    reader: AuditReader = Depends(get_audit_reader),
+) -> dict[str, Any]:
+    """D-61: one person at a glance, by role (patient / doctor / pharmacist / admin / family)."""
+    users = repo.list_users()
+    people = dict(users)
+    target = people.get(uid)
+    if target is None:
+        raise ApiError("USER_NOT_FOUND", "User not found.", status.HTTP_404_NOT_FOUND)
+    names = {k: str(v.get("name") or v.get("email") or "Unknown") for k, v in people.items()}
+    now = datetime.now(UTC)
+    role = target.get("role")
+    out: dict[str, Any] = {"user": user_row(uid, target, caseloads(users).get(uid))}
+    profile: dict[str, Any] = {}
+    if target.get("icNumber"):
+        profile["icNumber"] = mask_ic(str(target["icNumber"]))
+    for field in ("gender", "phone", "onboardingComplete"):
+        if target.get(field) is not None:
+            profile[field] = target[field]
+    if isinstance(target.get("dateOfBirth"), datetime):
+        profile["dateOfBirth"] = target["dateOfBirth"].date().isoformat()
+    elif target.get("dateOfBirth"):
+        profile["dateOfBirth"] = str(target["dateOfBirth"])
+    out["profile"] = profile
+
+    if role == UserRole.PATIENT.value:
+        doctor_id = target.get("assignedDoctorId")
+        readings = sorted(
+            (
+                r
+                for r in src.where_equal(Collection.VITAL_READINGS, "patientId", uid)
+                if isinstance(r.get("timestamp"), datetime)
+            ),
+            key=lambda r: r["timestamp"],
+        )
+        scores = sorted(
+            (
+                r
+                for r in src.where_equal(Collection.RISK_SCORES, "patientId", uid)
+                if isinstance(r.get("generatedAt"), datetime)
+            ),
+            key=lambda r: r["generatedAt"],
+        )
+        records = src.where_equal(Collection.HEALTH_RECORDS, "patientId", uid)
+        latest = readings[-1] if readings else None
+        out["patient"] = {
+            "doctor": {"uid": doctor_id, "name": names.get(str(doctor_id))} if doctor_id else None,
+            "latestReading": None
+            if latest is None
+            else {
+                "systolic": latest.get("systolic"),
+                "diastolic": latest.get("diastolic"),
+                "heartRate": latest.get("heartRate"),
+                "timestamp": latest["timestamp"].isoformat(),
+            },
+            "readingsLast30Days": sum(
+                1 for r in readings if r["timestamp"] >= now - timedelta(days=30)
+            ),
+            "risk": None
+            if not scores
+            else {
+                "level": overall_level(scores[-1]),
+                "generatedAt": scores[-1]["generatedAt"].isoformat(),
+            },
+            "medications": [
+                {
+                    "name": m.get("name"),
+                    "dosage": m.get("dosage"),
+                    "adherenceRate": m.get("adherenceRate"),
+                }
+                for m in src.where_equal(Collection.MEDICATIONS, "patientId", uid)
+            ],
+            "appointments": _appointment_rows(
+                src.where_equal(Collection.APPOINTMENTS, "patientId", uid), names, "doctorId", 20
+            ),
+            "records": {
+                "total": len(records),
+                "shared": sum(1 for r in records if r.get("sharedWithDoctor")),
+            },
+            "family": [
+                {"uid": k, "name": names[k]}
+                for k, v in users
+                if v.get("role") == UserRole.FAMILY_MEMBER.value and v.get("patientId") == uid
+            ],
+        }
+    elif role == UserRole.DOCTOR.value:
+        mine = [
+            (k, v)
+            for k, v in users
+            if v.get("role") == UserRole.PATIENT.value and v.get("assignedDoctorId") == uid
+        ]
+        latest_level: dict[str, str | None] = {}
+        for pid, _v in mine:
+            scores = [
+                r
+                for r in src.where_equal(Collection.RISK_SCORES, "patientId", pid)
+                if isinstance(r.get("generatedAt"), datetime)
+            ]
+            latest_level[pid] = (
+                overall_level(max(scores, key=lambda r: r["generatedAt"])) if scores else None
+            )
+        appts = src.where_equal(Collection.APPOINTMENTS, "doctorId", uid)
+        upcoming = [
+            a
+            for a in appts
+            if isinstance(a.get("dateTime"), datetime)
+            and a["dateTime"] >= now
+            and a.get("status") in ("booked", "rescheduled")
+        ]
+        out["doctor"] = {
+            "patients": [
+                {
+                    "uid": pid,
+                    "name": names[pid],
+                    "riskLevel": latest_level[pid],
+                    "isActive": v.get("isActive") is not False,
+                }
+                for pid, v in sorted(mine, key=lambda x: names[x[0]])
+            ],
+            "upcoming": list(
+                reversed(_appointment_rows(upcoming, names, "patientId", len(upcoming)))
+            )[:20],
+            "completedTotal": sum(1 for a in appts if a.get("status") == "completed"),
+            "openAlerts": sum(
+                1
+                for a in src.where_equal(Collection.CLINICAL_ALERTS, "doctorId", uid)
+                if a.get("status") == "open"
+            ),
+        }
+    elif role == UserRole.PHARMACIST.value:
+        out["pharmacist"] = {
+            "orders": None,  # D-59: medication orders arrive with Module 13
+        }
+
+    events = [
+        e
+        for _id, e in reader.between(now - timedelta(days=30), now + timedelta(seconds=1))
+        if e.get("userId") == uid
+    ]
+    out["activity"] = [
+        {
+            "timestamp": _iso_or_none(e.get("timestamp")),
+            "action": e.get("action"),
+            "details": e.get("details"),
+        }
+        for e in sorted(events, key=lambda e: e["timestamp"], reverse=True)[:20]
+    ]
+    return out

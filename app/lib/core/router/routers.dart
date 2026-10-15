@@ -6,6 +6,7 @@ import '../../features/appointments/presentation/admin_appointments_page.dart';
 import '../../features/appointments/presentation/admin_assignments_page.dart';
 import '../../features/appointments/presentation/doctor_calendar_page.dart';
 
+import '../../features/admin/presentation/admin_user_detail_page.dart';
 import '../../features/admin/presentation/hospital_analytics_page.dart';
 import '../../features/admin/presentation/system_analytics_page.dart';
 import '../../features/admin/presentation/system_health_page.dart';
@@ -208,6 +209,10 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
                     const Expanded(child: CreateStaffPage()),
                   ],
                 ),
+              ),
+              GoRoute(
+                path: ':uid',
+                builder: (_, st) => AdminUserDetailPage(uid: st.pathParameters['uid']!),
               ),
             ],
           ),
