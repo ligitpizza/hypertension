@@ -81,7 +81,8 @@ class FirestoreDashboardRepository implements DashboardRepository {
       .where('patientId', isEqualTo: patientId)
       .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
       .orderBy('dateTime')
-      .limit(5)
+      // No limit: cancelled bookings are filtered out below, so a limit could hide the
+      // active one behind them. A patient has only a few future appointments.
       .snapshots()
       .map(
         (s) => [
