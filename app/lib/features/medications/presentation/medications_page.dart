@@ -578,14 +578,9 @@ class _DoseTile extends StatelessWidget {
     final med = dose.medication;
     final scheme = Theme.of(context).colorScheme;
     final taken = dose.state == DoseState.taken;
-    final trailing = switch (dose.state) {
-      DoseState.taken => Chip(
-        label: Text(
-          dose.confirmedAt == null
-              ? 'Taken'
-              : '${dose.isLate ? 'Taken late' : 'Taken'} at ${_clock(dose.confirmedAt!)}',
-        ),
-      ),
+    final Widget? trailing = switch (dose.state) {
+      // The taken time sits under the dose (below) so the name keeps its full width.
+      DoseState.taken => null,
       // D-49: a missed dose can still be recorded as taken late until midnight.
       DoseState.missed =>
         busy
@@ -614,9 +609,28 @@ class _DoseTile extends StatelessWidget {
           med.name,
           style: taken ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
         ),
-        subtitle: Text(
-          '${med.dosage} • ${dose.time.label}'
-          '${dose.state == DoseState.missed ? ' • Missed' : ''}',
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${med.dosage} • ${dose.time.label}'
+              '${dose.state == DoseState.missed ? ' • Missed' : ''}',
+            ),
+            if (taken)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  dose.confirmedAt == null
+                      ? 'Taken'
+                      : '${dose.isLate ? 'Taken late' : 'Taken'} at ${_clock(dose.confirmedAt!)}',
+                  key: Key('taken-${med.id}-${dose.time.hhmm}'),
+                  style: TextStyle(
+                    color: dose.isLate ? Colors.orange.shade800 : scheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
         ),
         trailing: trailing,
       ),
