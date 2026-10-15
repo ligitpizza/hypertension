@@ -122,6 +122,11 @@ class _AppointmentsPageState extends ConsumerState<AppointmentsPage> {
     final slots = ref.watch(daySlotsProvider(_day));
     return Scaffold(
       appBar: AppBar(
+        // Reached by go() after booking too, so there may be nothing to pop: then go home.
+        leading: BackButton(
+          key: const Key('appointments-back'),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard'),
+        ),
         title: Text(_rescheduling ? 'Choose a new time' : 'Appointments'),
         actions: [
           if (!_rescheduling)

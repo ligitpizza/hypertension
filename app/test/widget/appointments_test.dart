@@ -233,6 +233,7 @@ Widget app(FakeAppointmentsRepository repo, {String initial = '/appointments', S
           ),
         ),
       ),
+      GoRoute(path: '/dashboard', builder: (_, _) => const Text('HOME')),
       GoRoute(
         path: '/doctor/patient/:id',
         builder: (_, s) => Text('PATIENT ${s.pathParameters['id']}'),
@@ -304,6 +305,14 @@ void main() {
       final saturday = t.widget<InkWell>(find.byKey(const Key('day-2026-10-17')));
       expect(saturday.onTap, isNull);
     });
+  });
+
+  tallTest('the back button returns home when there is nothing to go back to', (t) async {
+    await t.pumpWidget(app(repo));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('appointments-back')));
+    await t.pumpAndSettle();
+    expect(find.text('HOME'), findsOneWidget);
   });
 
   group('D-54 no doctor yet', () {

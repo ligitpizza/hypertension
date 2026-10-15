@@ -3,7 +3,7 @@
 GET   /appointments/slots?date=YYYY-MM-DD    the patient's own doctor's slots that day
 POST  /appointments                          book (checkup / follow-up)
 PATCH /appointments/{id}                     reschedule (dateTime) or cancel
-GET   /appointments/{id}/pre-visit-summary   patient or their doctor (UC7.5)
+GET   /appointments/{id}/pre-visit-summary   patient, their doctor or admin (UC7.5)
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -489,13 +489,17 @@ def staff_cancel(
 @router.get("/{appointment_id}/pre-visit-summary")
 def pre_visit_summary(
     appointment_id: str,
-    user: CurrentUser = Depends(require_roles(UserRole.PATIENT, UserRole.DOCTOR)),
+    user: CurrentUser = Depends(
+        require_roles(UserRole.PATIENT, UserRole.DOCTOR, UserRole.ADMIN)
+    ),
     repo: AppointmentRepository = Depends(get_appointment_repository),
     data: AgentDataRepository = Depends(get_agent_data_repository),
 ) -> dict[str, Any]:
     appt = repo.get(appointment_id)
+    # D-55: the admin opens appointments from the overview, so it sees the summary too.
     allowed = appt is not None and (
-        appt.data.get("patientId") == user.uid
+        user.role is UserRole.ADMIN
+        or appt.data.get("patientId") == user.uid
         or (user.role is UserRole.DOCTOR and appt.data.get("doctorId") == user.uid)
     )
     if appt is None or not allowed:

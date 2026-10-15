@@ -209,7 +209,7 @@ def test_uc7_5_summary_flags_data_gaps() -> None:
     assert "No blood pressure readings in the last 14 days." in empty["dataGaps"]
 
 
-def test_uc7_5_summary_endpoint_for_patient_and_their_doctor_only(
+def test_uc7_5_summary_endpoint_for_patient_their_doctor_and_admin_only(
     client: TestClient, appointment_repo: InMemoryAppointmentRepository
 ) -> None:
     appointment_repo.appointments["a1"] = {
@@ -219,7 +219,7 @@ def test_uc7_5_summary_endpoint_for_patient_and_their_doctor_only(
         "status": "booked",
         "type": "checkup",
     }
-    for token in ("patient-token", "doctor-token"):
+    for token in ("patient-token", "doctor-token", "admin-token"):
         res = client.get("/api/v1/appointments/a1/pre-visit-summary", headers=bearer(token))
         assert res.status_code == 200 and "dataGaps" in res.json()
     appointment_repo.appointments["a2"] = {
