@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/admin/data/admin_repository.dart';
+import 'package:hypertension/features/admin/data/analytics_models.dart';
 import 'package:hypertension/shared/services/api/api_client.dart';
 
 // Shared fake for the Module 11 admin screens.
@@ -69,5 +70,26 @@ class FakeAdminRepository implements AdminRepository {
   Future<SystemHealth> systemHealth() async {
     calls.add('health');
     return health;
+  }
+
+  HospitalAnalytics? hospital;
+  SystemAnalytics? usage;
+
+  @override
+  Future<HospitalAnalytics> hospitalAnalytics({int months = 6}) async => hospital!;
+
+  @override
+  Future<SystemAnalytics> systemAnalytics({int days = 7}) async {
+    calls.add('usage:$days');
+    return usage!;
+  }
+
+  @override
+  Future<Uint8List> report(DateTime from, DateTime to) async {
+    if (error != null) throw error!;
+    calls.add(
+      'report:${from.toIso8601String().substring(0, 10)}:${to.toIso8601String().substring(0, 10)}',
+    );
+    return Uint8List.fromList('%PDF'.codeUnits);
   }
 }

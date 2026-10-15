@@ -296,6 +296,9 @@ void main() {
         '/admin/appointments', // D-55
         '/admin/assignments', // D-54
         '/admin/audit-logs', // UC11.3
+        '/admin/deliveries', // UC11.4 (Module 13)
+        '/admin/analytics/hospital', // FR-11.4
+        '/admin/analytics/system', // FR-11.3
         '/admin/system-health', // FR-11.3
       ]);
       expect(staffDestinations(UserRole.patient), isEmpty);

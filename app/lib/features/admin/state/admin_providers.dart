@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/enums.dart';
 import '../../../shared/providers/api_providers.dart';
 import '../data/admin_repository.dart';
+import '../data/analytics_models.dart';
 
 Duration? _noRetry(int _, Object _) => null;
 
@@ -25,5 +26,16 @@ final auditLogsProvider = FutureProvider.autoDispose.family<AuditPage, AuditQuer
 /// Fig 4.3.14.7; refreshed by invalidating.
 final systemHealthProvider = FutureProvider.autoDispose<SystemHealth>(
   (ref) => ref.watch(adminRepositoryProvider).systemHealth(),
+  retry: _noRetry,
+);
+
+final hospitalAnalyticsProvider = FutureProvider.autoDispose<HospitalAnalytics>(
+  (ref) => ref.watch(adminRepositoryProvider).hospitalAnalytics(),
+  retry: _noRetry,
+);
+
+/// days -> usage analytics.
+final systemAnalyticsProvider = FutureProvider.autoDispose.family<SystemAnalytics, int>(
+  (ref, days) => ref.watch(adminRepositoryProvider).systemAnalytics(days: days),
   retry: _noRetry,
 );

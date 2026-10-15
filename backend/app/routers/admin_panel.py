@@ -3,18 +3,30 @@
 GET /admin/audit-logs        filter by date range, action, user, text; summary counts
 GET /admin/audit-logs.csv    the same rows as CSV (FR-11.3); the export itself is audited
 GET /admin/system-health     live check and latency per service, uptime (FR-11.3)
+GET /admin/analytics/hospital   risk distribution and trend, consultations, adherence (FR-11.4)
+GET /admin/analytics/system     clinicians, messages, critical alerts, activity (FR-11.3)
+POST /admin/reports          hospital-wide PDF for a date range (UC11.5)
 """
 
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
 from app.core.config import Settings, get_settings
 from app.core.enums import UserRole
 from app.core.errors import ApiError
+from app.services.analytics import (
+    AnalyticsSource,
+    get_analytics_source,
+    hospital,
+    report_data,
+    report_pdf,
+    system,
+)
 from app.services.audit_view import (
     AuditReader,
     get_audit_reader,
@@ -22,7 +34,7 @@ from app.services.audit_view import (
     summarise,
     to_csv,
 )
-from app.services.system_health import Probe, get_probe, system_health
+from app.services.system_health import Probe, get_probe, system_health, uptime
 from app.services.users import UserRepository, get_user_repository
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -154,3 +166,68 @@ def get_system_health(
 ) -> dict[str, Any]:
     """Fig 4.3.14.7: API, database, ML model, push, email, AI agent, Stripe, Grab."""
     return system_health(probe, reader, settings)
+
+
+@router.get("/analytics/hospital")
+def hospital_analytics(
+    months: int = Query(default=6, ge=1, le=12),
+    _: CurrentUser = Depends(admin_only),
+    src: AnalyticsSource = Depends(get_analytics_source),
+) -> dict[str, Any]:
+    """Fig 4.3.14.5 (FR-11.4), with the monthly risk-level trend (D-59)."""
+    return hospital(src, datetime.now(UTC), months)
+
+
+@router.get("/analytics/system")
+def system_analytics(
+    days: int = Query(default=7, ge=1, le=90),
+    _: CurrentUser = Depends(admin_only),
+    src: AnalyticsSource = Depends(get_analytics_source),
+    reader: AuditReader = Depends(get_audit_reader),
+) -> dict[str, Any]:
+    """Fig 4.3.14.6 (FR-11.3); usage grouped by doctor specialty (D-59)."""
+    now = datetime.now(UTC)
+    entries = [e for _, e in reader.between(now - timedelta(days=30), now + timedelta(seconds=1))]
+    return system(src, entries, now, days, uptime(reader, now))
+
+
+class ReportRequest(BaseModel):
+    """UC11.5 parameters: Malaysian calendar dates."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    start: date = Field(alias="from")
+    end: date = Field(alias="to")
+
+
+@router.post("/reports")
+def hospital_report(
+    body: ReportRequest,
+    admin: CurrentUser = Depends(admin_only),
+    src: AnalyticsSource = Depends(get_analytics_source),
+    reader: AuditReader = Depends(get_audit_reader),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> Response:
+    """UC11.5: compile the report for a date range and return the PDF (E1: no data)."""
+    start, end = body.start, body.end
+    lo, hi = _range(start, end)
+    data = report_data(src, [e for _, e in reader.between(lo, hi)], lo, hi)
+    if data is None:
+        raise ApiError(
+            "NO_DATA",
+            "There is no activity in this period, so no report was generated.",
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    period = f"{start:%d %b %Y} to {end:%d %b %Y}"
+    generated = f"{datetime.now(UTC) + MYT:%d %b %Y, %H:%M}"
+    pdf = report_pdf(data, period, generated)
+    audit.log(
+        user_id=admin.uid,
+        action="GENERATE_REPORT",
+        details=f"Hospital-wide report for {period}.",
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="careflow-hospital-report.pdf"'},
+    )

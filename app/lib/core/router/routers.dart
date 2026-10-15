@@ -6,6 +6,8 @@ import '../../features/appointments/presentation/admin_appointments_page.dart';
 import '../../features/appointments/presentation/admin_assignments_page.dart';
 import '../../features/appointments/presentation/doctor_calendar_page.dart';
 
+import '../../features/admin/presentation/hospital_analytics_page.dart';
+import '../../features/admin/presentation/system_analytics_page.dart';
 import '../../features/admin/presentation/system_health_page.dart';
 import '../../features/admin/presentation/audit_logs_page.dart';
 import '../../features/admin/presentation/admin_users_page.dart';
@@ -212,6 +214,18 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/admin/appointments', builder: (_, _) => const AdminAppointmentsPage()),
           GoRoute(path: '/admin/audit-logs', builder: (_, _) => const AuditLogsPage()),
           GoRoute(path: '/admin/system-health', builder: (_, _) => const SystemHealthPage()),
+          GoRoute(
+            path: '/admin/analytics/hospital',
+            builder: (_, _) => const HospitalAnalyticsPage(),
+          ),
+          GoRoute(path: '/admin/analytics/system', builder: (_, _) => const SystemAnalyticsPage()),
+          GoRoute(
+            path: '/admin/deliveries',
+            builder: (_, _) => const ComingSoon(
+              title: 'Delivery oversight',
+              note: 'Delivery oversight arrives with medication ordering and delivery (Module 13).',
+            ),
+          ),
           GoRoute(path: '/admin/assignments', builder: (_, _) => const AdminAssignmentsPage()),
         ],
       ),

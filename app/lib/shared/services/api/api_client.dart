@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -14,7 +16,13 @@ class ApiException implements Exception {
   final Object? details;
 
   factory ApiException.fromDio(DioException e) {
-    final data = e.response?.data;
+    var data = e.response?.data;
+    if (data is List<int>) {
+      // Byte downloads (PDF, CSV) still return the JSON error envelope on failure.
+      try {
+        data = jsonDecode(utf8.decode(data));
+      } catch (_) {}
+    }
     if (data is Map && data['error'] is Map) {
       final err = data['error'] as Map;
       return ApiException(
@@ -115,6 +123,28 @@ class ApiClient {
 
   /// Fig 4.3.14.7: live check per service.
   Future<Map<String, dynamic>> adminSystemHealth() => _getQuery('/admin/system-health', const {});
+
+  /// Fig 4.3.14.5 (FR-11.4).
+  Future<Map<String, dynamic>> adminHospitalAnalytics({int months = 6}) =>
+      _getQuery('/admin/analytics/hospital', {'months': months});
+
+  /// Fig 4.3.14.6 (FR-11.3).
+  Future<Map<String, dynamic>> adminSystemAnalytics({int days = 7}) =>
+      _getQuery('/admin/analytics/system', {'days': days});
+
+  /// UC11.5: the hospital-wide PDF for Malaysian dates (yyyy-MM-dd).
+  Future<List<int>> adminReport(String from, String to) async {
+    try {
+      final res = await _dio.post<List<int>>(
+        '/admin/reports',
+        data: {'from': from, 'to': to},
+        options: Options(responseType: ResponseType.bytes, receiveTimeout: agentTimeout),
+      );
+      return res.data ?? const [];
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
 
   /// UC11.1: edit name / specialty / caseload limit, or (de)activate.
   Future<Map<String, dynamic>> updateUser(String uid, Map<String, dynamic> body) =>

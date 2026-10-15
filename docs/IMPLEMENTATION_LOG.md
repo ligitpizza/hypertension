@@ -953,3 +953,45 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Deviations vs Chapter 4: D-58 (fileName, contentType, sizeBytes; stop sharing,
   recategorise, delete). Not in the data export (D-47) yet: the export lists measurements,
   not files.
+
+### 2026-10-16 — Increment 3 — Module 11: Admin Panel
+
+- FRs / UCs: FR-11.1–11.4; UC11.1 (E1 last admin), UC11.2 (through the D-54 request
+  flow), UC11.3, UC11.5 (E1 no data); UC11.4 deferred to Module 13. Sequence Fig 4.1.1.11;
+  mockups Figs 4.3.14.1–4.3.14.7. Decision D-59 (agreed with Ping); ML follow-up 2
+  (clinic-wide risk trend) delivered here.
+- **User Management** (`/admin/users`, Fig 4.3.14.1): search, role filter, paging of 10,
+  status and join date; Edit (name; doctor specialty and caseload limit `maxPatients`);
+  Deactivate (reason logged; Firebase login disabled and sessions revoked) / Reactivate
+  (also cancels a pending D-46 deletion). The last active admin cannot be deactivated.
+  Roles never change. "Add new user" opens staff provisioning at `/admin/users/new`.
+  API: `GET /admin/users`, `PATCH /admin/users/{uid}`; audit EDIT_USER,
+  DEACTIVATE_ACCOUNT, REACTIVATE_ACCOUNT.
+- **Patient Assignments** (`/admin/assignments`, Fig 4.3.14.2): D-54 requests beside a
+  Clinical team availability panel (caseload n / max, Available / Near capacity / Full);
+  the doctor chooser shows caseloads and warns before assigning to a full doctor. No
+  direct reassign or auto-assign (Ping, D-59).
+- **Security & Audit Logs** (`/admin/audit-logs`, Fig 4.3.14.3): range (today, 7/30/90
+  days), action filter, text search, summary cards (events with change from the previous
+  period, failed logins, privilege changes, exports), module affected, MYT times, paging,
+  CSV export (audited EXPORT_AUDIT_LOG). API: `GET /admin/audit-logs[.csv]`.
+- **System Health** (`/admin/system-health`, Fig 4.3.14.7): API, Firestore (timed read),
+  ML model (timed test prediction; degraded above 3 s, NFR-1.2), push, email, AI agent,
+  Stripe and Grab (simulated until Module 13). Uptime = heartbeats received / expected over
+  30 days; the 15-minute sweep now writes one `JOB_HEARTBEAT` (targetType `sweep`) per run,
+  hidden in the audit viewer unless filtered for.
+- **Hospital Analytics** (`/admin/analytics/hospital`, Fig 4.3.14.5): risk donut (latest
+  score per active patient), monthly risk-level trend, 6-month consultation volume
+  (completed / no-show / cancelled / upcoming), 30-day adherence line; delivery success
+  rate shows "available with Module 13". **Usage Analytics** (`/admin/analytics/system`,
+  Fig 4.3.14.6): active clinicians, uptime, messages sent, unresolved critical alerts,
+  daily activity by user type (7D/30D/3M), usage by doctor specialty.
+- **Hospital-wide report** (UC11.5): date-range picker → `POST /admin/reports` → PDF
+  (patients & risk, appointments with top cancellation reasons, adherence & alerts incl.
+  triage outcomes, usage), audited GENERATE_REPORT; E1 returns NO_DATA and the portal shows
+  the message. Byte downloads now surface the backend's JSON error message.
+- `/admin/deliveries` is a placeholder until Module 13.
+- Tests: backend 41 new (users 12, audit 7, health 9, analytics 11 + parametrised);
+  Flutter 33 new widget tests (481 total). New shared test fake `test/helpers/admin_fakes.dart`.
+- Deviations vs Chapter 4: D-59 (maxPatients; no auto-assign or direct reassign; uptime
+  from the sweep heartbeat; "department" = doctor specialty).

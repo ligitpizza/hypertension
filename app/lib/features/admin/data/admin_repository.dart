@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../../../core/constants/enums.dart';
 import '../../../shared/services/api/api_client.dart';
+import 'analytics_models.dart';
 
 /// One row of User Management (Fig 4.3.14.1; FR-11.1; D-59).
 class AdminUser {
@@ -227,6 +228,13 @@ abstract interface class AdminRepository {
   Future<Uint8List> auditCsv(AuditQuery query);
 
   Future<SystemHealth> systemHealth();
+
+  Future<HospitalAnalytics> hospitalAnalytics({int months = 6});
+
+  Future<SystemAnalytics> systemAnalytics({int days = 7});
+
+  /// UC11.5: the PDF for Malaysian dates [from, to].
+  Future<Uint8List> report(DateTime from, DateTime to);
 }
 
 class ApiAdminRepository implements AdminRepository {
@@ -282,4 +290,16 @@ class ApiAdminRepository implements AdminRepository {
   @override
   Future<SystemHealth> systemHealth() async =>
       SystemHealth.fromJson(await _api.adminSystemHealth());
+
+  @override
+  Future<HospitalAnalytics> hospitalAnalytics({int months = 6}) async =>
+      HospitalAnalytics.fromJson(await _api.adminHospitalAnalytics(months: months));
+
+  @override
+  Future<SystemAnalytics> systemAnalytics({int days = 7}) async =>
+      SystemAnalytics.fromJson(await _api.adminSystemAnalytics(days: days));
+
+  @override
+  Future<Uint8List> report(DateTime from, DateTime to) async =>
+      Uint8List.fromList(await _api.adminReport(AuditQuery._day(from), AuditQuery._day(to)));
 }

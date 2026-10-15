@@ -40,6 +40,7 @@ from app.routers.agent import get_agent_limiter
 from app.routers.auth import get_failed_login_limiter
 from app.routers.messages import get_message_repository
 from app.services.agent_context import get_agent_data_repository
+from app.services.analytics import get_analytics_source
 from app.services.appointments import get_appointment_repository
 from app.services.assignments import get_assignment_repository
 from app.services.audit_view import get_audit_reader
@@ -408,6 +409,30 @@ class InMemoryAuditReader:
     def between(self, start: datetime, end: datetime) -> list[tuple[str, dict[str, Any]]]:
         rows = [(i, e) for i, e in self.entries if start <= e["timestamp"] < end]
         return sorted(rows, key=lambda r: r[1]["timestamp"], reverse=True)
+
+
+class InMemoryAnalyticsSource:
+    """Module 11 analytics: collection name -> documents; users come from the user repo."""
+
+    def __init__(self, users: "InMemoryUserRepository") -> None:
+        self._users = users
+        self.docs: dict[str, list[dict[str, Any]]] = {}
+
+    def add(self, collection: str, **doc: Any) -> None:
+        self.docs.setdefault(collection, []).append(doc)
+
+    def users(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(uid, dict(u)) for uid, u in self._users.users.items()]
+
+    def in_range(self, collection: Any, field: str, start: datetime, end: datetime) -> list[Any]:
+        return [
+            d
+            for d in self.docs.get(collection.value, [])
+            if isinstance(d.get(field), datetime) and start <= d[field] < end
+        ]
+
+    def where_equal(self, collection: Any, field: str, value: Any) -> list[Any]:
+        return [d for d in self.docs.get(collection.value, []) if d.get(field) == value]
 
 
 class InMemoryRecordRepository:
@@ -955,6 +980,11 @@ def audit_reader() -> InMemoryAuditReader:
 
 
 @pytest.fixture
+def analytics(repo: InMemoryUserRepository) -> InMemoryAnalyticsSource:
+    return InMemoryAnalyticsSource(repo)
+
+
+@pytest.fixture
 def settings_repo(
     repo: InMemoryUserRepository,
     vitals_repo: InMemoryVitalsRepository,
@@ -990,6 +1020,7 @@ def make_client(
     record_repo: InMemoryRecordRepository,
     file_store: InMemoryFileStore,
     audit_reader: InMemoryAuditReader,
+    analytics: InMemoryAnalyticsSource,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -1021,6 +1052,7 @@ def make_client(
         app.dependency_overrides[get_record_repository] = lambda: record_repo
         app.dependency_overrides[get_file_store] = lambda: file_store
         app.dependency_overrides[get_audit_reader] = lambda: audit_reader
+        app.dependency_overrides[get_analytics_source] = lambda: analytics
         return TestClient(app)
 
     return _make
