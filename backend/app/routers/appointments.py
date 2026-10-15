@@ -16,11 +16,17 @@ from app.core.auth import CurrentUser, require_roles
 from app.core.enums import AppointmentStatus, Collection, UserRole
 from app.core.errors import ApiError
 from app.integrations.push import PushMessage
-from app.schemas.appointments import BookRequest, ChangeRequest
+from app.schemas.appointments import (
+    BookRequest,
+    ChangeRequest,
+    DecisionRequest,
+    StaffCancelRequest,
+)
 from app.services.agent_context import AgentDataRepository, get_agent_data_repository
 from app.services.appointment_extras import build_pre_visit_summary, when_text
 from app.services.appointments import (
     ACTIVE,
+    CHANGE_CUTOFF,
     LATE_CHANGE,
     MAX_AHEAD,
     SUMMARY_DAYS,
@@ -33,6 +39,7 @@ from app.services.appointments import (
     is_bookable,
     next_free,
     period,
+    reason_text,
 )
 from app.services.medications import MYT
 from app.services.notifications import Notifier, get_notifier
@@ -164,6 +171,29 @@ def _own(repo: AppointmentRepository, appointment_id: str, uid: str) -> Appointm
     return appt
 
 
+def _patient_name(repo: AppointmentRepository, uid: str) -> str:
+    return str((repo.user(uid) or {}).get("name") or "A patient")
+
+
+def _push(notifier: Notifier, uid: str | None, title: str, body: str, appt_id: str) -> None:
+    if uid:
+        notifier.notify(
+            uid, PushMessage(title, body, {"type": "appointment", "appointmentId": appt_id})
+        )
+
+
+def _apply_cancel(repo: AppointmentRepository, appt_id: str, reason: str, by: str) -> None:
+    repo.update(
+        appt_id,
+        {
+            "status": AppointmentStatus.CANCELLED.value,
+            "cancelledBy": by,
+            "changeReason": reason,
+            "pendingChange": None,
+        },
+    )
+
+
 @router.patch("/{appointment_id}")
 def change(
     appointment_id: str,
@@ -173,28 +203,109 @@ def change(
     notifier: Notifier = Depends(get_notifier),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
-    """UC7.2. The < 24 h warning (E1) is shown by the app before calling this."""
+    """UC7.2 / D-55: the patient asks; the doctor decides (or it lapses 2 h before)."""
     now = datetime.now(UTC)
     appt = _own(repo, appointment_id, user.uid)
-    if appt.data.get("status") not in ACTIVE or appt.data["dateTime"] <= now:
+    a = appt.data
+    if a.get("status") not in ACTIVE or a["dateTime"] <= now:
         raise ApiError(
             "APPOINTMENT_CLOSED",
             "This appointment can no longer be changed.",
             status.HTTP_409_CONFLICT,
         )
-    me = repo.user(user.uid) or {}
-    name = str(me.get("name") or "A patient")
+    name = _patient_name(repo, user.uid)
+    when = when_text(a["dateTime"])
+    pending = a.get("pendingChange")
+
+    if body.withdraw:
+        if not pending:
+            raise ApiError(
+                "NO_REQUEST", "There is no request to withdraw.", status.HTTP_409_CONFLICT
+            )
+        repo.update(appointment_id, {"pendingChange": None})
+        _push(
+            notifier,
+            a.get("doctorId"),
+            "Request withdrawn",
+            f"{name}: {when} stays as booked.",
+            appointment_id,
+        )
+        audit.log(
+            user_id=user.uid,
+            action="WITHDRAW_APPOINTMENT_REQUEST",
+            details=f"Withdrew the {pending.get('kind')} request for {when} (MYT).",
+            target_type=Collection.APPOINTMENTS.value,
+            target_id=appointment_id,
+        )
+        return {"id": appointment_id, "status": a["status"], "pendingChange": None}
+
+    if pending:
+        raise ApiError(
+            "CHANGE_PENDING",
+            "You already asked to change this appointment. Wait for your doctor or withdraw it.",
+            status.HTTP_409_CONFLICT,
+        )
+    if body.reason is None:
+        raise ApiError(
+            "REASON_REQUIRED", "Please choose a reason.", status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+    if body.reason == "other" and not body.note:
+        raise ApiError(
+            "REASON_REQUIRED", "Please tell us the reason.", status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+    reason = reason_text(body.reason, body.note)
+    soon = a["dateTime"] - now <= CHANGE_CUTOFF
+
     if body.cancel:
-        repo.update(appointment_id, {"status": AppointmentStatus.CANCELLED.value})
-        _notify_doctor(notifier, appt.data, name, "cancelled")
-        action, result = "CANCEL_APPOINTMENT", AppointmentStatus.CANCELLED.value
-        moment = appt.data["dateTime"]
+        if soon:
+            # Too close for the doctor to decide: a patient who can't come is cancelled.
+            _apply_cancel(repo, appointment_id, reason, "patient")
+            _push(
+                notifier,
+                a.get("doctorId"),
+                "Appointment cancelled",
+                f"{name}: {when}. Reason: {reason}",
+                appointment_id,
+            )
+            audit.log(
+                user_id=user.uid,
+                action="CANCEL_APPOINTMENT",
+                details=f"Cancelled {when} (MYT) within 2 hours. Reason: {reason}",
+                target_type=Collection.APPOINTMENTS.value,
+                target_id=appointment_id,
+            )
+            return {"id": appointment_id, "status": AppointmentStatus.CANCELLED.value}
+        request: dict[str, Any] = {
+            "kind": "cancel",
+            "reason": body.reason,
+            "note": body.note,
+            "requestedAt": now,
+        }
+        repo.update(appointment_id, {"pendingChange": request})
+        _push(
+            notifier,
+            a.get("doctorId"),
+            "Cancellation requested",
+            f"{name}: {when}. Reason: {reason}",
+            appointment_id,
+        )
+        action, details = (
+            "REQUEST_CANCEL_APPOINTMENT",
+            f"Asked to cancel {when} (MYT). Reason: {reason}",
+        )
     else:
         if body.dateTime is None:
             raise ApiError(
                 "NOTHING_TO_CHANGE",
                 "Choose a new time or cancel.",
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
+            )
+        if soon:
+            raise ApiError(
+                "TOO_LATE",
+                "It's less than 2 hours before your appointment, so it can't be moved. "
+                "You can cancel instead.",
+                status.HTTP_409_CONFLICT,
             )
         moment = body.dateTime.astimezone(UTC)
         if not is_bookable(moment, now):
@@ -203,27 +314,176 @@ def change(
                 "Please choose one of the available times.",
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
             )
-        moved = {**appt.data, "dateTime": moment, "status": AppointmentStatus.RESCHEDULED.value}
+        request = {
+            "kind": "reschedule",
+            "dateTime": moment,
+            "reason": body.reason,
+            "note": body.note,
+            "requestedAt": now,
+        }
         try:
-            repo.book(moved, exclude_id=appointment_id)
+            repo.request_reschedule(appointment_id, str(a["doctorId"]), request)
         except SlotTakenError as exc:
             raise ApiError(
                 "SLOT_TAKEN",
                 "That time was just taken. Please choose another.",
                 status.HTTP_409_CONFLICT,
             ) from exc
-        _notify_doctor(notifier, moved, name, "rescheduled")
-        action, result = "RESCHEDULE_APPOINTMENT", AppointmentStatus.RESCHEDULED.value
+        _push(
+            notifier,
+            a.get("doctorId"),
+            "Reschedule requested",
+            f"{name}: {when} -> {when_text(moment)}. Reason: {reason}",
+            appointment_id,
+        )
+        action = "REQUEST_RESCHEDULE_APPOINTMENT"
+        details = f"Asked to move {when} -> {when_text(moment)} (MYT). Reason: {reason}"
     audit.log(
         user_id=user.uid,
         action=action,
-        details=f"Appointment {result}: {when_text(appt.data['dateTime'])}"
-        f"{f' -> {when_text(moment)}' if result == AppointmentStatus.RESCHEDULED.value else ''}"
-        f" (MYT){' within 24 hours' if appt.data['dateTime'] - now < LATE_CHANGE else ''}.",
+        details=details + (" (within 24 hours)" if a["dateTime"] - now < LATE_CHANGE else ""),
         target_type=Collection.APPOINTMENTS.value,
         target_id=appointment_id,
     )
-    return {"id": appointment_id, "status": result, "dateTime": moment.isoformat()}
+    return {"id": appointment_id, "status": a["status"], "pendingChange": request["kind"]}
+
+
+def _staff_appointment(
+    repo: AppointmentRepository, appointment_id: str, user: CurrentUser
+) -> AppointmentDoc:
+    """The appointment's own doctor, or any admin (D-55)."""
+    appt = repo.get(appointment_id)
+    if appt is None or (user.role is UserRole.DOCTOR and appt.data.get("doctorId") != user.uid):
+        raise ApiError("APPOINTMENT_NOT_FOUND", "Appointment not found.", status.HTTP_404_NOT_FOUND)
+    return appt
+
+
+@router.post("/{appointment_id}/decision")
+def decide(
+    appointment_id: str,
+    body: DecisionRequest,
+    user: CurrentUser = Depends(require_roles(UserRole.DOCTOR, UserRole.ADMIN)),
+    repo: AppointmentRepository = Depends(get_appointment_repository),
+    notifier: Notifier = Depends(get_notifier),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-55: approve or decline the patient's pending cancel/reschedule."""
+    appt = _staff_appointment(repo, appointment_id, user)
+    a = appt.data
+    pending = a.get("pendingChange")
+    if not isinstance(pending, dict) or a.get("status") not in ACTIVE:
+        raise ApiError("NO_REQUEST", "There is no request to decide.", status.HTTP_409_CONFLICT)
+    kind = str(pending.get("kind"))
+    reason = reason_text(str(pending.get("reason")), pending.get("note"))
+    when = when_text(a["dateTime"])
+    patient_id = str(a["patientId"])
+    note = f" {body.note}" if body.note else ""
+    if not body.approve:
+        repo.update(appointment_id, {"pendingChange": None})
+        _push(
+            notifier,
+            patient_id,
+            "Request declined",
+            f"Your appointment on {when} stays as booked.{note}",
+            appointment_id,
+        )
+        result = "declined"
+    elif kind == "cancel":
+        _apply_cancel(repo, appointment_id, reason, "patient")
+        _push(
+            notifier,
+            patient_id,
+            "Cancellation approved",
+            f"Your appointment on {when} is cancelled.{note}",
+            appointment_id,
+        )
+        result = "cancelled"
+    else:
+        moment: datetime = pending["dateTime"]
+        try:
+            repo.book(
+                {
+                    **a,
+                    "dateTime": moment,
+                    "status": AppointmentStatus.RESCHEDULED.value,
+                    "changeReason": reason,
+                    "pendingChange": None,
+                },
+                exclude_id=appointment_id,
+            )
+        except SlotTakenError as exc:
+            raise ApiError(
+                "SLOT_TAKEN", "That time is no longer free.", status.HTTP_409_CONFLICT
+            ) from exc
+        _push(
+            notifier,
+            patient_id,
+            "Reschedule approved",
+            f"Your appointment moved to {when_text(moment)}.{note}",
+            appointment_id,
+        )
+        result = "rescheduled"
+    if user.role is UserRole.ADMIN and a.get("doctorId"):
+        _push(
+            notifier,
+            str(a["doctorId"]),
+            f"Admin {result} a {kind} request",
+            f"{_patient_name(repo, patient_id)}: {when}.",
+            appointment_id,
+        )
+    audit.log(
+        user_id=user.uid,
+        action="DECIDE_APPOINTMENT_REQUEST",
+        details=f"{kind} request for {when} (MYT) {result}. Reason given: {reason}.{note}",
+        target_type=Collection.APPOINTMENTS.value,
+        target_id=appointment_id,
+    )
+    return {"id": appointment_id, "result": result}
+
+
+@router.post("/{appointment_id}/staff-cancel")
+def staff_cancel(
+    appointment_id: str,
+    body: StaffCancelRequest,
+    user: CurrentUser = Depends(require_roles(UserRole.DOCTOR, UserRole.ADMIN)),
+    repo: AppointmentRepository = Depends(get_appointment_repository),
+    notifier: Notifier = Depends(get_notifier),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-55: the doctor or the admin cancels, with a reason; both sides are told."""
+    appt = _staff_appointment(repo, appointment_id, user)
+    a = appt.data
+    if a.get("status") not in ACTIVE:
+        raise ApiError(
+            "APPOINTMENT_CLOSED", "This appointment is not active.", status.HTTP_409_CONFLICT
+        )
+    by = "admin" if user.role is UserRole.ADMIN else "doctor"
+    _apply_cancel(repo, appointment_id, body.reason, by)
+    when = when_text(a["dateTime"])
+    _push(
+        notifier,
+        str(a["patientId"]),
+        "Appointment cancelled",
+        f"Your appointment on {when} was cancelled by the clinic: {body.reason} "
+        "Please book a new time.",
+        appointment_id,
+    )
+    if by == "admin":
+        _push(
+            notifier,
+            a.get("doctorId"),
+            "Appointment cancelled by admin",
+            f"{_patient_name(repo, str(a['patientId']))}: {when}. {body.reason}",
+            appointment_id,
+        )
+    audit.log(
+        user_id=user.uid,
+        action="STAFF_CANCEL_APPOINTMENT",
+        details=f"{by} cancelled {when} (MYT): {body.reason}",
+        target_type=Collection.APPOINTMENTS.value,
+        target_id=appointment_id,
+    )
+    return {"id": appointment_id, "status": AppointmentStatus.CANCELLED.value}
 
 
 @router.get("/{appointment_id}/pre-visit-summary")

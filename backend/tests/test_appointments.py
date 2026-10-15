@@ -176,31 +176,6 @@ def test_d54_no_doctor_yet(client: TestClient, repo: InMemoryUserRepository) -> 
     assert res.status_code == 409 and res.json()["error"]["code"] == "NO_DOCTOR"
 
 
-def test_uc7_2_reschedule_and_cancel_notify_the_doctor(
-    client: TestClient, appointment_repo: InMemoryAppointmentRepository, push: LogPushClient
-) -> None:
-    slot = a_future_slot(10)
-    appt_id = client.post(
-        "/api/v1/appointments", json={"dateTime": slot.isoformat()}, headers=PATIENT
-    ).json()["id"]
-    later = slot + timedelta(hours=1)
-    res = client.patch(
-        f"/api/v1/appointments/{appt_id}", json={"dateTime": later.isoformat()}, headers=PATIENT
-    )
-    assert res.status_code == 200 and res.json()["status"] == "rescheduled"
-    assert appointment_repo.appointments[appt_id]["dateTime"] == later
-    res = client.patch(f"/api/v1/appointments/{appt_id}", json={"cancel": True}, headers=PATIENT)
-    assert res.json()["status"] == "cancelled"
-    assert [m.title for _, m in push.sent] == [
-        "Appointment booked",
-        "Appointment rescheduled",
-        "Appointment cancelled",
-    ]
-    # A cancelled appointment can't be changed again.
-    again = client.patch(f"/api/v1/appointments/{appt_id}", json={"cancel": True}, headers=PATIENT)
-    assert again.status_code == 409
-
-
 def test_only_the_owner_changes_an_appointment(
     client: TestClient, appointment_repo: InMemoryAppointmentRepository
 ) -> None:
@@ -320,17 +295,6 @@ def test_emergency_auto_booking_once(
     assert "999" in push.sent[0][1].body and push.sent[0][1].urgent
     assert auto_book_emergency(appointment_repo, notifier, P, D, now) is None  # not twice
     assert auto_book_emergency(appointment_repo, notifier, "x", None, now) is None  # no doctor
-
-
-def test_audit_entries_say_which_time(client: TestClient, audit: InMemoryAuditLogger) -> None:
-    slot = a_future_slot(10)
-    appt_id = client.post(
-        "/api/v1/appointments", json={"dateTime": slot.isoformat()}, headers=PATIENT
-    ).json()["id"]
-    client.patch(f"/api/v1/appointments/{appt_id}", json={"cancel": True}, headers=PATIENT)
-    book, cancel = [e for e in audit.entries if "APPOINTMENT" in e["action"]]
-    assert "10:00 AM" in book["details"] and book["targetId"] == appt_id
-    assert cancel["action"] == "CANCEL_APPOINTMENT" and "10:00 AM" in cancel["details"]
 
 
 def test_emergency_auto_booking_is_audited(

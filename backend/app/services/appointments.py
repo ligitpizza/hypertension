@@ -27,6 +27,32 @@ MAX_AHEAD = timedelta(days=60)
 LATE_CHANGE = timedelta(hours=24)  # UC7.2 E1 warning
 REMINDERS = (timedelta(hours=24), timedelta(hours=1))  # UC7.4
 SUMMARY_DAYS = 14  # UC7.5 recent vitals window
+CHANGE_CUTOFF = timedelta(hours=2)  # D-55: requests lapse this long before the visit
+# D-55 reasons a patient gives when cancelling or rescheduling.
+CHANGE_REASONS = {
+    "feeling_better": "Feeling better",
+    "schedule_conflict": "Schedule conflict",
+    "transport": "Transport problem",
+    "cost": "Cost",
+    "other_doctor": "Seeing another doctor",
+    "other": "Other",
+}
+
+
+def reason_text(reason: str, note: str | None) -> str:
+    label = CHANGE_REASONS.get(reason, reason)
+    return f"{label}: {note}" if note else label
+
+
+def held_time(data: dict[str, Any]) -> datetime | None:
+    """D-55: the new time a pending reschedule is holding."""
+    pending = data.get("pendingChange")
+    if isinstance(pending, dict) and pending.get("kind") == "reschedule":
+        held = pending.get("dateTime")
+        return held if isinstance(held, datetime) else None
+    return None
+
+
 ACTIVE = (AppointmentStatus.BOOKED.value, AppointmentStatus.RESCHEDULED.value)
 
 
@@ -93,7 +119,8 @@ class AppointmentRepository(Protocol):
     def get(self, appointment_id: str) -> AppointmentDoc | None: ...
 
     def taken(self, doctor_id: str, start: datetime, end: datetime) -> set[datetime]:
-        """Active appointment times of a doctor in [start, end)."""
+        """Active appointment times of a doctor in [start, end), plus times held by
+        pending reschedule requests (D-55)."""
         ...
 
     def book(self, data: dict[str, Any], exclude_id: str | None = None) -> str:
@@ -102,6 +129,12 @@ class AppointmentRepository(Protocol):
         ...
 
     def update(self, appointment_id: str, data: dict[str, Any]) -> None: ...
+
+    def request_reschedule(
+        self, appointment_id: str, doctor_id: str, pending: dict[str, Any]
+    ) -> None:
+        """D-55: atomically hold the requested time; SlotTakenError if it isn't free."""
+        ...
 
     def upcoming_for_patient(self, patient_id: str, now: datetime) -> list[AppointmentDoc]: ...
 
@@ -134,23 +167,50 @@ class FirestoreAppointmentRepository:
             .where(filter=gfs.FieldFilter("dateTime", "<", end))
         )
 
+    def _holds_query(self, doctor_id: str) -> Any:
+        # Equality on two fields: served by single-field indexes (no composite needed).
+        return (
+            self._col()
+            .where(filter=gfs.FieldFilter("doctorId", "==", doctor_id))
+            .where(filter=gfs.FieldFilter("pendingChange.kind", "==", "reschedule"))
+        )
+
     def taken(self, doctor_id: str, start: datetime, end: datetime) -> set[datetime]:
-        return {
+        booked = {
             d.get("dateTime")
             for d in self._doctor_query(doctor_id, start, end).stream()
             if d.get("status") in ACTIVE
         }
+        held = {
+            t
+            for d in self._holds_query(doctor_id).stream()
+            if d.get("status") in ACTIVE
+            and (t := held_time(dict(d.to_dict()))) is not None
+            and start <= t < end
+        }
+        return booked | held
+
+    def _check_free(
+        self, tx: Any, doctor_id: str, moment: datetime, exclude_id: str | None
+    ) -> None:
+        for d in self._doctor_query(doctor_id, moment, moment + SLOT).stream(transaction=tx):
+            if d.id != exclude_id and d.get("status") in ACTIVE:
+                raise SlotTakenError
+        for d in self._holds_query(doctor_id).stream(transaction=tx):
+            if (
+                d.id != exclude_id
+                and d.get("status") in ACTIVE
+                and held_time(dict(d.to_dict())) == moment
+            ):
+                raise SlotTakenError
 
     def book(self, data: dict[str, Any], exclude_id: str | None = None) -> str:
         moment: datetime = data["dateTime"]
-        query = self._doctor_query(data["doctorId"], moment, moment + SLOT)
         ref = self._col().document(exclude_id) if exclude_id else self._col().document()
 
         @gfs.transactional  # type: ignore[untyped-decorator]
         def run(tx: Any) -> None:
-            for d in query.stream(transaction=tx):
-                if d.id != exclude_id and d.get("status") in ACTIVE:
-                    raise SlotTakenError
+            self._check_free(tx, data["doctorId"], moment, exclude_id)
             if exclude_id:
                 tx.update(ref, {**data, "updatedAt": gfs.SERVER_TIMESTAMP})
             else:
@@ -161,6 +221,18 @@ class FirestoreAppointmentRepository:
 
     def update(self, appointment_id: str, data: dict[str, Any]) -> None:
         self._col().document(appointment_id).update({**data, "updatedAt": gfs.SERVER_TIMESTAMP})
+
+    def request_reschedule(
+        self, appointment_id: str, doctor_id: str, pending: dict[str, Any]
+    ) -> None:
+        ref = self._col().document(appointment_id)
+
+        @gfs.transactional  # type: ignore[untyped-decorator]
+        def run(tx: Any) -> None:
+            self._check_free(tx, doctor_id, pending["dateTime"], appointment_id)
+            tx.update(ref, {"pendingChange": pending, "updatedAt": gfs.SERVER_TIMESTAMP})
+
+        run(self._db.transaction())
 
     def upcoming_for_patient(self, patient_id: str, now: datetime) -> list[AppointmentDoc]:
         q = (

@@ -388,25 +388,37 @@ class InMemoryAppointmentRepository:
         return AppointmentDoc(appointment_id, a) if a else None
 
     def taken(self, doctor_id: str, start: datetime, end: datetime) -> set[datetime]:
-        from app.services.appointments import ACTIVE
+        from app.services.appointments import ACTIVE, held_time
 
-        return {
-            a["dateTime"]
-            for a in self.appointments.values()
-            if a["doctorId"] == doctor_id and start <= a["dateTime"] < end and a["status"] in ACTIVE
-        }
+        out = set()
+        for a in self.appointments.values():
+            if a["doctorId"] != doctor_id or a["status"] not in ACTIVE:
+                continue
+            for t in (a["dateTime"], held_time(a)):
+                if t is not None and start <= t < end:
+                    out.add(t)
+        return out
 
-    def book(self, data: dict[str, Any], exclude_id: str | None = None) -> str:
-        from app.services.appointments import ACTIVE, SlotTakenError
+    def _check_free(self, doctor_id: str, moment: datetime, exclude_id: str | None) -> None:
+        from app.services.appointments import ACTIVE, SlotTakenError, held_time
 
         for k, a in self.appointments.items():
             if (
                 k != exclude_id
-                and a["doctorId"] == data["doctorId"]
-                and a["dateTime"] == data["dateTime"]
+                and a["doctorId"] == doctor_id
                 and a["status"] in ACTIVE
+                and moment in (a["dateTime"], held_time(a))
             ):
                 raise SlotTakenError
+
+    def request_reschedule(
+        self, appointment_id: str, doctor_id: str, pending: dict[str, Any]
+    ) -> None:
+        self._check_free(doctor_id, pending["dateTime"], appointment_id)
+        self.appointments[appointment_id]["pendingChange"] = pending
+
+    def book(self, data: dict[str, Any], exclude_id: str | None = None) -> str:
+        self._check_free(data["doctorId"], data["dateTime"], exclude_id)
         appt_id = exclude_id or f"a{len(self.appointments) + 1}"
         self.appointments[appt_id] = dict(data)
         return appt_id

@@ -14,6 +14,7 @@ from app.core.enums import AppointmentStatus, AppointmentType
 from app.integrations.email import EmailClient, EmailMessage, get_email_client
 from app.integrations.push import PushMessage
 from app.services.appointments import (
+    CHANGE_CUTOFF,
     MAX_AHEAD,
     REMINDERS,
     AppointmentDoc,
@@ -21,6 +22,7 @@ from app.services.appointments import (
     SlotTakenError,
     get_appointment_repository,
     next_free,
+    reason_text,
 )
 from app.services.medications import MYT
 from app.services.notifications import Notifier, get_notifier
@@ -185,11 +187,48 @@ class AppointmentJob:
             for a in self.repo.active_between(now + offset, now + offset + SWEEP):
                 self._remind(a, offset)
                 sent += 1
+        lapsed = 0
+        for a in self.repo.active_between(now, now + CHANGE_CUTOFF):
+            if isinstance(a.data.get("pendingChange"), dict):
+                self._lapse(a)
+                lapsed += 1
         done = 0
         for a in self.repo.active_between(now - timedelta(days=7), now - timedelta(hours=1)):
             self.repo.update(a.id, {"status": AppointmentStatus.COMPLETED.value})
             done += 1
-        return {"appointmentReminders": sent, "appointmentsCompleted": done}
+        return {
+            "appointmentReminders": sent,
+            "appointmentsCompleted": done,
+            "appointmentRequestsLapsed": lapsed,
+        }
+
+    def _lapse(self, a: AppointmentDoc) -> None:
+        """D-55: undecided 2 h before the visit. A cancellation goes ahead (a patient who
+        can't come shouldn't be forced); a reschedule keeps the original time."""
+        pending = a.data["pendingChange"]
+        when = when_text(a.data["dateTime"])
+        patient_id = str(a.data.get("patientId"))
+        doctor_id = str(a.data.get("doctorId") or "")
+        if pending.get("kind") == "cancel":
+            self.repo.update(
+                a.id,
+                {
+                    "status": AppointmentStatus.CANCELLED.value,
+                    "cancelledBy": "system",
+                    "changeReason": reason_text(str(pending.get("reason")), pending.get("note")),
+                    "pendingChange": None,
+                },
+            )
+            title, body = "Appointment cancelled", f"Your appointment on {when} is cancelled."
+        else:
+            self.repo.update(a.id, {"pendingChange": None})
+            title, body = "Appointment unchanged", f"Your appointment stays on {when}."
+        for uid in (patient_id, doctor_id):
+            if uid:
+                self.notifier.notify(
+                    uid,
+                    PushMessage(title, body, {"type": "appointment", "appointmentId": a.id}),
+                )
 
     def _remind(self, a: AppointmentDoc, offset: timedelta) -> None:
         patient_id = str(a.data.get("patientId"))
