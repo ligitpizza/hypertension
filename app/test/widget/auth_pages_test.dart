@@ -295,6 +295,7 @@ void main() {
         '/admin/users',
         '/admin/appointments', // D-55
         '/admin/assignments', // D-54
+        '/admin/audit-logs', // UC11.3
       ]);
       expect(staffDestinations(UserRole.patient), isEmpty);
     });

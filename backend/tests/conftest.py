@@ -42,6 +42,7 @@ from app.routers.messages import get_message_repository
 from app.services.agent_context import get_agent_data_repository
 from app.services.appointments import get_appointment_repository
 from app.services.assignments import get_assignment_repository
+from app.services.audit_view import get_audit_reader
 from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
@@ -390,6 +391,23 @@ class InMemorySettingsRepository:
         self._users.health_profiles.pop(uid, None)
         self._users.users.pop(uid, None)
         return len(gone) + 2
+
+
+class InMemoryAuditReader:
+    """Stored audit entries for the Module 11 viewer: (id, entry with timestamp)."""
+
+    def __init__(self) -> None:
+        self.entries: list[tuple[str, dict[str, Any]]] = []
+
+    def add(self, when: datetime, action: str, user_id: str = "u-admin", **extra: Any) -> None:
+        entry = {"userId": user_id, "action": action, "details": extra.pop("details", action)}
+        entry.update(extra)
+        entry["timestamp"] = when
+        self.entries.append((f"log-{len(self.entries) + 1}", entry))
+
+    def between(self, start: datetime, end: datetime) -> list[tuple[str, dict[str, Any]]]:
+        rows = [(i, e) for i, e in self.entries if start <= e["timestamp"] < end]
+        return sorted(rows, key=lambda r: r[1]["timestamp"], reverse=True)
 
 
 class InMemoryRecordRepository:
@@ -932,6 +950,11 @@ def file_store() -> InMemoryFileStore:
 
 
 @pytest.fixture
+def audit_reader() -> InMemoryAuditReader:
+    return InMemoryAuditReader()
+
+
+@pytest.fixture
 def settings_repo(
     repo: InMemoryUserRepository,
     vitals_repo: InMemoryVitalsRepository,
@@ -966,6 +989,7 @@ def make_client(
     assignment_repo: InMemoryAssignmentRepository,
     record_repo: InMemoryRecordRepository,
     file_store: InMemoryFileStore,
+    audit_reader: InMemoryAuditReader,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -996,6 +1020,7 @@ def make_client(
         app.dependency_overrides[get_assignment_repository] = lambda: assignment_repo
         app.dependency_overrides[get_record_repository] = lambda: record_repo
         app.dependency_overrides[get_file_store] = lambda: file_store
+        app.dependency_overrides[get_audit_reader] = lambda: audit_reader
         return TestClient(app)
 
     return _make

@@ -20,7 +20,7 @@ import 'package:hypertension/features/provider_portal/state/portal_providers.dar
 import 'package:hypertension/shared/models/health_models.dart';
 
 import '../helpers/fakes.dart';
-import 'admin_users_test.dart' show FakeAdminRepository, user;
+import '../helpers/admin_fakes.dart';
 
 // Module 7 screens (Figs 4.3.6.1, 4.3.6.2, 4.3.12.3; FR-7.1-7.4; UC7.1-UC7.5; D-53, D-54).
 

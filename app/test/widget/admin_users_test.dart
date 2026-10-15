@@ -3,58 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
-import 'package:hypertension/features/admin/data/admin_repository.dart';
 import 'package:hypertension/features/admin/presentation/admin_users_page.dart';
 import 'package:hypertension/features/admin/state/admin_providers.dart';
 import 'package:hypertension/shared/services/api/api_client.dart';
 
+import '../helpers/admin_fakes.dart';
 import '../helpers/fakes.dart';
 
 // Module 11 User Management (Fig 4.3.14.1; FR-11.1, UC11.1; D-59).
-
-AdminUser user(String uid, String name, UserRole role, {bool active = true, int? caseload}) =>
-    AdminUser(
-      uid: uid,
-      name: name,
-      email: '$uid@example.com',
-      role: role,
-      isActive: active,
-      createdAt: DateTime(2026, 10, 1),
-      specialty: role == UserRole.doctor ? 'Cardiology' : null,
-      maxPatients: role == UserRole.doctor ? 30 : null,
-      caseload: caseload,
-    );
-
-class FakeAdminRepository implements AdminRepository {
-  List<AdminUser> all = [];
-  final calls = <String>[];
-  ApiException? error;
-
-  @override
-  Future<List<AdminUser>> users({UserRole? role, String? query}) async {
-    calls.add('list:${role?.value}:$query');
-    return [
-      for (final u in all)
-        if ((role == null || u.role == role) &&
-            (query == null || query.isEmpty || u.name.toLowerCase().contains(query.toLowerCase())))
-          u,
-    ];
-  }
-
-  @override
-  Future<AdminUser> updateUser(
-    String uid, {
-    String? name,
-    String? specialty,
-    int? maxPatients,
-    bool? isActive,
-    String? reason,
-  }) async {
-    if (error != null) throw error!;
-    calls.add('update:$uid:$name:$specialty:$maxPatients:$isActive:$reason');
-    return all.firstWhere((u) => u.uid == uid);
-  }
-}
 
 late FakeAdminRepository repo;
 

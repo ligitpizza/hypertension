@@ -105,6 +105,14 @@ class ApiClient {
   Future<Map<String, dynamic>> adminUsers({String? role, String? query}) =>
       _getQuery('/admin/users', {'role': ?role, if (query != null && query.isNotEmpty) 'q': query});
 
+  /// UC11.3: audit entries with summary counts (query: from, to, action, userId, q, offset, limit).
+  Future<Map<String, dynamic>> adminAuditLogs(Map<String, dynamic> query) =>
+      _getQuery('/admin/audit-logs', query);
+
+  /// FR-11.3: the same entries as CSV.
+  Future<List<int>> adminAuditCsv(Map<String, dynamic> query) =>
+      _bytes('/admin/audit-logs.csv', query);
+
   /// UC11.1: edit name / specialty / caseload limit, or (de)activate.
   Future<Map<String, dynamic>> updateUser(String uid, Map<String, dynamic> body) =>
       _send('PATCH', '/admin/users/$uid', body);
@@ -391,6 +399,19 @@ class ApiClient {
     try {
       final res = await _dio.get<Map<String, dynamic>>(path);
       return res.data ?? const {};
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  Future<List<int>> _bytes(String path, Map<String, dynamic> query) async {
+    try {
+      final res = await _dio.get<List<int>>(
+        path,
+        queryParameters: query,
+        options: Options(responseType: ResponseType.bytes, receiveTimeout: agentTimeout),
+      );
+      return res.data ?? const [];
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }

@@ -15,3 +15,9 @@ final adminUsersProvider = FutureProvider.autoDispose.family<List<AdminUser>, (U
   (ref, k) => ref.watch(adminRepositoryProvider).users(role: k.$1, query: k.$2),
   retry: _noRetry,
 );
+
+/// UC11.3 audit viewer page.
+final auditLogsProvider = FutureProvider.autoDispose.family<AuditPage, AuditQuery>(
+  (ref, q) => ref.watch(adminRepositoryProvider).auditLogs(q),
+  retry: _noRetry,
+);

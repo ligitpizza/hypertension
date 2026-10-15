@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../../core/constants/enums.dart';
 import '../../../shared/services/api/api_client.dart';
 
@@ -53,6 +55,103 @@ class AdminUser {
   }
 }
 
+/// One audit entry (Fig 4.3.14.3).
+class AuditEntry {
+  const AuditEntry({
+    required this.id,
+    required this.action,
+    required this.module,
+    required this.details,
+    this.timestamp,
+    this.userId,
+    this.userName,
+    this.role,
+    this.targetId,
+  });
+
+  final String id;
+  final String action;
+  final String module;
+  final String details;
+  final DateTime? timestamp;
+  final String? userId;
+  final String? userName;
+  final String? role;
+  final String? targetId;
+
+  bool get isFailure => action == 'LOGIN_FAILED' || action == 'LOGIN_BLOCKED';
+
+  factory AuditEntry.fromJson(Map<String, dynamic> j) => AuditEntry(
+    id: '${j['id']}',
+    action: j['action'] as String? ?? '',
+    module: j['module'] as String? ?? 'Other',
+    details: j['details'] as String? ?? '',
+    timestamp: j['timestamp'] == null ? null : DateTime.parse('${j['timestamp']}'),
+    userId: j['userId'] as String?,
+    userName: j['userName'] as String?,
+    role: j['role'] as String?,
+    targetId: j['targetId'] as String?,
+  );
+}
+
+class AuditPage {
+  const AuditPage({
+    required this.entries,
+    required this.total,
+    required this.actions,
+    required this.summary,
+  });
+
+  final List<AuditEntry> entries;
+  final int total;
+  final List<String> actions;
+  final Map<String, dynamic> summary;
+}
+
+/// Filters for the audit viewer; dates are Malaysian calendar days.
+class AuditQuery {
+  const AuditQuery({
+    required this.from,
+    required this.to,
+    this.action,
+    this.text = '',
+    this.offset = 0,
+    this.limit = 15,
+  });
+
+  final DateTime from;
+  final DateTime to;
+  final String? action;
+  final String text;
+  final int offset;
+  final int limit;
+
+  static String _day(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Map<String, dynamic> toQuery({bool paged = true}) => {
+    'from': _day(from),
+    'to': _day(to),
+    'action': ?action,
+    if (text.isNotEmpty) 'q': text,
+    if (paged) 'offset': offset,
+    if (paged) 'limit': limit,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuditQuery &&
+      other.from == from &&
+      other.to == to &&
+      other.action == action &&
+      other.text == text &&
+      other.offset == offset &&
+      other.limit == limit;
+
+  @override
+  int get hashCode => Object.hash(from, to, action, text, offset, limit);
+}
+
 /// Module 11 admin data, all through FastAPI (aggregation and audit logging live there).
 abstract interface class AdminRepository {
   Future<List<AdminUser>> users({UserRole? role, String? query});
@@ -65,6 +164,10 @@ abstract interface class AdminRepository {
     bool? isActive,
     String? reason,
   });
+
+  Future<AuditPage> auditLogs(AuditQuery query);
+
+  Future<Uint8List> auditCsv(AuditQuery query);
 }
 
 class ApiAdminRepository implements AdminRepository {
@@ -98,4 +201,22 @@ class ApiAdminRepository implements AdminRepository {
       if (reason != null && reason.isNotEmpty) 'reason': reason,
     }),
   );
+
+  @override
+  Future<AuditPage> auditLogs(AuditQuery query) async {
+    final res = await _api.adminAuditLogs(query.toQuery());
+    return AuditPage(
+      entries: [
+        for (final e in (res['entries'] as List? ?? const []).cast<Map<dynamic, dynamic>>())
+          AuditEntry.fromJson(Map<String, dynamic>.from(e)),
+      ],
+      total: (res['total'] as num?)?.toInt() ?? 0,
+      actions: [for (final a in (res['actions'] as List? ?? const [])) '$a'],
+      summary: Map<String, dynamic>.from(res['summary'] as Map? ?? const {}),
+    );
+  }
+
+  @override
+  Future<Uint8List> auditCsv(AuditQuery query) async =>
+      Uint8List.fromList(await _api.adminAuditCsv(query.toQuery(paged: false)));
 }

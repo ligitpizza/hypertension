@@ -10,6 +10,7 @@ from app.core.errors import register_error_handlers
 from app.ml.risk_model import load_risk_model
 from app.routers import (
     admin,
+    admin_panel,
     agent,
     appointments,
     assignments,
@@ -70,6 +71,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(admin.router, prefix=API_PREFIX)
+    app.include_router(admin_panel.router, prefix=API_PREFIX)
     app.include_router(vitals.router, prefix=API_PREFIX)
     app.include_router(risk.router, prefix=API_PREFIX)
     app.include_router(devices.router, prefix=API_PREFIX)
