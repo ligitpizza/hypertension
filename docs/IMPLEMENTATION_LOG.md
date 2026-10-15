@@ -1085,3 +1085,8 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   - Alert wording depends on the trigger (SOS: "asked for help"); the action buttons wrap
     instead of squeezing "Acknowledge".
   - Tests: Flutter 510; backend D-26 test replaced by D-63 tests.
+- **Family sign-in looks different (D-63, Ping's request):** choosing Family on the login
+  switches to a teal scheme (as in the family mockups), a family icon, "CareFlow Family",
+  "Welcome, family member", "Sign In as Family", a read-only note, and "Create a family
+  account", which opens registration with Family preselected (`/register?role=family`).
+  Registration and the family screens use the same teal. Tests: Flutter 512.

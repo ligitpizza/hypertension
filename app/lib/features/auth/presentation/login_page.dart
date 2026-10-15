@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'family_theme.dart';
 import '../../../core/constants/enums.dart';
 import '../../../core/utils/validators.dart';
 import '../data/auth_repository.dart';
@@ -67,8 +68,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final isFamilyApp = ref.watch(clientAppProvider) == ClientApp.family;
+    final family = _role == UserRole.familyMember;
+    // D-63: Family mode looks different (teal, as in Figs 4.3.16.x) so it is easy to tell apart.
+    return AnimatedTheme(
+      data: family ? familyTheme(Theme.of(context)) : Theme.of(context),
+      child: Builder(builder: (context) => _page(context, isFamilyApp, family)),
+    );
+  }
+
+  Widget _page(BuildContext context, bool isFamilyApp, bool family) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -85,16 +95,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       color: scheme.primaryContainer,
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(Icons.favorite, color: scheme.onPrimaryContainer, size: 34),
+                    child: Icon(
+                      family ? Icons.family_restroom : Icons.favorite,
+                      key: Key(family ? 'login-icon-family' : 'login-icon-patient'),
+                      color: scheme.onPrimaryContainer,
+                      size: 34,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    isFamilyApp ? 'CareFlow Family' : 'CareFlow',
+                    isFamilyApp || family ? 'CareFlow Family' : 'CareFlow',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Your health journey, beautifully managed.',
+                  Text(
+                    family
+                        ? 'Stay close to the health of the people you love.'
+                        : 'Your health journey, beautifully managed.',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -116,13 +133,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Text(
-                                'Welcome back',
+                                family ? 'Welcome, family member' : 'Welcome back',
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context).textTheme.titleLarge,
                               ),
                               const SizedBox(height: 4),
-                              const Text(
-                                'Please enter your details to sign in.',
+                              Text(
+                                family
+                                    ? "Sign in to follow your loved one's health."
+                                    : 'Please enter your details to sign in.',
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 20),
@@ -180,8 +199,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                         child: CircularProgressIndicator(strokeWidth: 2),
                                       )
                                     : const Icon(Icons.arrow_forward),
-                                label: const Text('Sign In'),
+                                label: Text(family ? 'Sign In as Family' : 'Sign In'),
                               ),
+                              if (family) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  key: const Key('login-family-note'),
+                                  children: [
+                                    Icon(
+                                      Icons.visibility_outlined,
+                                      size: 18,
+                                      color: scheme.primary,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        "Family accounts see a linked patient's readings and "
+                                        'emergency alerts (read-only).',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -196,8 +235,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       const Text('New to CareFlow?'),
                       TextButton(
                         key: const Key('login-create-account'),
-                        onPressed: () => context.go('/register'),
-                        child: const Text('Create an account'),
+                        onPressed: () => context.go(family ? '/register?role=family' : '/register'),
+                        child: Text(family ? 'Create a family account' : 'Create an account'),
                       ),
                     ],
                   ),

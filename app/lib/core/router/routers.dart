@@ -124,7 +124,10 @@ final patientRouterProvider = Provider<GoRouter>(
     routes: [
       GoRoute(path: '/start', builder: (_, _) => const SplashPage()),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
-      GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
+      GoRoute(
+        path: '/register',
+        builder: (_, s) => RegisterPage(family: s.uri.queryParameters['role'] == 'family'),
+      ),
       GoRoute(path: '/onboard', builder: (_, _) => const OnboardingPage()),
       GoRoute(path: '/onboard/complete', builder: (_, _) => const OnboardingCompletePage()),
       ...patientFeatureRoutes,
@@ -140,7 +143,10 @@ final familyRouterProvider = Provider<GoRouter>(
     home: '/family/home',
     routes: [
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
-      GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
+      GoRoute(
+        path: '/register',
+        builder: (_, s) => RegisterPage(family: s.uri.queryParameters['role'] == 'family'),
+      ),
       ...familyRoutes,
     ],
   ),

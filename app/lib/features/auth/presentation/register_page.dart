@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'widgets/role_toggle.dart';
+import 'family_theme.dart';
 import '../../../core/constants/enums.dart';
 import '../../../core/utils/validators.dart';
 import '../data/auth_repository.dart';
@@ -14,7 +15,10 @@ import 'onboarding/onboarding_labels.dart';
 /// UC1.1 Register Account (FR-1.1). Patient app registers patients, Family app
 /// registers family members; staff never self-register (FR-1.6).
 class RegisterPage extends ConsumerStatefulWidget {
-  const RegisterPage({super.key});
+  const RegisterPage({super.key, this.family = false});
+
+  /// D-63: opened from the Family login ("Create a family account").
+  final bool family;
 
   @override
   ConsumerState<RegisterPage> createState() => _RegisterPageState();
@@ -57,7 +61,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   String? _error;
 
   /// D-63: the CareFlow app registers patients or family members (Fig 4.3.1.1 toggle).
-  late UserRole _role = ref.read(clientAppProvider) == ClientApp.family
+  late UserRole _role = ref.read(clientAppProvider) == ClientApp.family || widget.family
       ? UserRole.familyMember
       : UserRole.patient;
 
@@ -96,7 +100,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedTheme(
+    data: _role == UserRole.familyMember ? familyTheme(Theme.of(context)) : Theme.of(context),
+    child: Builder(builder: _page),
+  );
+
+  Widget _page(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isFamily = _role == UserRole.familyMember;
     final canChoose = ref.watch(clientAppProvider) == ClientApp.patient;

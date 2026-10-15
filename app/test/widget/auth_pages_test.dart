@@ -54,6 +54,41 @@ void main() {
       expect(repo.lastSelectedRole, UserRole.familyMember);
     });
 
+    tallTest('D-63 Family mode looks different and signs in as family', (t) async {
+      final repo = FakeAuthRepository();
+      await t.pumpWidget(harness(const LoginPage(), repo: repo));
+      expect(find.byKey(const Key('login-icon-patient')), findsOneWidget);
+      expect(find.byKey(const Key('login-family-note')), findsNothing);
+      await t.tap(find.text('Family'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('login-icon-family')), findsOneWidget);
+      expect(find.text('CareFlow Family'), findsOneWidget);
+      expect(find.text('Welcome, family member'), findsOneWidget);
+      expect(find.byKey(const Key('login-family-note')), findsOneWidget);
+      expect(find.text('Sign In as Family'), findsOneWidget);
+      expect(find.text('Create a family account'), findsOneWidget);
+      final primary = Theme.of(
+        t.element(find.byKey(const Key('login-submit'))),
+      ).colorScheme.primary;
+      expect(primary, isNot(Theme.of(t.element(find.byType(LoginPage))).colorScheme.primary));
+      await fill(t, 'login-email', 'f@x.my');
+      await fill(t, 'login-password', 'secret123');
+      await t.tap(find.byKey(const Key('login-submit')));
+      await t.pumpAndSettle();
+      expect(repo.lastSelectedRole, UserRole.familyMember);
+    });
+
+    tallTest('D-63 registration can start as a family member', (t) async {
+      final repo = FakeAuthRepository();
+      await t.pumpWidget(harness(const RegisterPage(family: true), repo: repo));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Register as a family member'), findsOneWidget);
+      expect(find.byKey(const Key('register-ic')), findsNothing);
+      await t.tap(find.text('Patient'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('register-ic')), findsOneWidget);
+    });
+
     tallTest('UC1.2 E1 shows the generic credentials error', (t) async {
       final repo = FakeAuthRepository()
         ..signInError = const AuthFailure(
