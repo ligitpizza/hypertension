@@ -71,7 +71,8 @@ def test_fr_1_4_uc1_4_onboarding_saves_structured_profile(
     assert user["onboardingComplete"] is True
     assert user["gender"] == "male"
     assert user["dateOfBirth"].date() == date(1968, 4, 12)
-    assert audit.actions() == ["COMPLETE_ONBOARDING"]
+    # D-54: a new patient without a doctor is also put on the admin's list.
+    assert audit.actions() == ["COMPLETE_ONBOARDING", "REQUEST_DOCTOR"]
 
 
 @pytest.mark.parametrize(

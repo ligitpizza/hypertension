@@ -877,3 +877,7 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   the header. Audit entries for booking, rescheduling and cancelling now name the times
   (e.g. "Appointment cancelled: Thu 16 Oct, 10:00 AM (MYT)"), and the automatic emergency
   booking is audited as AUTO_BOOK_EMERGENCY. The admin audit-log viewer arrives with M11.
+- **Ping's follow-ups:** finishing onboarding without a doctor now creates the
+  "new patient needs a doctor" request automatically (audited), so every new patient shows
+  in the admin's Assignments list; the button stays for older accounts. Dashboard quick
+  actions are a 4-column grid that grows by rows, with a new Appointments shortcut.

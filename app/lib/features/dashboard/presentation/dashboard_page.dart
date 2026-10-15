@@ -392,42 +392,53 @@ class _RiskCard extends ConsumerWidget {
 class _QuickActions extends StatelessWidget {
   const _QuickActions();
 
+  /// Shortcuts, four per row; more rows appear as actions are added.
+  static const actions = [
+    ('Log Vitals', Icons.favorite_border, '/vitals/log', Key('qa-vitals')),
+    ('Symptoms', Icons.sick_outlined, '/symptom', Key('qa-symptoms')),
+    ('Messages', Icons.chat_bubble_outline, '/chat', Key('qa-messages')),
+    ('AI Agent', Icons.smart_toy_outlined, '/ai-agent', Key('qa-agent')),
+    ('Appointments', Icons.event_outlined, '/appointments', Key('qa-appointments')),
+  ];
+
   @override
-  Widget build(BuildContext context) {
-    const actions = [
-      ('Log Vitals', Icons.favorite_border, '/vitals/log', Key('qa-vitals')),
-      ('Symptoms', Icons.sick_outlined, '/symptom', Key('qa-symptoms')),
-      ('Messages', Icons.chat_bubble_outline, '/chat', Key('qa-messages')),
-      ('AI Agent', Icons.smart_toy_outlined, '/ai-agent', Key('qa-agent')),
-    ];
-    return Row(
-      children: [
-        for (final (label, icon, path, key) in actions)
-          Expanded(
+  Widget build(BuildContext context) => GridView.count(
+    key: const Key('quick-actions'),
+    crossAxisCount: 4,
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    mainAxisSpacing: 4,
+    crossAxisSpacing: 4,
+    childAspectRatio: 0.82,
+    children: [
+      for (final (label, icon, path, key) in actions)
+        Card(
+          key: key,
+          margin: EdgeInsets.zero,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => context.push(path),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Card(
-                key: key,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => context.push(path),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Column(
-                      children: [
-                        CircleAvatar(child: Icon(icon)),
-                        const SizedBox(height: 8),
-                        Text(label, textAlign: TextAlign.center),
-                      ],
-                    ),
+              padding: const EdgeInsets.all(6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircleAvatar(child: Icon(icon)),
+                  const SizedBox(height: 6),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                ),
+                ],
               ),
             ),
           ),
-      ],
-    );
-  }
+        ),
+    ],
+  );
 }
 
 /// D-37 / Fig 4.3.8.2: one-tap emergency call on the dashboard while an emergency is

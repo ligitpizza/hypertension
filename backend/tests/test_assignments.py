@@ -166,3 +166,25 @@ def test_only_admins_resolve(client: TestClient, token: str) -> None:
         "/api/v1/admin/assignment-requests/r1/decline", json={}, headers=bearer(token)
     )
     assert res.status_code == 403
+
+
+def test_d54_onboarding_puts_a_new_patient_in_the_admin_list(
+    client: TestClient, repo: InMemoryUserRepository, assignment_repo: InMemoryAssignmentRepository
+) -> None:
+    from tests.test_auth_onboarding import VALID
+
+    repo.users[P] = {"role": "patient", "name": "Siti", "onboardingComplete": False}
+    res = client.post("/api/v1/auth/onboarding", json=VALID, headers=PATIENT)
+    assert res.status_code == 201
+    [req] = assignment_repo.requests.values()
+    assert (req["patientId"], req["kind"], req["status"]) == (P, "new_patient", "pending")
+
+
+def test_d54_no_request_when_the_patient_already_has_a_doctor(
+    client: TestClient, repo: InMemoryUserRepository, assignment_repo: InMemoryAssignmentRepository
+) -> None:
+    from tests.test_auth_onboarding import VALID
+
+    repo.users[P] = {"role": "patient", "onboardingComplete": False, "assignedDoctorId": "d2"}
+    client.post("/api/v1/auth/onboarding", json=VALID, headers=PATIENT)
+    assert assignment_repo.requests == {}

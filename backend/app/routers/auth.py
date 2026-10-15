@@ -15,7 +15,14 @@ from fastapi import APIRouter, Depends, Request, status
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, get_current_user, require_roles
 from app.core.config import get_settings
-from app.core.enums import APP_ROLES, Collection, SessionEvent, UserRole
+from app.core.enums import (
+    APP_ROLES,
+    AssignmentRequestKind,
+    AssignmentRequestStatus,
+    Collection,
+    SessionEvent,
+    UserRole,
+)
 from app.core.errors import ApiError
 from app.core.rate_limit import RateLimiter
 from app.schemas.auth import (
@@ -25,6 +32,7 @@ from app.schemas.auth import (
     RegisterProfileResponse,
     SessionEventRequest,
 )
+from app.services.assignments import AssignmentRepository, get_assignment_repository
 from app.services.ic import IcError, parse_ic
 from app.services.identity import IdentityProvider, get_identity_provider
 from app.services.users import UserRepository, get_user_repository, new_link_code
@@ -142,6 +150,7 @@ def complete_onboarding(
     body: OnboardingRequest,
     user: CurrentUser = Depends(require_roles(UserRole.PATIENT)),
     repo: UserRepository = Depends(get_user_repository),
+    assignments: AssignmentRepository = Depends(get_assignment_repository),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
     """UC1.4: validate and store the health profile, mark onboarding complete (FR-1.4)."""
@@ -177,6 +186,25 @@ def complete_onboarding(
         target_type=Collection.HEALTH_PROFILES.value,
         target_id=user.uid,
     )
+    # D-54: every new patient appears in the admin's Assignments list automatically.
+    if not str(existing.get("assignedDoctorId") or "").strip() and not assignments.has_pending(
+        user.uid
+    ):
+        request_id = assignments.create(
+            {
+                "patientId": user.uid,
+                "requestedBy": user.uid,
+                "kind": AssignmentRequestKind.NEW_PATIENT.value,
+                "status": AssignmentRequestStatus.PENDING.value,
+            }
+        )
+        audit.log(
+            user_id=user.uid,
+            action="REQUEST_DOCTOR",
+            details="Doctor requested automatically after onboarding.",
+            target_type=Collection.DOCTOR_ASSIGNMENT_REQUESTS.value,
+            target_id=request_id,
+        )
     return {"status": "ok", "onboardingComplete": True}
 
 

@@ -55,7 +55,14 @@ Widget app(FakeDashboardRepository repo) {
     initialLocation: '/dashboard',
     routes: [
       GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
-      for (final p in ['/vitals/log', '/symptom', '/chat', '/ai-agent', '/medications'])
+      for (final p in [
+        '/vitals/log',
+        '/symptom',
+        '/chat',
+        '/ai-agent',
+        '/medications',
+        '/appointments',
+      ])
         GoRoute(path: p, builder: (_, _) => Text('ROUTE $p')),
     ],
   );
@@ -181,6 +188,7 @@ void main() {
     ('qa-symptoms', '/symptom'),
     ('qa-messages', '/chat'),
     ('qa-agent', '/ai-agent'),
+    ('qa-appointments', '/appointments'),
   ]) {
     tallTest('FR-2.2 UC2.5 quick action $key opens $route', (t) async {
       await t.pumpWidget(app(FakeDashboardRepository()));
@@ -190,6 +198,26 @@ void main() {
       expect(find.text('ROUTE $route'), findsOneWidget);
     });
   }
+
+  testWidgets('quick actions sit four to a row on a phone', (t) async {
+    t.view.physicalSize = const Size(360, 800);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(app(FakeDashboardRepository()));
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(
+      find.byKey(const Key('qa-appointments')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final first = t.getTopLeft(find.byKey(const Key('qa-vitals')));
+    final fourth = t.getTopLeft(find.byKey(const Key('qa-agent')));
+    final fifth = t.getTopLeft(find.byKey(const Key('qa-appointments')));
+    expect(fourth.dy, first.dy); // same row
+    expect(fifth.dy, greaterThan(first.dy)); // wraps to the next row
+    expect(fifth.dx, first.dx);
+    expect(t.takeException(), isNull);
+  });
 
   tallTest('patient shell highlights the current tab', (t) async {
     await t.pumpWidget(
