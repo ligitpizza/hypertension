@@ -63,6 +63,7 @@ class AppointmentStatus(StrEnum):
     RESCHEDULED = "rescheduled"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
+    NO_SHOW = "no_show"  # D-56
 
 
 class AppointmentType(StrEnum):

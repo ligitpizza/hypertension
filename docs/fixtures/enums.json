@@ -50,7 +50,8 @@
     "booked",
     "rescheduled",
     "cancelled",
-    "completed"
+    "completed",
+    "no_show"
   ],
   "order_method": [
     "self_collection",

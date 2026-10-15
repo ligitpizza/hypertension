@@ -896,3 +896,16 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   decide/cancel dialog. No new index: the admin query is a range on `dateTime` only.
 - Tests: backend D-55 suite (`test_appointment_changes.py`); Flutter 10 new widget tests
   (431 total).
+- **D-56 after Ping's D-55 test:** appointments are no longer auto-completed by the
+  15-minute job. From the start time the doctor (or admin) opens the appointment and taps
+  **Complete appointment** or **No-show** (`POST /appointments/{id}/outcome`, audited);
+  `status` gains `no_show`. Visits still open 30 minutes after their start are flagged red
+  "Not completed" on the calendar ("N to complete" in the header) and in the admin
+  overview (new filters Not completed and No-show). A patient can hold one active
+  appointment: the booking calendar is replaced by "You already have an appointment"
+  (a past visit the doctor hasn't closed counts too), and the API returns
+  `ACTIVE_APPOINTMENT`; the emergency auto-booking is exempt. Also: the admin can now
+  open the pre-visit summary (it was patient/doctor only, so the overview showed "Could
+  not load the summary"), and Appointments has a back button that returns home when
+  opened after booking.
+- Tests: backend 7 new (D-56); Flutter 7 new (439 total).

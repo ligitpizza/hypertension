@@ -95,6 +95,8 @@ class _AppointmentsPageState extends ConsumerState<AppointmentsPage> {
         if (!mounted) return;
         context.go('/appointments/booked/$id');
       }
+    } on ActiveAppointmentException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } on SlotTakenException catch (e) {
       ref.invalidate(daySlotsProvider(_day));
       setState(() {
@@ -120,6 +122,8 @@ class _AppointmentsPageState extends ConsumerState<AppointmentsPage> {
     final now = ref.watch(nowProvider)();
     final theme = Theme.of(context);
     final slots = ref.watch(daySlotsProvider(_day));
+    // D-56: one active appointment at a time; rescheduling it is still allowed.
+    final current = _rescheduling ? null : ref.watch(myActiveAppointmentProvider).value;
     return Scaffold(
       appBar: AppBar(
         // Reached by go() after booking too, so there may be nothing to pop: then go home.
@@ -156,83 +160,86 @@ class _AppointmentsPageState extends ConsumerState<AppointmentsPage> {
             Text('Book new appointment', style: theme.textTheme.titleLarge),
             const SizedBox(height: 8),
           ],
-          slots.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => e is NoDoctorException
-                ? const _NoDoctorCard()
-                : _Problem(onRetry: () => ref.invalidate(daySlotsProvider(_day))),
-            data: (day) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'With ${day.doctor.name}${day.doctor.specialty == null ? '' : ' · ${day.doctor.specialty}'}',
-                  key: const Key('booking-doctor'),
-                ),
-                const SizedBox(height: 8),
-                _MonthCalendar(
-                  selected: _day,
-                  first: _firstSelectableDay(now),
-                  last: toMyt(now).add(const Duration(days: 60)),
-                  onSelect: _pickDay,
-                ),
-                if (!_rescheduling) ...[
+          if (current != null)
+            _OneAtATime(appointment: current, now: now)
+          else
+            slots.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => e is NoDoctorException
+                  ? const _NoDoctorCard()
+                  : _Problem(onRetry: () => ref.invalidate(daySlotsProvider(_day))),
+              data: (day) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'With ${day.doctor.name}${day.doctor.specialty == null ? '' : ' · ${day.doctor.specialty}'}',
+                    key: const Key('booking-doctor'),
+                  ),
+                  const SizedBox(height: 8),
+                  _MonthCalendar(
+                    selected: _day,
+                    first: _firstSelectableDay(now),
+                    last: toMyt(now).add(const Duration(days: 60)),
+                    onSelect: _pickDay,
+                  ),
+                  if (!_rescheduling) ...[
+                    const SizedBox(height: 16),
+                    SegmentedButton<AppointmentType>(
+                      key: const Key('appointment-type'),
+                      segments: const [
+                        ButtonSegment(value: AppointmentType.checkup, label: Text('Checkup')),
+                        ButtonSegment(value: AppointmentType.followUp, label: Text('Follow-up')),
+                      ],
+                      selected: {
+                        _type == AppointmentType.emergency ? AppointmentType.checkup : _type,
+                      },
+                      onSelectionChanged: (s) => setState(() => _type = s.first),
+                    ),
+                  ],
                   const SizedBox(height: 16),
-                  SegmentedButton<AppointmentType>(
-                    key: const Key('appointment-type'),
-                    segments: const [
-                      ButtonSegment(value: AppointmentType.checkup, label: Text('Checkup')),
-                      ButtonSegment(value: AppointmentType.followUp, label: Text('Follow-up')),
+                  Text('Available times', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final p in const ['morning', 'afternoon', 'evening'])
+                        ChoiceChip(
+                          key: Key('period-$p'),
+                          label: Text(p[0].toUpperCase() + p.substring(1)),
+                          selected: _period == p,
+                          onSelected: (_) => setState(() => _period = p),
+                        ),
                     ],
-                    selected: {
-                      _type == AppointmentType.emergency ? AppointmentType.checkup : _type,
-                    },
-                    onSelectionChanged: (s) => setState(() => _type = s.first),
                   ),
+                  const SizedBox(height: 8),
+                  _SlotGrid(
+                    slots: [
+                      for (final s in day.slots)
+                        if (s.period == _period) s,
+                    ],
+                    selected: _slot,
+                    onSelect: (t) => setState(() => _slot = t),
+                  ),
+                  if (day.slots.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('The clinic is closed on this day.'),
+                    ),
+                  if (day.alternatives.isNotEmpty || _alternatives.isNotEmpty)
+                    _Alternatives(
+                      times: _alternatives.isNotEmpty ? _alternatives : day.alternatives,
+                      now: now,
+                      onPick: _useAlternative,
+                    ),
                 ],
-                const SizedBox(height: 16),
-                Text('Available times', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final p in const ['morning', 'afternoon', 'evening'])
-                      ChoiceChip(
-                        key: Key('period-$p'),
-                        label: Text(p[0].toUpperCase() + p.substring(1)),
-                        selected: _period == p,
-                        onSelected: (_) => setState(() => _period = p),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _SlotGrid(
-                  slots: [
-                    for (final s in day.slots)
-                      if (s.period == _period) s,
-                  ],
-                  selected: _slot,
-                  onSelect: (t) => setState(() => _slot = t),
-                ),
-                if (day.slots.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('The clinic is closed on this day.'),
-                  ),
-                if (day.alternatives.isNotEmpty || _alternatives.isNotEmpty)
-                  _Alternatives(
-                    times: _alternatives.isNotEmpty ? _alternatives : day.alternatives,
-                    now: now,
-                    onPick: _useAlternative,
-                  ),
-              ],
+              ),
             ),
-          ),
         ],
       ),
-      bottomNavigationBar: slots.hasValue
+      bottomNavigationBar: slots.hasValue && current == null
           ? SafeArea(
               minimum: const EdgeInsets.all(16),
               child: FilledButton.icon(
@@ -410,6 +417,32 @@ class AppointmentCard extends ConsumerWidget {
                 ],
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// D-56: booking is closed while an appointment is active.
+class _OneAtATime extends StatelessWidget {
+  const _OneAtATime({required this.appointment, required this.now});
+
+  final Appointment appointment;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final past = !now.isBefore(appointment.dateTime);
+    return Card(
+      key: const Key('one-at-a-time'),
+      child: ListTile(
+        leading: const Icon(Icons.event_busy_outlined),
+        title: Text('You already have an appointment: ${whenLabel(appointment.dateTime, now)}'),
+        subtitle: Text(
+          past
+              ? 'You can book a new one once your doctor has closed this visit.'
+              : 'You can book a new one after this visit. To change the time, use '
+                    'Reschedule above.',
         ),
       ),
     );
@@ -741,7 +774,7 @@ class AppointmentHistoryPage extends ConsumerWidget {
                     leading: Icon(Icons.circle, size: 12, color: appointmentColor(a.type)),
                     title: Text(whenLabel(a.dateTime, now)),
                     subtitle: Text(
-                      '${a.type.label} · ${a.status.value}'
+                      '${a.type.label} · ${a.status.label}'
                       '${a.changeReason == null ? '' : ' · ${a.changeReason}'}',
                     ),
                     onTap: a.status == AppointmentStatus.cancelled

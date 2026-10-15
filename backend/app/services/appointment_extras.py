@@ -192,15 +192,8 @@ class AppointmentJob:
             if isinstance(a.data.get("pendingChange"), dict):
                 self._lapse(a)
                 lapsed += 1
-        done = 0
-        for a in self.repo.active_between(now - timedelta(days=7), now - timedelta(hours=1)):
-            self.repo.update(a.id, {"status": AppointmentStatus.COMPLETED.value})
-            done += 1
-        return {
-            "appointmentReminders": sent,
-            "appointmentsCompleted": done,
-            "appointmentRequestsLapsed": lapsed,
-        }
+        # D-56: no auto-completion; the doctor records Completed or No-show.
+        return {"appointmentReminders": sent, "appointmentRequestsLapsed": lapsed}
 
     def _lapse(self, a: AppointmentDoc) -> None:
         """D-55: undecided 2 h before the visit. A cancellation goes ahead (a patient who

@@ -24,6 +24,16 @@ final myUpcomingAppointmentsProvider = StreamProvider<List<Appointment>>((ref) {
       .patientAppointments(uid, DateTime(now.year, now.month, now.day));
 }, retry: _noRetry);
 
+/// D-56: the patient's earliest active appointment (past or future), if any.
+final myActiveAppointmentProvider = StreamProvider<Appointment?>((ref) {
+  final uid = ref.watch(authUidProvider).value;
+  if (uid == null) return Stream.value(null);
+  return ref
+      .watch(appointmentsRepositoryProvider)
+      .activeAppointments(uid)
+      .map((l) => l.isEmpty ? null : l.first);
+}, retry: _noRetry);
+
 final myAppointmentHistoryProvider = StreamProvider.autoDispose<List<Appointment>>((ref) {
   final uid = ref.watch(authUidProvider).value;
   if (uid == null) return Stream.value(const []);

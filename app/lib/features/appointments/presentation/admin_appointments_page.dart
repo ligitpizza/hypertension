@@ -13,21 +13,25 @@ import 'appointment_details_dialog.dart';
 enum AppointmentFilter {
   all('All'),
   requested('Change requested'),
+  notCompleted('Not completed'),
   booked('Booked'),
   rescheduled('Rescheduled'),
   cancelled('Cancelled'),
-  completed('Completed');
+  completed('Completed'),
+  noShow('No-show');
 
   const AppointmentFilter(this.label);
   final String label;
 
-  bool matches(Appointment a) => switch (this) {
+  bool matches(Appointment a, DateTime now) => switch (this) {
     all => true,
     requested => a.pendingChange != null && !a.isCancelled,
+    notCompleted => a.isOverdue(now),
     booked => a.status == AppointmentStatus.booked,
     rescheduled => a.status == AppointmentStatus.rescheduled,
     cancelled => a.isCancelled,
     completed => a.status == AppointmentStatus.completed,
+    noShow => a.status == AppointmentStatus.noShow,
   };
 }
 
@@ -61,6 +65,7 @@ class _AdminAppointmentsPageState extends ConsumerState<AdminAppointmentsPage> {
     final appts = ref.watch(allAppointmentsProvider((_start(_month), _start(next))));
     final doctors = ref.watch(doctorsProvider).value ?? const [];
     final doctorNames = {for (final d in doctors) d.uid: d.name};
+    final now = ref.watch(nowProvider)();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -105,7 +110,7 @@ class _AdminAppointmentsPageState extends ConsumerState<AdminAppointmentsPage> {
             ];
             final shown = [
               for (final a in ofDoctor)
-                if (_filter.matches(a)) a,
+                if (_filter.matches(a, now)) a,
             ];
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,7 +122,9 @@ class _AdminAppointmentsPageState extends ConsumerState<AdminAppointmentsPage> {
                     for (final f in AppointmentFilter.values)
                       ChoiceChip(
                         key: Key('filter-${f.name}'),
-                        label: Text('${f.label} (${ofDoctor.where(f.matches).length})'),
+                        label: Text(
+                          '${f.label} (${ofDoctor.where((a) => f.matches(a, now)).length})',
+                        ),
                         selected: _filter == f,
                         onSelected: (_) => setState(() => _filter = f),
                       ),
@@ -161,12 +168,18 @@ class _Row extends ConsumerWidget {
         : p != null
         ? '${p.isCancel ? 'Cancellation requested' : 'Move to ${whenLabel(p.dateTime!, now)} requested'}'
               ': ${p.reasonText}'
+        : a.isOverdue(now)
+        ? 'Not completed'
         : a.changeReason == null
-        ? a.status.value
-        : '${a.status.value} · ${a.changeReason}';
+        ? a.status.label
+        : '${a.status.label} · ${a.changeReason}';
     return Card(
       key: Key('admin-appt-${a.id}'),
-      color: p != null ? Colors.amber.withValues(alpha: 0.15) : null,
+      color: a.isOverdue(now)
+          ? Colors.red.withValues(alpha: 0.08)
+          : p != null
+          ? Colors.amber.withValues(alpha: 0.15)
+          : null,
       child: ListTile(
         leading: Icon(Icons.circle, size: 12, color: appointmentColor(a.type)),
         title: Text(

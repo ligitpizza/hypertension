@@ -238,6 +238,13 @@ class Appointment {
   bool get isActive =>
       status == AppointmentStatus.booked || status == AppointmentStatus.rescheduled;
 
+  /// D-56: started and not ended yet, so the doctor can record the outcome.
+  bool canRecordOutcome(DateTime now) => isActive && !now.isBefore(dateTime);
+
+  /// D-56: still open more than 30 minutes after it started ("Not completed").
+  bool isOverdue(DateTime now) =>
+      isActive && now.isAfter(dateTime.add(const Duration(minutes: 30)));
+
   factory Appointment.fromFirestore(String id, Map<String, dynamic> d) => Appointment(
     id: id,
     patientId: d['patientId'] as String,

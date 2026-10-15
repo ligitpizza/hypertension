@@ -41,6 +41,15 @@ class DecisionRequest(BaseModel):
     note: str | None = Field(default=None, max_length=300)
 
 
+class OutcomeRequest(BaseModel):
+    """D-56: the doctor (or admin) records how the visit went."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    outcome: Literal["completed", "no_show"]
+    note: str | None = Field(default=None, max_length=300)
+
+
 class StaffCancelRequest(BaseModel):
     """D-55: a doctor or the admin cancels, saying why."""
 

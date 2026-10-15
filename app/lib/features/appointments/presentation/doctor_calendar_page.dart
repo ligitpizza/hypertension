@@ -82,6 +82,8 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
     final cancelledCount = list.length - active.length;
     final emergencies = active.where((a) => a.type == AppointmentType.emergency).length;
     final requests = active.where((a) => a.pendingChange != null).length;
+    final now = ref.watch(nowProvider)();
+    final overdue = active.where((a) => a.isOverdue(now)).length;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -102,7 +104,8 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
                   '${active.length} scheduled appointments · $emergencies '
                   '${emergencies == 1 ? 'emergency' : 'emergencies'}'
                   '${cancelledCount > 0 ? ' · $cancelledCount cancelled' : ''}'
-                  '${requests > 0 ? ' · $requests waiting for you' : ''}',
+                  '${requests > 0 ? ' · $requests waiting for you' : ''}'
+                  '${overdue > 0 ? ' · $overdue to complete' : ''}',
                   key: const Key('calendar-counts'),
                 ),
               ],
@@ -266,18 +269,20 @@ class _MonthGrid extends StatelessWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
+class _Chip extends ConsumerWidget {
   const _Chip({required this.appointment, required this.text});
 
   final Appointment appointment;
   final String text;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cancelled = appointment.isCancelled;
     final pending = !cancelled && appointment.pendingChange != null;
-    final color = cancelled
+    final color = cancelled || appointment.status == AppointmentStatus.noShow
         ? Colors.grey
+        : appointment.isOverdue(ref.watch(nowProvider)())
+        ? Colors.red.shade900
         : pending
         ? Colors.amber.shade800
         : appointmentColor(appointment.type);
@@ -303,14 +308,15 @@ class _Chip extends StatelessWidget {
   }
 }
 
-class _AgendaList extends StatelessWidget {
+class _AgendaList extends ConsumerWidget {
   const _AgendaList({required this.appointments, required this.names});
 
   final List<Appointment> appointments;
   final Map<String, String> names;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(nowProvider)();
     if (appointments.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(24),
@@ -353,11 +359,18 @@ class _AgendaList extends StatelessWidget {
                   '${a.pendingChange != null && !a.isCancelled ? (a.pendingChange!.isCancel ? 'Cancellation requested · ' : 'Reschedule requested · ') : ''}'
                   '${a.type.label}${switch (a.status) {
                     AppointmentStatus.completed => ' · completed',
+                    AppointmentStatus.noShow => ' · no-show',
                     AppointmentStatus.rescheduled => ' · rescheduled',
                     _ => '',
                   }}',
                 ),
-                trailing: a.pendingChange != null && !a.isCancelled
+                trailing: a.isOverdue(now)
+                    ? Chip(
+                        key: Key('overdue-${a.id}'),
+                        backgroundColor: Colors.red.withValues(alpha: 0.15),
+                        label: const Text('Not completed'),
+                      )
+                    : a.pendingChange != null && !a.isCancelled
                     ? Chip(
                         key: Key('request-${a.id}'),
                         backgroundColor: Colors.amber.withValues(alpha: 0.3),

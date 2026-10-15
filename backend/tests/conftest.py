@@ -438,6 +438,15 @@ class InMemoryAppointmentRepository:
             key=lambda d: d.data["dateTime"],
         )
 
+    def active_for_patient(self, patient_id: str) -> list[Any]:
+        from app.services.appointments import ACTIVE, AppointmentDoc
+
+        return [
+            AppointmentDoc(k, a)
+            for k, a in self.appointments.items()
+            if a["patientId"] == patient_id and a["status"] in ACTIVE
+        ]
+
     def active_between(self, start: datetime, end: datetime) -> list[Any]:
         from app.services.appointments import ACTIVE, AppointmentDoc
 

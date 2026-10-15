@@ -243,6 +243,10 @@ class ApiClient {
   });
 
   /// D-55: the doctor or admin approves / declines a pending change.
+  /// D-56: completed | no_show.
+  Future<Map<String, dynamic>> recordAppointmentOutcome(String id, String outcome) =>
+      _post('/appointments/$id/outcome', {'outcome': outcome});
+
   Future<Map<String, dynamic>> decideAppointment(
     String id, {
     required bool approve,

@@ -266,7 +266,7 @@ def test_uc7_4_reminders_24h_and_1h_once_each(
     assert j.run(now + timedelta(minutes=15))["appointmentReminders"] == 0
 
 
-def test_past_appointments_are_completed(
+def test_d56_past_appointments_are_not_auto_completed(
     appointment_repo: InMemoryAppointmentRepository, tokens: InMemoryTokenRepository
 ) -> None:
     now = datetime(2026, 10, 15, 12, tzinfo=UTC)
@@ -278,8 +278,8 @@ def test_past_appointments_are_completed(
         "type": "checkup",
     }
     j, _, _ = job(appointment_repo, tokens)
-    assert j.run(now)["appointmentsCompleted"] == 1
-    assert appointment_repo.appointments["a1"]["status"] == "completed"
+    assert "appointmentsCompleted" not in j.run(now)
+    assert appointment_repo.appointments["a1"]["status"] == "booked"
 
 
 def test_emergency_auto_booking_once(

@@ -35,6 +35,8 @@ class FakeAppointmentsRepository implements AppointmentsRepository {
   bool slotTaken = false;
   final booked = <(DateTime, AppointmentType)>[];
   List<Appointment> all = const [];
+  List<Appointment> active = const [];
+  bool activeOnBook = false;
   bool cancelNow = false;
   final rescheduled = <(String, DateTime, String, String?)>[];
   final cancelled = <(String, String, String?)>[];
@@ -74,6 +76,9 @@ class FakeAppointmentsRepository implements AppointmentsRepository {
   @override
   Future<String> book(DateTime time, AppointmentType type) async {
     if (slotTaken) throw SlotTakenException([myt(15, 11), myt(15, 11, 30)]);
+    if (activeOnBook) {
+      throw const ActiveAppointmentException('You already have an appointment on Fri 16 Oct.');
+    }
     booked.add((time, type));
     return 'new1';
   }
@@ -97,6 +102,13 @@ class FakeAppointmentsRepository implements AppointmentsRepository {
 
   @override
   Future<void> staffCancel(String id, String reason) async => calls.add('staffCancel:$id:$reason');
+
+  @override
+  Future<void> recordOutcome(String id, {required bool completed}) async =>
+      calls.add('outcome:$id:${completed ? 'completed' : 'no_show'}');
+
+  @override
+  Stream<List<Appointment>> activeAppointments(String patientId) => Stream.value(active);
 
   @override
   Stream<List<Appointment>> allAppointments(DateTime start, DateTime end) => Stream.value([
@@ -669,6 +681,99 @@ void main() {
       await t.tap(find.byKey(const Key('details-approve')));
       await t.pumpAndSettle();
       expect(repo.calls, ['decide:a4:true:null']);
+    });
+  });
+
+  group('D-56 one booking at a time; the doctor records the outcome', () {
+    tallTest('an active appointment closes booking but keeps the next-appointment card', (t) async {
+      repo
+        ..upcoming = [appt('a1', myt(20, 10))]
+        ..active = [appt('a1', myt(20, 10))];
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('one-at-a-time')), findsOneWidget);
+      expect(find.textContaining('You already have an appointment: Tue 20 Oct'), findsOneWidget);
+      expect(find.byKey(const Key('book-appointment')), findsNothing);
+      expect(find.byKey(const Key('reschedule-a1')), findsOneWidget);
+    });
+
+    tallTest('a past visit the doctor has not closed also blocks booking', (t) async {
+      repo.active = [appt('old', myt(12, 10))];
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.textContaining('once your doctor has closed this visit'), findsOneWidget);
+    });
+
+    tallTest('the server refusal is shown if booking races another device', (t) async {
+      repo.activeOnBook = true;
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('slot-10:00 AM')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('book-appointment')));
+      await t.pumpAndSettle();
+      expect(find.text('You already have an appointment on Fri 16 Oct.'), findsOneWidget);
+      expect(repo.booked, isEmpty);
+    });
+
+    tallTest('an unclosed past visit is flagged; the doctor completes it', (t) async {
+      repo.upcoming = [appt('a1', myt(13, 10)), appt('a2', myt(16, 10))];
+      await t.pumpWidget(app(repo, initial: '/calendar', uid: 'd1'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('1 to complete'), findsOneWidget);
+      await t.tap(find.byKey(const Key('cal-day-13')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('overdue-a1')), findsOneWidget);
+      await t.tap(find.byKey(const Key('agenda-a1')));
+      await t.pumpAndSettle();
+      expect(find.text('Not completed yet: record how the visit went.'), findsOneWidget);
+      await t.tap(find.byKey(const Key('details-complete')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['outcome:a1:completed']);
+    });
+
+    tallTest('no outcome buttons before the appointment starts', (t) async {
+      repo.upcoming = [appt('a1', myt(16, 10))];
+      await t.pumpWidget(app(repo, initial: '/calendar', uid: 'd1'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('cal-day-16')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('agenda-a1')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('details-outcome')), findsNothing);
+    });
+
+    tallTest('once started the doctor can mark a no-show', (t) async {
+      repo.upcoming = [appt('a2', myt(14, 8, 45))];
+      await t.pumpWidget(app(repo, initial: '/calendar', uid: 'd1'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('cal-day-14')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('agenda-a2')));
+      await t.pumpAndSettle();
+      expect(find.text('The appointment has started.'), findsOneWidget);
+      await t.tap(find.byKey(const Key('details-no-show')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['outcome:a2:no_show']);
+    });
+
+    tallTest('the admin filters for visits not completed and no-shows', (t) async {
+      repo.all = [
+        appt('a1', myt(12, 10)),
+        appt('a2', myt(12, 11), status: AppointmentStatus.noShow),
+        appt('a3', myt(16, 10)),
+      ];
+      await t.pumpWidget(app(repo, initial: '/admin/appointments', uid: 'admin'));
+      await t.pumpAndSettle();
+      expect(find.text('Not completed (1)'), findsOneWidget);
+      await t.tap(find.byKey(const Key('filter-notCompleted')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('admin-appt-a1')), findsOneWidget);
+      expect(find.byKey(const Key('admin-appt-a3')), findsNothing);
+      await t.tap(find.byKey(const Key('filter-noShow')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('admin-appt-a2')), findsOneWidget);
+      expect(find.textContaining('no-show'), findsOneWidget);
     });
   });
 }

@@ -3,6 +3,7 @@
 GET   /appointments/slots?date=YYYY-MM-DD    the patient's own doctor's slots that day
 POST  /appointments                          book (checkup / follow-up)
 PATCH /appointments/{id}                     reschedule (dateTime) or cancel
+POST  /appointments/{id}/outcome             doctor or admin: completed | no_show (D-56)
 GET   /appointments/{id}/pre-visit-summary   patient, their doctor or admin (UC7.5)
 """
 
@@ -20,6 +21,7 @@ from app.schemas.appointments import (
     BookRequest,
     ChangeRequest,
     DecisionRequest,
+    OutcomeRequest,
     StaffCancelRequest,
 )
 from app.services.agent_context import AgentDataRepository, get_agent_data_repository
@@ -124,6 +126,20 @@ def book(
             "INVALID_SLOT",
             "Please choose one of the available times.",
             status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    active = repo.active_for_patient(user.uid)
+    if active:
+        # D-56: one active appointment at a time (the emergency auto-booking is exempt).
+        current = min(active, key=lambda d: d.data["dateTime"])
+        raise ApiError(
+            "ACTIVE_APPOINTMENT",
+            f"You already have an appointment on {when_text(current.data['dateTime'])}. "
+            "You can book another once it is over, or reschedule it instead.",
+            status.HTTP_409_CONFLICT,
+            details={
+                "appointmentId": current.id,
+                "dateTime": current.data["dateTime"].astimezone(UTC).isoformat(),
+            },
         )
     data = {
         "patientId": user.uid,
@@ -486,12 +502,55 @@ def staff_cancel(
     return {"id": appointment_id, "status": AppointmentStatus.CANCELLED.value}
 
 
+@router.post("/{appointment_id}/outcome")
+def record_outcome(
+    appointment_id: str,
+    body: OutcomeRequest,
+    user: CurrentUser = Depends(require_roles(UserRole.DOCTOR, UserRole.ADMIN)),
+    repo: AppointmentRepository = Depends(get_appointment_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-56: from its start time, the doctor (or admin) marks the visit Completed or
+    No-show. Either ends it, so the patient can book again."""
+    appt = _staff_appointment(repo, appointment_id, user)
+    a = appt.data
+    if a.get("status") not in ACTIVE:
+        raise ApiError(
+            "APPOINTMENT_CLOSED", "This appointment is not active.", status.HTTP_409_CONFLICT
+        )
+    if datetime.now(UTC) < a["dateTime"]:
+        raise ApiError(
+            "NOT_STARTED",
+            "You can record the outcome once the appointment has started.",
+            status.HTTP_409_CONFLICT,
+        )
+    new_status = (
+        AppointmentStatus.COMPLETED if body.outcome == "completed" else AppointmentStatus.NO_SHOW
+    )
+    repo.update(
+        appointment_id,
+        {"status": new_status.value, "pendingChange": None, "updatedAt": datetime.now(UTC)},
+    )
+    label = "completed" if new_status is AppointmentStatus.COMPLETED else "no-show"
+    audit.log(
+        user_id=user.uid,
+        action=(
+            "COMPLETE_APPOINTMENT"
+            if new_status is AppointmentStatus.COMPLETED
+            else "NO_SHOW_APPOINTMENT"
+        ),
+        details=f"Appointment {when_text(a['dateTime'])} (MYT) marked {label}"
+        + (f": {body.note}" if body.note else "."),
+        target_type=Collection.APPOINTMENTS.value,
+        target_id=appointment_id,
+    )
+    return {"id": appointment_id, "status": new_status.value}
+
+
 @router.get("/{appointment_id}/pre-visit-summary")
 def pre_visit_summary(
     appointment_id: str,
-    user: CurrentUser = Depends(
-        require_roles(UserRole.PATIENT, UserRole.DOCTOR, UserRole.ADMIN)
-    ),
+    user: CurrentUser = Depends(require_roles(UserRole.PATIENT, UserRole.DOCTOR, UserRole.ADMIN)),
     repo: AppointmentRepository = Depends(get_appointment_repository),
     data: AgentDataRepository = Depends(get_agent_data_repository),
 ) -> dict[str, Any]:

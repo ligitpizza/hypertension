@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/enums.dart';
 import '../../../shared/models/health_models.dart';
 import '../../../shared/services/api/api_client.dart';
 import '../domain/appointment_text.dart';
+import '../../dashboard/state/dashboard_providers.dart';
 import '../state/appointment_providers.dart';
 import 'pre_visit_summary_page.dart';
 
@@ -98,8 +98,8 @@ class _DetailsDialogState extends ConsumerState<_DetailsDialog> {
     final a = widget.appointment;
     final repo = ref.read(appointmentsRepositoryProvider);
     final p = a.pendingChange;
-    final active = !a.isCancelled && a.status != AppointmentStatus.completed;
-    final now = DateTime.now();
+    final active = a.isActive;
+    final now = ref.watch(nowProvider)();
     return AlertDialog(
       key: const Key('appointment-details'),
       title: Text('${widget.patientName ?? 'Patient'} · ${a.type.label}'),
@@ -110,7 +110,7 @@ class _DetailsDialogState extends ConsumerState<_DetailsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${dateLabel(a.dateTime)}, ${timeLabel(a.dateTime)} · ${a.status.value}'
+              '${dateLabel(a.dateTime)}, ${timeLabel(a.dateTime)} · ${a.status.label}'
               '${widget.doctorName == null ? '' : ' · ${widget.doctorName}'}',
             ),
             if (a.isCancelled)
@@ -118,6 +118,52 @@ class _DetailsDialogState extends ConsumerState<_DetailsDialog> {
                 'Cancelled${a.cancelledBy == null ? '' : ' by ${a.cancelledBy}'}'
                 '${a.changeReason == null ? '' : ': ${a.changeReason}'}',
                 key: const Key('details-cancel-reason'),
+              ),
+            if (a.canRecordOutcome(now))
+              Card(
+                key: const Key('details-outcome'),
+                color: a.isOverdue(now) ? Colors.red.withValues(alpha: 0.12) : null,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        a.isOverdue(now)
+                            ? 'Not completed yet: record how the visit went.'
+                            : 'The appointment has started.',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          FilledButton.icon(
+                            key: const Key('details-complete'),
+                            icon: const Icon(Icons.check),
+                            onPressed: _busy
+                                ? null
+                                : () => _run(
+                                    () => repo.recordOutcome(a.id, completed: true),
+                                    'Appointment completed.',
+                                  ),
+                            label: const Text('Complete appointment'),
+                          ),
+                          OutlinedButton(
+                            key: const Key('details-no-show'),
+                            onPressed: _busy
+                                ? null
+                                : () => _run(
+                                    () => repo.recordOutcome(a.id, completed: false),
+                                    'Marked as no-show.',
+                                  ),
+                            child: const Text('No-show'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
             if (p != null && active)
               Card(

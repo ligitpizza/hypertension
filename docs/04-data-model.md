@@ -124,7 +124,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | patientId | Reference (users) | Booking patient | Required |
 | doctorId | Reference (users) | Attending doctor | Optional; null until UC7.3 assignment |
 | dateTime | Timestamp | Scheduled date/time | Required |
-| status | String | booked / rescheduled / cancelled / completed | Required |
+| status | String | booked / rescheduled / cancelled / completed / no_show (D-56) | Required |
 
 ### `clinical_notes`  (Table 4.2.3.10)
 

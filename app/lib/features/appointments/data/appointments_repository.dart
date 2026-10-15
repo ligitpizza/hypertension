@@ -51,6 +51,13 @@ class SlotTakenException implements Exception {
   final List<DateTime> alternatives;
 }
 
+/// D-56: the patient already has an active appointment; [message] names it.
+class ActiveAppointmentException implements Exception {
+  const ActiveAppointmentException(this.message);
+
+  final String message;
+}
+
 /// D-54 request, as the patient / admin sees it.
 class AssignmentRequest {
   const AssignmentRequest({
@@ -122,6 +129,12 @@ abstract interface class AppointmentsRepository {
   Future<void> decide(String id, {required bool approve, String? note});
 
   Future<void> staffCancel(String id, String reason);
+
+  /// D-56 (doctor or admin): [completed] or no-show.
+  Future<void> recordOutcome(String id, {required bool completed});
+
+  /// D-56: the patient's active appointments, past or future (one at a time).
+  Stream<List<Appointment>> activeAppointments(String patientId);
 
   /// Admin overview: every doctor's appointments in [start, end).
   Stream<List<Appointment>> allAppointments(DateTime start, DateTime end);
@@ -224,6 +237,7 @@ class ApiAppointmentsRepository implements AppointmentsRepository {
         throw SlotTakenException(_times(d is Map ? d['alternatives'] : null));
       }
       if (e.code == 'NO_DOCTOR') throw const NoDoctorException();
+      if (e.code == 'ACTIVE_APPOINTMENT') throw ActiveAppointmentException(e.message);
       rethrow;
     }
   }
@@ -252,6 +266,21 @@ class ApiAppointmentsRepository implements AppointmentsRepository {
 
   @override
   Future<void> staffCancel(String id, String reason) => _api.staffCancelAppointment(id, reason);
+
+  @override
+  Future<void> recordOutcome(String id, {required bool completed}) =>
+      _api.recordAppointmentOutcome(id, completed ? 'completed' : 'no_show');
+
+  @override
+  Stream<List<Appointment>> activeAppointments(String patientId) => _appts
+      .where('patientId', isEqualTo: patientId)
+      .snapshots()
+      .map(
+        (s) => [
+          for (final a in _list(s))
+            if (a.isActive) a,
+        ]..sort((a, b) => a.dateTime.compareTo(b.dateTime)),
+      );
 
   @override
   Stream<List<Appointment>> allAppointments(DateTime start, DateTime end) => _appts

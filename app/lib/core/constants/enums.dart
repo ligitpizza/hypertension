@@ -107,10 +107,19 @@ enum AppointmentStatus {
   booked('booked'),
   rescheduled('rescheduled'),
   cancelled('cancelled'),
-  completed('completed');
+  completed('completed'),
+  noShow('no_show'); // D-56
 
   const AppointmentStatus(this.value);
   final String value;
+
+  String get label => switch (this) {
+    booked => 'booked',
+    rescheduled => 'rescheduled',
+    cancelled => 'cancelled',
+    completed => 'completed',
+    noShow => 'no-show',
+  };
   static AppointmentStatus fromValue(String v) => enumFromValue(values, v, (e) => e.value);
 }
 

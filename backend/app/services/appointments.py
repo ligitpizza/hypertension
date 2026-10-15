@@ -139,7 +139,12 @@ class AppointmentRepository(Protocol):
     def upcoming_for_patient(self, patient_id: str, now: datetime) -> list[AppointmentDoc]: ...
 
     def active_between(self, start: datetime, end: datetime) -> list[AppointmentDoc]:
-        """All active appointments starting in [start, end) (reminders, completion)."""
+        """All active appointments starting in [start, end) (reminders, lapses)."""
+        ...
+
+    def active_for_patient(self, patient_id: str) -> list[AppointmentDoc]:
+        """D-56: the patient's active appointments, past or future, until the doctor
+        records the outcome."""
         ...
 
 
@@ -241,6 +246,13 @@ class FirestoreAppointmentRepository:
             .where(filter=gfs.FieldFilter("dateTime", ">=", now))
             .order_by("dateTime")
         )
+        return [
+            AppointmentDoc(d.id, dict(d.to_dict())) for d in q.stream() if d.get("status") in ACTIVE
+        ]
+
+    def active_for_patient(self, patient_id: str) -> list[AppointmentDoc]:
+        # Equality on patientId only (no composite index); a patient has few appointments.
+        q = self._col().where(filter=gfs.FieldFilter("patientId", "==", patient_id))
         return [
             AppointmentDoc(d.id, dict(d.to_dict())) for d in q.stream() if d.get("status") in ACTIVE
         ]

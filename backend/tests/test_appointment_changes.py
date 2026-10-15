@@ -196,3 +196,89 @@ def test_audit_entries_say_which_time(client: TestClient, audit: InMemoryAuditLo
     book, request = [e for e in audit.entries if "APPOINTMENT" in e["action"]]
     assert "10:00 AM" in book["details"] and book["targetId"] == appt_id
     assert request["action"] == "REQUEST_CANCEL_APPOINTMENT" and "Cost" in request["details"]
+
+
+# ---------- D-56: outcome by the doctor; one active appointment ----------
+
+
+def test_d56_only_one_active_appointment(
+    client: TestClient, appointment_repo: InMemoryAppointmentRepository
+) -> None:
+    appt_id, _ = book_one(client, 10)
+    slot = a_future_slot(11)
+    res = client.post("/api/v1/appointments", json={"dateTime": slot.isoformat()}, headers=PATIENT)
+    assert res.status_code == 409
+    err = res.json()["error"]
+    assert err["code"] == "ACTIVE_APPOINTMENT" and err["details"]["appointmentId"] == appt_id
+    # Once it has ended (here: no-show), the patient can book again.
+    appointment_repo.appointments[appt_id]["status"] = "no_show"
+    res = client.post("/api/v1/appointments", json={"dateTime": slot.isoformat()}, headers=PATIENT)
+    assert res.status_code == 201
+
+
+def test_d56_a_past_unrecorded_appointment_still_blocks_booking(
+    client: TestClient, appointment_repo: InMemoryAppointmentRepository
+) -> None:
+    appointment_repo.appointments["old"] = {
+        "patientId": P,
+        "doctorId": D,
+        "dateTime": datetime.now(UTC) - timedelta(days=2),
+        "status": "booked",
+        "type": "checkup",
+    }
+    slot = a_future_slot(10)
+    res = client.post("/api/v1/appointments", json={"dateTime": slot.isoformat()}, headers=PATIENT)
+    assert res.json()["error"]["code"] == "ACTIVE_APPOINTMENT"
+
+
+def started(appointment_repo: InMemoryAppointmentRepository, doctor: str = D) -> str:
+    appointment_repo.appointments["s1"] = {
+        "patientId": P,
+        "doctorId": doctor,
+        "dateTime": datetime.now(UTC) - timedelta(minutes=5),
+        "status": "booked",
+        "type": "checkup",
+        "pendingChange": {"kind": "cancel", "reason": "cost"},
+    }
+    return "s1"
+
+
+@pytest.mark.parametrize(
+    ("headers", "outcome", "action"),
+    [
+        (DOCTOR, "completed", "COMPLETE_APPOINTMENT"),
+        (DOCTOR, "no_show", "NO_SHOW_APPOINTMENT"),
+        (ADMIN, "completed", "COMPLETE_APPOINTMENT"),
+    ],
+)
+def test_d56_doctor_or_admin_records_the_outcome(
+    client: TestClient,
+    appointment_repo: InMemoryAppointmentRepository,
+    audit: InMemoryAuditLogger,
+    headers: dict[str, str],
+    outcome: str,
+    action: str,
+) -> None:
+    appt_id = started(appointment_repo)
+    res = client.post(url(appt_id, "/outcome"), json={"outcome": outcome}, headers=headers)
+    assert res.status_code == 200 and res.json()["status"] == outcome
+    a = appointment_repo.appointments[appt_id]
+    assert a["status"] == outcome and a["pendingChange"] is None
+    assert audit.entries[-1]["action"] == action
+    again = client.post(url(appt_id, "/outcome"), json={"outcome": outcome}, headers=headers)
+    assert again.status_code == 409
+
+
+def test_d56_outcome_rules(
+    client: TestClient, appointment_repo: InMemoryAppointmentRepository
+) -> None:
+    future_id, _ = book_one(client)
+    res = client.post(url(future_id, "/outcome"), json={"outcome": "completed"}, headers=DOCTOR)
+    assert res.json()["error"]["code"] == "NOT_STARTED"
+    other = started(appointment_repo, doctor="other")
+    res = client.post(url(other, "/outcome"), json={"outcome": "completed"}, headers=DOCTOR)
+    assert res.status_code == 404  # not this doctor's appointment
+    res = client.post(url(other, "/outcome"), json={"outcome": "completed"}, headers=PATIENT)
+    assert res.status_code == 403
+    res = client.post(url(other, "/outcome"), json={"outcome": "maybe"}, headers=ADMIN)
+    assert res.status_code == 422
