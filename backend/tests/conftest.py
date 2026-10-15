@@ -92,6 +92,7 @@ class FakeIdentityProvider:
         self.claims: dict[str, str] = {}
         self.revoked: list[str] = []
         self.deleted: list[str] = []
+        self.disabled: set[str] = set()
         self._next = 0
 
     def create_user(self, *, email: str, display_name: str) -> str:
@@ -113,6 +114,12 @@ class FakeIdentityProvider:
 
     def delete_user(self, uid: str) -> None:
         self.deleted.append(uid)
+
+    def set_disabled(self, uid: str, disabled: bool) -> None:
+        if disabled:
+            self.disabled.add(uid)
+        else:
+            self.disabled.discard(uid)
 
 
 class InMemoryUserRepository:
@@ -142,6 +149,17 @@ class InMemoryUserRepository:
     ) -> None:
         self.health_profiles[uid] = dict(profile)
         self.users[uid].update(user_updates)
+
+    def list_users(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(uid, dict(u)) for uid, u in self.users.items()]
+
+    def update_user(self, uid: str, data: dict[str, Any]) -> None:
+        u = self.users[uid]
+        for k, v in data.items():
+            if v is None:
+                u.pop(k, None)
+            else:
+                u[k] = v
 
 
 class InMemoryVitalsRepository:

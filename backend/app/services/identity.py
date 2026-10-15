@@ -30,6 +30,10 @@ class IdentityProvider(Protocol):
         """Remove the login (D-46 purge); a login that is already gone is fine."""
         ...
 
+    def set_disabled(self, uid: str, disabled: bool) -> None:
+        """UC11.1: block or allow signing in (the admin deactivates an account)."""
+        ...
+
 
 class FirebaseIdentityProvider:
     def create_user(self, *, email: str, display_name: str) -> str:
@@ -58,6 +62,12 @@ class FirebaseIdentityProvider:
             fb_auth.delete_user(uid, app=get_firebase_app())
         except fb_auth.UserNotFoundError:
             pass
+
+    def set_disabled(self, uid: str, disabled: bool) -> None:
+        try:
+            fb_auth.update_user(uid, disabled=disabled, app=get_firebase_app())
+        except fb_auth.UserNotFoundError:
+            pass  # no login (e.g. already purged): isActive alone decides
 
 
 def get_identity_provider() -> IdentityProvider:

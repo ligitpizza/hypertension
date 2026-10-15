@@ -99,6 +99,16 @@ class ApiClient {
   }) => _post('/auth/login-failed', {'email': email, 'reason': reason, 'app': app});
 
   /// UC1.5: admin creates a staff account.
+  // ---- Module 11 admin panel (D-59) ----
+
+  /// UC11.1: all users, optionally by role and search text.
+  Future<Map<String, dynamic>> adminUsers({String? role, String? query}) =>
+      _getQuery('/admin/users', {'role': ?role, if (query != null && query.isNotEmpty) 'q': query});
+
+  /// UC11.1: edit name / specialty / caseload limit, or (de)activate.
+  Future<Map<String, dynamic>> updateUser(String uid, Map<String, dynamic> body) =>
+      _send('PATCH', '/admin/users/$uid', body);
+
   Future<Map<String, dynamic>> createStaff({
     required String name,
     required String email,

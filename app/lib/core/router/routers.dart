@@ -6,6 +6,7 @@ import '../../features/appointments/presentation/admin_appointments_page.dart';
 import '../../features/appointments/presentation/admin_assignments_page.dart';
 import '../../features/appointments/presentation/doctor_calendar_page.dart';
 
+import '../../features/admin/presentation/admin_users_page.dart';
 import '../../features/admin/presentation/create_staff_page.dart';
 import '../../features/auth/presentation/forgot_password_page.dart';
 import '../../features/auth/presentation/login_page.dart';
@@ -182,7 +183,30 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
               note: 'The prescription and order queue is coming soon.',
             ),
           ),
-          GoRoute(path: '/admin/users', builder: (_, _) => const CreateStaffPage()),
+          GoRoute(
+            path: '/admin/users',
+            builder: (_, _) => const AdminUsersPage(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (c, _) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: TextButton.icon(
+                        key: const Key('back-to-users'),
+                        onPressed: () => c.go('/admin/users'),
+                        icon: const Icon(Icons.arrow_back),
+                        label: const Text('User management'),
+                      ),
+                    ),
+                    const Expanded(child: CreateStaffPage()),
+                  ],
+                ),
+              ),
+            ],
+          ),
           GoRoute(path: '/admin/appointments', builder: (_, _) => const AdminAppointmentsPage()),
           GoRoute(path: '/admin/assignments', builder: (_, _) => const AdminAssignmentsPage()),
         ],

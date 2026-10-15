@@ -32,6 +32,14 @@ class UserRepository(Protocol):
         self, uid: str, profile: dict[str, Any], user_updates: dict[str, Any]
     ) -> None: ...
 
+    def list_users(self) -> list[tuple[str, dict[str, Any]]]:
+        """UC11.1: every user document (the clinic is small; filtered in FastAPI)."""
+        ...
+
+    def update_user(self, uid: str, data: dict[str, Any]) -> None:
+        """UC11.1: admin edits; None removes a field."""
+        ...
+
 
 class FirestoreUserRepository:
     def __init__(self, db: Any) -> None:
@@ -43,6 +51,17 @@ class FirestoreUserRepository:
     def get_user(self, uid: str) -> dict[str, Any] | None:
         snap = self._users().document(uid).get()
         return dict(snap.to_dict()) if snap.exists else None
+
+    def list_users(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(d.id, dict(d.to_dict())) for d in self._users().stream()]
+
+    def update_user(self, uid: str, data: dict[str, Any]) -> None:
+        self._users().document(uid).update(
+            {
+                **{k: (firestore.DELETE_FIELD if v is None else v) for k, v in data.items()},
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            }
+        )
 
     def create_user(self, uid: str, data: dict[str, Any]) -> None:
         now = firestore.SERVER_TIMESTAMP

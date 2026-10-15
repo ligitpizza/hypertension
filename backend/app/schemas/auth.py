@@ -176,3 +176,13 @@ class CreateStaffResponse(BaseModel):
     emailSent: bool
     # Returned only when the email could not be sent, so the admin can pass it on.
     setupLink: str | None = None
+
+
+class UpdateUserRequest(_Strict):
+    """UC11.1 / D-59: what the admin may change. Roles are never changed here."""
+
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    specialty: str | None = Field(default=None, max_length=100)
+    maxPatients: int | None = Field(default=None, ge=1, le=500)
+    isActive: bool | None = None
+    reason: str | None = Field(default=None, max_length=300)

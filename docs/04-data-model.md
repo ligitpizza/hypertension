@@ -31,6 +31,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | onboardingComplete | Boolean | Whether the onboarding health profile is complete | Present only when role = patient; default false |
 | assignedDoctorId | Reference (users) | Currently assigned doctor | Present only when role = patient; null until UC7.3 assignment |
 | specialty | String | Medical specialty | Present only when role = doctor |
+| maxPatients | Number | Caseload limit set by the admin (D-59) | Doctor only; optional, default 30 |
 | patientId | Reference (users) | Linked patient | Present only when role = family_member; null while the link is pending (UC15.1) |
 
 > Pharmacist and Admin accounts use only the common fields above; no role-specific fields apply.
