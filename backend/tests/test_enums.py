@@ -44,6 +44,7 @@ CASES: dict[str, type[StrEnum]] = {
     "appointment_type": enums.AppointmentType,
     "assignment_request_kind": enums.AssignmentRequestKind,
     "assignment_request_status": enums.AssignmentRequestStatus,
+    "record_category": enums.RecordCategory,
 }
 
 

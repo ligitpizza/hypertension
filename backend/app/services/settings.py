@@ -164,6 +164,10 @@ class FirestoreSettingsRepository:
         # UC12.4 E1: retained prescriptions stop renewing.
         for p in self.recurring_prescriptions(uid):
             self._col(Collection.PRESCRIPTIONS).document(p["id"]).update({"isRecurring": False})
+        # docs/04: health_records go with their Storage files (D-58).
+        from app.services.records import get_file_store
+
+        get_file_store().delete_prefix(f"health_records/{uid}/")
         refs.append(user_ref)  # last, so a failed purge is retried by the next daily run
         return self._delete_all(refs)
 

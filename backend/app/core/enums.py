@@ -87,6 +87,17 @@ class AssignmentRequestStatus(StrEnum):
     DECLINED = "declined"
 
 
+class RecordCategory(StrEnum):
+    """health_records.category (D-58)."""
+
+    LAB_RESULT = "lab_result"
+    PRESCRIPTION = "prescription"
+    IMAGING = "imaging"
+    DISCHARGE_SUMMARY = "discharge_summary"
+    REFERRAL_LETTER = "referral_letter"
+    OTHER = "other"
+
+
 class OrderMethod(StrEnum):
     SELF_COLLECTION = "self_collection"
     HOME_DELIVERY = "home_delivery"

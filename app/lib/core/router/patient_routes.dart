@@ -1,3 +1,4 @@
+import '../../features/records/presentation/records_page.dart';
 import '../../features/medications/data/medications_repository.dart';
 import '../../features/medications/presentation/medication_form_page.dart';
 import '../../features/medications/presentation/medications_page.dart';
@@ -35,13 +36,7 @@ final List<RouteBase> patientFeatureRoutes = [
       GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
       GoRoute(path: '/vitals', builder: (_, _) => const VitalsPage()),
       GoRoute(path: '/medications', builder: (_, _) => const MedicationsPage()),
-      GoRoute(
-        path: '/records',
-        builder: (_, _) => const ComingSoonPage(
-          title: 'Health records',
-          note: 'Uploading and sharing your medical documents is coming soon.',
-        ),
-      ),
+      GoRoute(path: '/records', builder: (_, _) => const RecordsPage()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
     ],
   ),

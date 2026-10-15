@@ -44,6 +44,7 @@ void main() {
     'appointment_type': AppointmentType.values.map((e) => e.value).toList(),
     'assignment_request_kind': AssignmentRequestKind.values.map((e) => e.value).toList(),
     'assignment_request_status': AssignmentRequestStatus.values.map((e) => e.value).toList(),
+    'record_category': RecordCategory.values.map((e) => e.value).toList(),
   };
 
   for (final entry in cases.entries) {

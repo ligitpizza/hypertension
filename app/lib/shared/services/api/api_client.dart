@@ -329,6 +329,37 @@ class ApiClient {
     }
   }
 
+  // ---- Module 6 health records (D-58) ----
+
+  Future<Map<String, dynamic>> createRecord({
+    required String recordId,
+    required String category,
+    required String fileName,
+  }) => _post('/records', {'recordId': recordId, 'category': category, 'fileName': fileName});
+
+  Future<Map<String, dynamic>> setRecordCategory(String id, String category) =>
+      _send('PATCH', '/records/$id', {'category': category});
+
+  Future<void> deleteRecord(String id) => _send('DELETE', '/records/$id', null);
+
+  Future<Map<String, dynamic>> shareRecord(String id) => _send('POST', '/records/$id/share', null);
+
+  Future<Map<String, dynamic>> unshareRecord(String id) =>
+      _send('DELETE', '/records/$id/share', null);
+
+  /// UC6.3: the file's bytes (the patient's own, or a shared one for the doctor).
+  Future<List<int>> recordFile(String id) async {
+    try {
+      final res = await _dio.get<List<int>>(
+        '/records/$id/file',
+        options: Options(responseType: ResponseType.bytes, receiveTimeout: agentTimeout),
+      );
+      return res.data ?? const [];
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
   /// UC12.4: deactivate now, purge after 7 days (D-46).
   Future<Map<String, dynamic>> deleteAccount({bool acknowledgeRecurring = false}) =>
       _send('DELETE', '/settings/account?acknowledgeRecurring=$acknowledgeRecurring', null);

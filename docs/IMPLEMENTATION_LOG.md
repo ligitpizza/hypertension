@@ -920,3 +920,36 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   failed once (for example when access changed during reassignment testing) stayed in error.
   They and the Patients-list rows are now autoDispose (they start again when reopened), and
   portal sections keep the last data if a stream errors later.
+
+### 2026-10-16 — Increment 3 — Module 6: Health Records Management
+
+- FRs / UCs: FR-6.1, FR-6.2; UC6.1 (E1 unsupported type, E2 upload failure), UC6.2,
+  UC6.3 (E1 empty state). Sequence Fig 4.1.1.6; activity Fig 3.44 (the "share now?"
+  decision after saving). Decision D-58 (agreed with Ping).
+- Flow: the patient taps Upload → Choose a file / Photo from gallery / Take a photo
+  (PDF, JPG, PNG, ≤ 10 MB, checked before upload) → the file goes straight to Storage at
+  `health_records/{patientId}/{recordId}` (retried 3 times, progress shown) → a required
+  category dialog (Lab result, Prescription, Imaging / scan, Discharge summary, Referral
+  letter, Other; Cancel deletes the upload) → `POST /api/v1/records` checks the stored file
+  again and saves the record → "Share with your doctor now?".
+- Patient Records tab (`/records`, replaces the placeholder): list with file name,
+  category, size, date and a "Shared with your doctor" label; category filter chips; tap
+  to open (images in a zoomable viewer, PDFs through the system share/viewer); menu with
+  Share with doctor / Stop sharing, Change category, Delete (confirmed).
+- Doctor: new **Records** tab on the patient page listing shared documents only, opened
+  through `GET /api/v1/records/{id}/file` (assigned doctor, only while shared). Sharing
+  pushes the doctor "New shared document".
+- Backend: `app/routers/records.py`, `app/services/records.py` (FileStore adapter over the
+  Storage bucket, `storage_bucket` setting), `app/schemas/records.py`; audit actions
+  UPLOAD_RECORD, SHARE_RECORD, UNSHARE_RECORD, RECATEGORISE_RECORD, DELETE_RECORD. The
+  account purge (D-46) now also deletes `health_records/{uid}/` files (docs/04 cascade).
+- Rules: `health_records` read by the owner, or by the assigned doctor when
+  `sharedWithDoctor == true`; writes API-only. Storage: owner-only create once, PDF/JPG/PNG,
+  ≤ 10 MB; owner read/delete. Indexes: (patientId, uploadedAt desc) and (patientId,
+  sharedWithDoctor, uploadedAt desc).
+- New enum `record_category` in docs/fixtures/enums.json (Python and Dart match).
+- Tests: backend 14 (`test_records.py`); rules 12 new (187 total); Flutter 13 widget/unit
+  (`records_test.dart`, 457 total).
+- Deviations vs Chapter 4: D-58 (fileName, contentType, sizeBytes; stop sharing,
+  recategorise, delete). Not in the data export (D-47) yet: the export lists measurements,
+  not files.

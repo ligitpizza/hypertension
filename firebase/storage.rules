@@ -1,12 +1,23 @@
 rules_version = '2';
 
 // CareFlow Cloud Storage rules. Deny by default.
-// Health record uploads (PDF/JPG/PNG, <= 10 MB, owner + shared doctor read)
-// are added with Module 6 (Increment 3).
 service firebase.storage {
   match /b/{bucket}/o {
     match /{allPaths=**} {
       allow read, write: if false;
+    }
+
+    // D-58 health records: the patient uploads once to their own folder (PDF/JPG/PNG,
+    // <= 10 MB), reads it and may delete it. The doctor opens shared files through FastAPI.
+    match /health_records/{patientId}/{recordId} {
+      allow create: if request.auth != null
+        && request.auth.uid == patientId
+        && request.auth.token.role == 'patient'
+        && resource == null
+        && request.resource.size <= 10485760
+        && request.resource.contentType in ['application/pdf', 'image/jpeg', 'image/png'];
+      allow read, delete: if request.auth != null && request.auth.uid == patientId;
+      allow update: if false;
     }
 
     // D-52 message attachments: end-to-end encrypted on the device, so Storage only ever

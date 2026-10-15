@@ -105,6 +105,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---- Module 6 health records (FR-6.1, FR-6.2; D-58) ----
+    // Written only through FastAPI. The patient reads their own; the assigned doctor reads
+    // a record only while it is shared (queries must filter sharedWithDoctor == true).
+    match /health_records/{recordId} {
+      allow read: if isSelf(resource.data.patientId)
+        || (resource.data.sharedWithDoctor == true
+            && isAssignedDoctorOf(resource.data.patientId));
+      allow write: if false;
+    }
+
     // appointments: read-only until Module 7 adds its write paths.
 
     match /appointments/{appointmentId} {

@@ -202,5 +202,13 @@
     "pending",
     "approved",
     "declined"
+  ],
+  "record_category": [
+    "lab_result",
+    "prescription",
+    "imaging",
+    "discharge_summary",
+    "referral_letter",
+    "other"
   ]
 }

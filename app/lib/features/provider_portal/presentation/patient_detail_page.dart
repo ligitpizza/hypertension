@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../records/presentation/shared_records_tab.dart';
 import '../../../core/constants/enums.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../../../core/utils/risk_style.dart';
@@ -321,7 +322,7 @@ class _HistoryTabs extends ConsumerWidget {
     final triage = ref.watch(patientTriageProvider(patientId));
 
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Card(
         child: Column(
           children: [
@@ -333,6 +334,7 @@ class _HistoryTabs extends ConsumerWidget {
                 Tab(text: 'Care plan'),
                 Tab(text: 'Clinical notes'),
                 Tab(text: 'Alerts & triage'),
+                Tab(text: 'Records'),
               ],
             ),
             SizedBox(
@@ -426,6 +428,7 @@ class _HistoryTabs extends ConsumerWidget {
                   ),
                   _pad(NotesList(notes: notes)),
                   _pad(_AlertHistory(alerts: alerts, triage: triage)),
+                  _pad(SharedRecordsTab(patientId: patientId)),
                 ],
               ),
             ),

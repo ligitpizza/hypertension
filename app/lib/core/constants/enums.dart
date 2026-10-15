@@ -433,3 +433,18 @@ enum AssignmentRequestStatus {
   final String value;
   static AssignmentRequestStatus fromValue(String v) => enumFromValue(values, v, (e) => e.value);
 }
+
+/// health_records.category (D-58).
+enum RecordCategory {
+  labResult('lab_result', 'Lab result'),
+  prescription('prescription', 'Prescription'),
+  imaging('imaging', 'Imaging / scan'),
+  dischargeSummary('discharge_summary', 'Discharge summary'),
+  referralLetter('referral_letter', 'Referral letter'),
+  other('other', 'Other');
+
+  const RecordCategory(this.value, this.label);
+  final String value;
+  final String label;
+  static RecordCategory fromValue(String v) => enumFromValue(values, v, (e) => e.value);
+}

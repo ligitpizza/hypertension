@@ -21,6 +21,7 @@ from app.routers import (
     messages,
     prescriptions,
     provider,
+    records,
     risk,
     triage,
     vitals,
@@ -80,6 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(appointments.router, prefix=API_PREFIX)
     app.include_router(assignments.router, prefix=API_PREFIX)
     app.include_router(prescriptions.router, prefix=API_PREFIX)
+    app.include_router(records.router, prefix=API_PREFIX)
     app.include_router(settings_routes.router, prefix=API_PREFIX)
     app.include_router(jobs.router)
     return app

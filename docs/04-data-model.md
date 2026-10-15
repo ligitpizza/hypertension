@@ -110,8 +110,11 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 |---|---|---|---|
 | _id | String | Primary key | Auto-generated |
 | patientId | Reference (users) | Owning patient | Required |
-| fileUrl | String | Firebase Storage reference | Required |
-| category | String | Document category assigned at upload | Required (UC6.1) |
+| fileUrl | String | Firebase Storage reference | Required; path `health_records/{patientId}/{recordId}` (D-58) |
+| fileName | String | Original file name (D-58) | Required |
+| contentType | String | application/pdf / image/jpeg / image/png (D-58) | Required |
+| sizeBytes | Number | File size (D-58) | Required; ≤ 10 MB |
+| category | String | lab_result / prescription / imaging / discharge_summary / referral_letter / other (D-58) | Required (UC6.1) |
 | uploadedAt | Timestamp | Upload time | Required |
 | sharedWithDoctor | Boolean | Whether shared with the assigned doctor | Default: false |
 | sharedAt | Timestamp | When sharing was granted | Optional; present once shared (UC6.2) |

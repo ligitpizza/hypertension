@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     app_env: Literal["dev", "prod"] = "prod"
     app_version: str = "0.1.0"
     firebase_project_id: str = "hypertension-dd85f"
+    # Default Firebase Storage bucket (Module 6 health records, D-58).
+    storage_bucket: str = "hypertension-dd85f.firebasestorage.app"
 
     # Dev only: Flutter Web picks a random localhost port, so allow any of them.
     # Production needs no CORS because Hosting rewrites /api/** to the same origin.

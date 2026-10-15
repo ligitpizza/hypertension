@@ -48,6 +48,7 @@ from app.services.identity import EmailAlreadyRegisteredError, get_identity_prov
 from app.services.medications import MedicationDoc, get_medication_repository
 from app.services.notifications import Notifier, get_notifier, get_token_repository
 from app.services.provider import get_provider_repository
+from app.services.records import get_file_store, get_record_repository
 from app.services.risk import get_risk_data_repository
 from app.services.settings import get_settings_repository
 from app.services.triage import Symptom, get_triage_repository
@@ -371,6 +372,60 @@ class InMemorySettingsRepository:
         self._users.health_profiles.pop(uid, None)
         self._users.users.pop(uid, None)
         return len(gone) + 2
+
+
+class InMemoryRecordRepository:
+    """Module 6 (D-58)."""
+
+    def __init__(self, users: "InMemoryUserRepository") -> None:
+        self._users = users
+        self.records: dict[str, dict[str, Any]] = {}
+
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def get(self, record_id: str) -> dict[str, Any] | None:
+        r = self.records.get(record_id)
+        return dict(r) if r else None
+
+    def create(self, record_id: str, data: dict[str, Any]) -> None:
+        self.records[record_id] = dict(data)
+
+    def update(self, record_id: str, data: dict[str, Any]) -> None:
+        r = self.records[record_id]
+        for k, v in data.items():
+            if v is None:
+                r.pop(k, None)
+            else:
+                r[k] = v
+
+    def delete(self, record_id: str) -> None:
+        self.records.pop(record_id, None)
+
+
+class InMemoryFileStore:
+    """Firebase Storage stand-in: path -> (bytes, content type)."""
+
+    def __init__(self) -> None:
+        self.files: dict[str, tuple[bytes, str]] = {}
+
+    def stat(self, path: str) -> Any:
+        from app.services.records import StoredFile
+
+        f = self.files.get(path)
+        return StoredFile(len(f[0]), f[1]) if f else None
+
+    def read(self, path: str) -> bytes:
+        return self.files[path][0]
+
+    def delete(self, path: str) -> None:
+        self.files.pop(path, None)
+
+    def delete_prefix(self, prefix: str) -> int:
+        gone = [p for p in self.files if p.startswith(prefix)]
+        for p in gone:
+            del self.files[p]
+        return len(gone)
 
 
 class InMemoryAppointmentRepository:
@@ -849,6 +904,16 @@ def appointment_repo(repo: InMemoryUserRepository) -> InMemoryAppointmentReposit
 
 
 @pytest.fixture
+def record_repo(repo: InMemoryUserRepository) -> InMemoryRecordRepository:
+    return InMemoryRecordRepository(repo)
+
+
+@pytest.fixture
+def file_store() -> InMemoryFileStore:
+    return InMemoryFileStore()
+
+
+@pytest.fixture
 def settings_repo(
     repo: InMemoryUserRepository,
     vitals_repo: InMemoryVitalsRepository,
@@ -881,6 +946,8 @@ def make_client(
     settings_repo: InMemorySettingsRepository,
     appointment_repo: InMemoryAppointmentRepository,
     assignment_repo: InMemoryAssignmentRepository,
+    record_repo: InMemoryRecordRepository,
+    file_store: InMemoryFileStore,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -909,6 +976,8 @@ def make_client(
         app.dependency_overrides[get_settings_repository] = lambda: settings_repo
         app.dependency_overrides[get_appointment_repository] = lambda: appointment_repo
         app.dependency_overrides[get_assignment_repository] = lambda: assignment_repo
+        app.dependency_overrides[get_record_repository] = lambda: record_repo
+        app.dependency_overrides[get_file_store] = lambda: file_store
         return TestClient(app)
 
     return _make
