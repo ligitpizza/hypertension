@@ -31,7 +31,9 @@ final openAlertsProvider = StreamProvider<List<ClinicalAlert>>((ref) {
   return ref.watch(portalRepositoryProvider).openAlerts(uid);
 }, retry: _noRetry);
 
-final patientLatestReadingProvider = StreamProvider.family<VitalReading?, String>(
+// autoDispose: a listener that failed once (e.g. access changed during a reassignment)
+// must start again when the doctor reopens the patient, not stay broken for the session.
+final patientLatestReadingProvider = StreamProvider.autoDispose.family<VitalReading?, String>(
   (ref, patientId) => ref
       .watch(dashboardRepositoryProvider)
       .recentReadings(patientId, limit: 1)
@@ -39,7 +41,7 @@ final patientLatestReadingProvider = StreamProvider.family<VitalReading?, String
   retry: _noRetry,
 );
 
-final patientLatestRiskProvider = StreamProvider.family<RiskScore?, String>(
+final patientLatestRiskProvider = StreamProvider.autoDispose.family<RiskScore?, String>(
   (ref, patientId) => ref.watch(dashboardRepositoryProvider).latestRiskScore(patientId),
   retry: _noRetry,
 );
@@ -47,7 +49,7 @@ final patientLatestRiskProvider = StreamProvider.family<RiskScore?, String>(
 /// Dashboard rows: each patient joined with their latest reading and risk score.
 /// Rows fill in as each patient's data arrives. A patient with an open critical alert is
 /// flagged as Emergency (D-37).
-final patientRowsProvider = Provider<AsyncValue<List<PatientRow>>>((ref) {
+final patientRowsProvider = Provider.autoDispose<AsyncValue<List<PatientRow>>>((ref) {
   final emergencies = {
     for (final a in ref.watch(openAlertsProvider).value ?? const <ClinicalAlert>[])
       if (a.severity == RiskLevel.critical) a.patientId,

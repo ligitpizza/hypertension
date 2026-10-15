@@ -914,3 +914,9 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   "Pick any time (testing)" on the booking screen, so Complete / No-show, "Not completed",
   reminders and lapses can be tried at once. Tests force it off. Set it to false before the
   final demo and redeploy.
+- **Fix (Ping, doctor patient page opened from the calendar):** "Latest reading" and "Risk
+  assessment" showed "Could not load this section" while the rest of the page loaded. Their
+  streams were kept alive for the whole session by the Patients list, so a listener that
+  failed once (for example when access changed during reassignment testing) stayed in error.
+  They and the Patients-list rows are now autoDispose (they start again when reopened), and
+  portal sections keep the last data if a stream errors later.

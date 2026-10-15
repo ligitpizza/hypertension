@@ -88,7 +88,9 @@ class AsyncSection<T> extends StatelessWidget {
   final String emptyText;
 
   @override
+  // A later stream error keeps showing the last data rather than replacing it.
   Widget build(BuildContext context) => value.when(
+    skipError: true,
     loading: () => const Padding(
       padding: EdgeInsets.all(16),
       child: Center(child: CircularProgressIndicator()),
