@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 from firebase_admin import firestore as gfs
 
-from app.core.enums import AppointmentStatus, Collection
+from app.core.enums import AppointmentStatus, AppointmentType, Collection
 from app.core.firebase import get_firestore
 from app.services.medications import MYT
 
@@ -86,8 +86,24 @@ def is_bookable(moment: datetime, now: datetime, any_time: bool = False) -> bool
     )
 
 
+def booked_by(data: dict[str, Any]) -> str:
+    """D-60: who made the booking; older documents predate the field."""
+    by = data.get("bookedBy")
+    if by in ("patient", "admin", "system"):
+        return str(by)
+    return "system" if data.get("type") == AppointmentType.EMERGENCY.value else "patient"
+
+
+def clashes(a: datetime, b: datetime) -> bool:
+    """Two visits overlap when they start less than one slot apart (D-60: the admin may
+    book any minute, so exact-start checks are not enough)."""
+    return abs(a - b) < SLOT
+
+
 def free_slots(day: date, taken: set[datetime], now: datetime) -> list[datetime]:
-    return [s for s in day_slots(day) if s not in taken and is_bookable(s, now)]
+    return [
+        s for s in day_slots(day) if not any(clashes(s, t) for t in taken) and is_bookable(s, now)
+    ]
 
 
 def next_free(taken: set[datetime], now: datetime, limit: int = 3) -> list[datetime]:
@@ -205,14 +221,17 @@ class FirestoreAppointmentRepository:
     def _check_free(
         self, tx: Any, doctor_id: str, moment: datetime, exclude_id: str | None
     ) -> None:
-        for d in self._doctor_query(doctor_id, moment, moment + SLOT).stream(transaction=tx):
+        start = moment - SLOT + timedelta(microseconds=1)
+        for d in self._doctor_query(doctor_id, start, moment + SLOT).stream(transaction=tx):
             if d.id != exclude_id and d.get("status") in ACTIVE:
                 raise SlotTakenError
         for d in self._holds_query(doctor_id).stream(transaction=tx):
+            held = held_time(dict(d.to_dict()))
             if (
                 d.id != exclude_id
                 and d.get("status") in ACTIVE
-                and held_time(dict(d.to_dict())) == moment
+                and held is not None
+                and clashes(held, moment)
             ):
                 raise SlotTakenError
 

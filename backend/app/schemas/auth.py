@@ -186,3 +186,13 @@ class UpdateUserRequest(_Strict):
     maxPatients: int | None = Field(default=None, ge=1, le=500)
     isActive: bool | None = None
     reason: str | None = Field(default=None, max_length=300)
+
+
+class CreatePatientRequest(_Strict):
+    """D-60: the admin opens a patient account; the patient finishes onboarding later."""
+
+    name: str = Field(min_length=2, max_length=100)
+    email: str = Field(max_length=254)
+    icNumber: str = Field(min_length=12, max_length=14)
+
+    _email = field_validator("email")(_check_email)

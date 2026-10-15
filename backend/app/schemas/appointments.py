@@ -56,3 +56,27 @@ class StaffCancelRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     reason: str = Field(min_length=3, max_length=300)
+
+
+AdminType = Literal["checkup", "follow_up", "emergency"]
+
+
+class AdminBookRequest(BaseModel):
+    """D-60: the admin books for a patient with any doctor at any minute."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    patientId: str = Field(min_length=1, max_length=128)
+    doctorId: str = Field(min_length=1, max_length=128)
+    dateTime: datetime
+    type: AdminType = "checkup"
+
+
+class AdminEditRequest(BaseModel):
+    """D-60: the admin moves an appointment (time, doctor or type) instantly."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    dateTime: datetime | None = None
+    doctorId: str | None = Field(default=None, min_length=1, max_length=128)
+    type: AdminType | None = None

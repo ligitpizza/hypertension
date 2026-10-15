@@ -3,26 +3,35 @@
 POST  /admin/staff          staff provisioning (FR-1.6, UC1.5)
 GET   /admin/users          list / search / filter all users (FR-11.1, UC11.1)
 PATCH /admin/users/{uid}    edit name, specialty, caseload limit; deactivate / reactivate
+POST  /admin/patients       create a patient account (D-60)
+DELETE /admin/users/{uid}   permanently delete a user (D-60)
 """
 
 import html
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
 from app.core.enums import Collection, UserRole
 from app.core.errors import ApiError
 from app.integrations.email import EmailClient, EmailMessage, get_email_client
-from app.schemas.auth import CreateStaffRequest, CreateStaffResponse, UpdateUserRequest
+from app.schemas.auth import (
+    CreatePatientRequest,
+    CreateStaffRequest,
+    CreateStaffResponse,
+    UpdateUserRequest,
+)
+from app.services.appointments import AppointmentRepository, get_appointment_repository
 from app.services.identity import (
     EmailAlreadyRegisteredError,
     IdentityProvider,
     get_identity_provider,
 )
+from app.services.settings import SettingsRepository, get_settings_repository
 from app.services.users import UserRepository, get_user_repository
 
 log = logging.getLogger("careflow.admin")
@@ -253,3 +262,131 @@ def update_user(
 
     updated = dict(dict(repo.list_users()).get(uid) or target)
     return user_row(uid, updated, caseloads(repo.list_users()).get(uid))
+
+
+def patient_setup_email(name: str, email: str, link: str) -> EmailMessage:
+    text = (
+        f"Hello {name},\n\n"
+        "The clinic has created a CareFlow account for you.\n"
+        f"Set your password using this link:\n{link}\n\n"
+        "Then sign in to the CareFlow app with this email address and complete your health "
+        "profile.\n"
+    )
+    safe_name, safe_link = html.escape(name), html.escape(link, quote=True)
+    body_html = (
+        f"<p>Hello {safe_name},</p>"
+        "<p>The clinic has created a CareFlow account for you.</p>"
+        f'<p><a href="{safe_link}">Set your password</a></p>'
+        "<p>Then sign in to the CareFlow app with this email address and complete your "
+        "health profile.</p>"
+    )
+    return EmailMessage(
+        to_email=email,
+        to_name=name,
+        subject="Your CareFlow account",
+        text=text,
+        html=body_html,
+    )
+
+
+@router.post("/patients", status_code=status.HTTP_201_CREATED)
+def create_patient_account(
+    body: CreatePatientRequest,
+    admin: CurrentUser = Depends(admin_only),
+    identity: IdentityProvider = Depends(get_identity_provider),
+    repo: UserRepository = Depends(get_user_repository),
+    email_client: EmailClient = Depends(get_email_client),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-60: same account shape as self-registration (D-51 IC check, D-06 link code)."""
+    from app.routers.auth import _patient_ic, _unique_link_code
+
+    ic = _patient_ic(body.icNumber, UserRole.PATIENT, repo, "")
+    try:
+        uid = identity.create_user(email=body.email, display_name=body.name)
+    except EmailAlreadyRegisteredError as exc:
+        raise ApiError(
+            "EMAIL_ALREADY_REGISTERED",
+            "An account with this email already exists.",
+            status.HTTP_409_CONFLICT,
+        ) from exc
+    identity.set_role(uid, UserRole.PATIENT)
+    repo.create_user(
+        uid,
+        {
+            "email": body.email,
+            "name": body.name,
+            "role": UserRole.PATIENT.value,
+            "isActive": True,
+            "icNumber": ic,
+            "onboardingComplete": False,
+            "assignedDoctorId": None,
+            "linkCode": _unique_link_code(repo),
+        },
+    )
+    link = identity.password_setup_link(body.email)
+    try:
+        email_sent = email_client.send(patient_setup_email(body.name, body.email, link))
+    except Exception:
+        log.exception("Patient setup email failed for uid=%s", uid)
+        email_sent = False
+    audit.log(
+        user_id=admin.uid,
+        action="CREATE_PATIENT_ACCOUNT",
+        details="Admin created a patient account; setup link "
+        f"{'emailed' if email_sent else 'shown to admin'}.",
+        target_type=Collection.USERS.value,
+        target_id=uid,
+    )
+    return {"uid": uid, "emailSent": email_sent, "setupLink": None if email_sent else link}
+
+
+@router.delete("/users/{uid}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    uid: str,
+    admin: CurrentUser = Depends(admin_only),
+    repo: UserRepository = Depends(get_user_repository),
+    settings_repo: SettingsRepository = Depends(get_settings_repository),
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+    identity: IdentityProvider = Depends(get_identity_provider),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> Response:
+    """D-60: permanent removal. Patients go through the D-46 cascade (doctor-authored
+    records are kept); a doctor must hand over patients and appointments first."""
+    users = repo.list_users()
+    target = dict(users).get(uid)
+    if target is None:
+        raise ApiError("USER_NOT_FOUND", "User not found.", status.HTTP_404_NOT_FOUND)
+    if uid == admin.uid:
+        raise ApiError(
+            "CANNOT_DELETE_SELF", "You cannot delete your own account.", status.HTTP_409_CONFLICT
+        )
+    role = target.get("role")
+    if role == UserRole.ADMIN.value and not any(
+        other != uid and u.get("role") == UserRole.ADMIN.value and u.get("isActive") is not False
+        for other, u in users
+    ):
+        raise ApiError(
+            "LAST_ADMIN", "This is the only active admin account.", status.HTTP_409_CONFLICT
+        )
+    if role == UserRole.DOCTOR.value:
+        now = datetime.now(UTC)
+        patients = caseloads(users).get(uid, 0)
+        upcoming = len(appointments.taken(uid, now, now + timedelta(days=365)))
+        if patients or upcoming:
+            raise ApiError(
+                "DOCTOR_IN_USE",
+                f"This doctor still has {patients} assigned patients and {upcoming} upcoming "
+                "appointments. Reassign or cancel them first.",
+                status.HTTP_409_CONFLICT,
+            )
+    removed = settings_repo.purge(uid)
+    identity.delete_user(uid)
+    audit.log(
+        user_id=admin.uid,
+        action="DELETE_USER",
+        details=f"Permanently deleted {role} account ({removed} records removed).",
+        target_type=Collection.USERS.value,
+        target_id=uid,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

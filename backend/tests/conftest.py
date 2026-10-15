@@ -518,14 +518,14 @@ class InMemoryAppointmentRepository:
         return out
 
     def _check_free(self, doctor_id: str, moment: datetime, exclude_id: str | None) -> None:
-        from app.services.appointments import ACTIVE, SlotTakenError, held_time
+        from app.services.appointments import ACTIVE, SlotTakenError, clashes, held_time
 
         for k, a in self.appointments.items():
             if (
                 k != exclude_id
                 and a["doctorId"] == doctor_id
                 and a["status"] in ACTIVE
-                and moment in (a["dateTime"], held_time(a))
+                and any(t is not None and clashes(t, moment) for t in (a["dateTime"], held_time(a)))
             ):
                 raise SlotTakenError
 

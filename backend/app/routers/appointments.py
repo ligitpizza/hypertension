@@ -19,6 +19,8 @@ from app.core.enums import AppointmentStatus, Collection, UserRole
 from app.core.errors import ApiError
 from app.integrations.push import PushMessage
 from app.schemas.appointments import (
+    AdminBookRequest,
+    AdminEditRequest,
     BookRequest,
     ChangeRequest,
     DecisionRequest,
@@ -36,6 +38,7 @@ from app.services.appointments import (
     AppointmentDoc,
     AppointmentRepository,
     SlotTakenError,
+    booked_by,
     day_slots,
     free_slots,
     get_appointment_repository,
@@ -134,7 +137,8 @@ def book(
             "Please choose one of the available times.",
             status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
-    active = repo.active_for_patient(user.uid)
+    # D-60: only the patient's own bookings count (not emergency or admin-assigned).
+    active = [a for a in repo.active_for_patient(user.uid) if booked_by(a.data) == "patient"]
     if active:
         # D-56: one active appointment at a time (the emergency auto-booking is exempt).
         current = min(active, key=lambda d: d.data["dateTime"])
@@ -154,6 +158,7 @@ def book(
         "dateTime": moment,
         "status": AppointmentStatus.BOOKED.value,
         "type": body.type,
+        "bookedBy": "patient",
     }
     try:
         appt_id = repo.book(data)
@@ -581,3 +586,186 @@ def pre_visit_summary(
         now,
     )
     return summary
+
+
+# ---------------- D-60: the admin books and edits directly ----------------
+
+admin_router = APIRouter(prefix="/admin/appointments", tags=["appointments"])
+admin_only = require_roles(UserRole.ADMIN)
+ADMIN_PAST = timedelta(days=1)
+ADMIN_AHEAD = timedelta(days=365)
+
+
+def _admin_time(moment: datetime, now: datetime) -> datetime:
+    moment = moment.astimezone(UTC)
+    if moment.second or moment.microsecond or not (now - ADMIN_PAST <= moment <= now + ADMIN_AHEAD):
+        raise ApiError(
+            "INVALID_TIME",
+            "Choose a whole minute from yesterday up to a year ahead.",
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    return moment
+
+
+def _active_role(
+    repo: AppointmentRepository, uid: str, role: UserRole, label: str
+) -> dict[str, Any]:
+    u = repo.user(uid)
+    if u is None or u.get("role") != role.value or u.get("isActive") is False:
+        raise ApiError(
+            f"{label.upper()}_NOT_FOUND",
+            f"That {label} was not found or is not active.",
+            status.HTTP_404_NOT_FOUND,
+        )
+    return u
+
+
+def _doctor_busy() -> ApiError:
+    return ApiError(
+        "DOCTOR_BUSY",
+        "The doctor already has an appointment within 30 minutes of that time.",
+        status.HTTP_409_CONFLICT,
+    )
+
+
+@admin_router.post("", status_code=status.HTTP_201_CREATED)
+def admin_book(
+    body: AdminBookRequest,
+    admin: CurrentUser = Depends(admin_only),
+    repo: AppointmentRepository = Depends(get_appointment_repository),
+    notifier: Notifier = Depends(get_notifier),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-60: pick patient, any doctor, type and time; labelled "Admin assigned"."""
+    now = datetime.now(UTC)
+    moment = _admin_time(body.dateTime, now)
+    patient = _active_role(repo, body.patientId, UserRole.PATIENT, "patient")
+    doctor = _active_role(repo, body.doctorId, UserRole.DOCTOR, "doctor")
+    if any(booked_by(a.data) == "admin" for a in repo.active_for_patient(body.patientId)):
+        raise ApiError(
+            "ADMIN_LIMIT",
+            "This patient already has an active admin-assigned appointment. Edit that one instead.",
+            status.HTTP_409_CONFLICT,
+        )
+    data = {
+        "patientId": body.patientId,
+        "doctorId": body.doctorId,
+        "dateTime": moment,
+        "status": AppointmentStatus.BOOKED.value,
+        "type": body.type,
+        "bookedBy": "admin",
+    }
+    try:
+        appt_id = repo.book(data)
+    except SlotTakenError as exc:
+        raise _doctor_busy() from exc
+    when = when_text(moment)
+    doctor_name = str(doctor.get("name") or "your doctor")
+    _push(
+        notifier,
+        body.patientId,
+        "Appointment booked for you",
+        f"The clinic booked you with {doctor_name} on {when}.",
+        appt_id,
+    )
+    _push(
+        notifier,
+        body.doctorId,
+        "Appointment added by admin",
+        f"{patient.get('name') or 'A patient'}: {when}.",
+        appt_id,
+    )
+    audit.log(
+        user_id=admin.uid,
+        action="ADMIN_BOOK_APPOINTMENT",
+        details=f"{body.type} with {doctor_name} for {when} (MYT).",
+        target_type=Collection.APPOINTMENTS.value,
+        target_id=appt_id,
+    )
+    return {
+        "id": appt_id,
+        **{k: v for k, v in data.items() if k != "dateTime"},
+        "dateTime": moment.isoformat(),
+    }
+
+
+@admin_router.patch("/{appointment_id}")
+def admin_edit(
+    appointment_id: str,
+    body: AdminEditRequest,
+    admin: CurrentUser = Depends(admin_only),
+    repo: AppointmentRepository = Depends(get_appointment_repository),
+    notifier: Notifier = Depends(get_notifier),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-60: move time / doctor / type of any active appointment, no approval needed."""
+    appt = repo.get(appointment_id)
+    if appt is None:
+        raise ApiError("APPOINTMENT_NOT_FOUND", "Appointment not found.", status.HTTP_404_NOT_FOUND)
+    a = appt.data
+    if a.get("status") not in ACTIVE:
+        raise ApiError(
+            "APPOINTMENT_CLOSED", "This appointment is not active.", status.HTTP_409_CONFLICT
+        )
+    now = datetime.now(UTC)
+    moment = _admin_time(body.dateTime, now) if body.dateTime else a["dateTime"]
+    old_doctor = str(a.get("doctorId") or "")
+    doctor_id = body.doctorId or old_doctor
+    doctor = _active_role(repo, doctor_id, UserRole.DOCTOR, "doctor")
+    moved = moment != a["dateTime"] or doctor_id != old_doctor
+    changes: list[str] = []
+    if moment != a["dateTime"]:
+        changes.append(f"time {when_text(a['dateTime'])} -> {when_text(moment)}")
+    if doctor_id != old_doctor:
+        changes.append(f"doctor -> {doctor.get('name') or doctor_id}")
+    if body.type and body.type != a.get("type"):
+        changes.append(f"type -> {body.type}")
+    if not changes:
+        return {"id": appointment_id, "changed": False}
+    update = {
+        **a,
+        "dateTime": moment,
+        "doctorId": doctor_id,
+        "type": body.type or a.get("type"),
+        "pendingChange": None,
+    }
+    if moment != a["dateTime"]:
+        update["status"] = AppointmentStatus.RESCHEDULED.value
+    if moved:
+        try:
+            repo.book(update, exclude_id=appointment_id)
+        except SlotTakenError as exc:
+            raise _doctor_busy() from exc
+    else:
+        repo.update(appointment_id, {"type": update["type"], "pendingChange": None})
+    when = when_text(moment)
+    summary = "; ".join(changes)
+    _push(
+        notifier,
+        str(a["patientId"]),
+        "Appointment changed by the clinic",
+        f"Your appointment is now on {when} with {doctor.get('name') or 'your doctor'}.",
+        appointment_id,
+    )
+    for uid in {doctor_id, old_doctor} - {""}:
+        _push(
+            notifier,
+            uid,
+            "Appointment changed by admin",
+            f"{_patient_name(repo, str(a['patientId']))}: {summary}.",
+            appointment_id,
+        )
+    audit.log(
+        user_id=admin.uid,
+        action="ADMIN_EDIT_APPOINTMENT",
+        details=f"{summary} (MYT).",
+        target_type=Collection.APPOINTMENTS.value,
+        target_id=appointment_id,
+    )
+    return {
+        "id": appointment_id,
+        "changed": True,
+        "dateTime": moment.isoformat(),
+        "doctorId": doctor_id,
+        "type": update["type"],
+    }

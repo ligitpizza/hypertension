@@ -141,6 +141,7 @@ def auto_book_emergency(
                     "dateTime": slot,
                     "status": AppointmentStatus.BOOKED.value,
                     "type": AppointmentType.EMERGENCY.value,
+                    "bookedBy": "system",  # D-60
                 }
             )
         except SlotTakenError:
