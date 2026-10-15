@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'widgets/role_toggle.dart';
 import '../../../core/constants/enums.dart';
 import '../../../shared/providers/api_providers.dart';
 import '../data/auth_repository.dart';
@@ -100,6 +101,11 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
   String? _error;
   final _ic = TextEditingController(); // D-51: patients must give it to finish
 
+  /// D-63: the CareFlow app may finish a patient or a family-member account.
+  late UserRole _role = ref.read(clientAppProvider) == ClientApp.family
+      ? UserRole.familyMember
+      : UserRole.patient;
+
   @override
   void dispose() {
     _ic.dispose();
@@ -111,9 +117,8 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
       _working = true;
       _error = null;
     });
-    final app = ref.read(clientAppProvider);
     final user = FirebaseAuth.instance.currentUser;
-    final patient = app != ClientApp.family;
+    final patient = _role == UserRole.patient;
     final icError = patient ? validateIc(_ic.text) : null;
     if (icError != null) {
       setState(() {
@@ -129,7 +134,7 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
             name: (user?.displayName?.trim().length ?? 0) >= 2
                 ? user!.displayName!
                 : 'CareFlow user',
-            role: app == ClientApp.family ? UserRole.familyMember.value : UserRole.patient.value,
+            role: _role.value,
             icNumber: patient ? parseIc(_ic.text).value : null,
           );
       await user?.getIdToken(true);
@@ -160,7 +165,16 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
       message: _error ?? 'We could not finish creating your account. Please try again.',
       extra: Column(
         children: [
-          if (ref.watch(clientAppProvider) != ClientApp.family) ...[
+          if (ref.watch(clientAppProvider) == ClientApp.patient) ...[
+            RoleToggle(
+              key: const Key('finish-role'),
+              roles: const [UserRole.patient, UserRole.familyMember],
+              selected: _role,
+              onChanged: (r) => setState(() => _role = r),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (_role == UserRole.patient) ...[
             SizedBox(
               width: 280,
               child: TextField(

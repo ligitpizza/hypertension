@@ -238,8 +238,8 @@ String? wrongAppMessage(UserRole? role, ClientApp app) {
   const staff = {UserRole.doctor, UserRole.pharmacist, UserRole.admin};
   switch (app) {
     case ClientApp.patient:
-      if (role == UserRole.patient) return null;
-      if (role == UserRole.familyMember) return AuthMessages.useFamilyApp;
+      // D-63: one CareFlow app for patients and family members.
+      if (role == UserRole.patient || role == UserRole.familyMember) return null;
       return staff.contains(role) ? AuthMessages.useStaffPortal : AuthMessages.generic;
     case ClientApp.family:
       if (role == UserRole.familyMember) return null;

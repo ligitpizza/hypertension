@@ -45,12 +45,22 @@ def test_uc1_2_e2_deactivated_account_is_blocked(
     assert audit.actions() == ["LOGIN_BLOCKED"]
 
 
-def test_d26_family_member_cannot_use_patient_app(
+def test_d63_family_member_signs_in_to_the_careflow_app(
     client: TestClient, repo: InMemoryUserRepository
 ) -> None:
     _seed(repo, "u-family", "family_member")
     res = client.post(
         SESSION, json={"event": "LOGIN", "app": "patient"}, headers=bearer("family-token")
+    )
+    assert res.status_code == 200
+
+
+def test_staff_cannot_use_the_careflow_app(
+    client: TestClient, repo: InMemoryUserRepository
+) -> None:
+    _seed(repo, "u-doctor", "doctor")
+    res = client.post(
+        SESSION, json={"event": "LOGIN", "app": "patient"}, headers=bearer("doctor-token")
     )
     assert res.status_code == 403
     assert res.json()["error"]["code"] == "WRONG_APP"

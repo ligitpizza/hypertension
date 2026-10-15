@@ -74,7 +74,7 @@ class _NotLinked extends StatelessWidget {
       if (!pending)
         FilledButton.icon(
           key: const Key('family-go-link'),
-          onPressed: () => context.go('/link'),
+          onPressed: () => context.go('/family/link'),
           icon: const Icon(Icons.key),
           label: const Text('Enter link code'),
         ),
@@ -145,7 +145,7 @@ class _Linked extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white),
               ),
               trailing: const Icon(Icons.chevron_right, color: Colors.white),
-              onTap: () => context.go('/alert/${alert.id}'),
+              onTap: () => context.go('/family/alert/${alert.id}'),
             ),
           ),
         Card(

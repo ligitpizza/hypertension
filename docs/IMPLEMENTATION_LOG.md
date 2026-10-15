@@ -1073,3 +1073,15 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   because linked family may now read the patient); Flutter 13 (`family_test.dart`, 506 total).
   Family debug APK builds with the key in the merged manifest.
 - Deviations vs Chapter 4: D-62 (alert fields, triggers, unlinking, requester name, SMS fake).
+- **After Ping's first FR-14.2 test (D-63):**
+  - **One app**: family members now sign in to (and register in) the CareFlow app with the
+    Patient / Family toggle and get the family dashboard there; the backend accepts family
+    members from the patient app; patients and family members are kept to their own screens
+    (`patientAppGuard`); `phone-live` installs only the CareFlow app again.
+  - **"Allow" did nothing**: location returned null silently when the phone's GPS was off
+    or permission had been refused. The Family page and SOS screen now say which, and open
+    the phone's location switch or CareFlow's permission page; they re-check when you come
+    back. The map on the family alert appears once the patient's alert carries a location.
+  - Alert wording depends on the trigger (SOS: "asked for help"); the action buttons wrap
+    instead of squeezing "Acknowledge".
+  - Tests: Flutter 510; backend D-26 test replaced by D-63 tests.

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
+import 'package:hypertension/core/router/routers.dart' show patientAppGuard;
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/dashboard/data/dashboard_repository.dart';
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
@@ -102,6 +103,18 @@ class FakeLocation implements LocationSource {
 
   @override
   Future<bool> granted() async => here != null;
+
+  LocationAccess access = LocationAccess.granted;
+  final settings = <LocationAccess>[];
+
+  @override
+  Future<LocationAccess> request() async {
+    asked.add(true);
+    return here == null ? access : LocationAccess.granted;
+  }
+
+  @override
+  Future<void> openSettings(LocationAccess access) async => settings.add(access);
 }
 
 class FakeHealthData implements DashboardRepository {
@@ -166,10 +179,10 @@ Widget app(String initial, {String uid = 'f1'}) {
   final router = GoRouter(
     initialLocation: initial,
     routes: [
-      GoRoute(path: '/home', builder: (_, _) => const FamilyDashboardPage()),
-      GoRoute(path: '/link', builder: (_, _) => const LinkPage()),
+      GoRoute(path: '/family/home', builder: (_, _) => const FamilyDashboardPage()),
+      GoRoute(path: '/family/link', builder: (_, _) => const LinkPage()),
       GoRoute(
-        path: '/alert/:id',
+        path: '/family/alert/:id',
         builder: (_, s) => AlertPage(alertId: s.pathParameters['id']!),
       ),
       GoRoute(path: '/family-requests', builder: (_, _) => const FamilyRequestsPage()),
@@ -211,7 +224,7 @@ void main() {
 
   group('UC15.1 link (Fig 4.3.16.1)', () {
     tallTest('enter the code and send the request', (t) async {
-      await t.pumpWidget(app('/link'));
+      await t.pumpWidget(app('/family/link'));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('link-send')));
       await t.pump();
@@ -224,7 +237,7 @@ void main() {
 
     tallTest('an invalid code shows the reason', (t) async {
       repo.error = ApiException('INVALID_CODE', 'No patient has this link code.');
-      await t.pumpWidget(app('/link'));
+      await t.pumpWidget(app('/family/link'));
       await t.pumpAndSettle();
       await t.enterText(find.byKey(const Key('link-code')), 'ZZZZZZ');
       await t.tap(find.byKey(const Key('link-send')));
@@ -239,20 +252,20 @@ void main() {
         patientId: 'p1',
         status: 'pending',
       );
-      await t.pumpWidget(app('/link'));
+      await t.pumpWidget(app('/family/link'));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('link-pending')), findsOneWidget);
       await t.tap(find.byKey(const Key('link-withdraw')));
       await t.pumpAndSettle();
       expect(repo.calls, ['withdraw:r1']);
-      await t.pumpWidget(app('/home'));
+      await t.pumpWidget(app('/family/home'));
       await t.pumpAndSettle();
       expect(find.text('Waiting for approval'), findsOneWidget);
     });
 
     tallTest('linked: shows who you follow and unlinks after confirming', (t) async {
       repo.linked = 'p1';
-      await t.pumpWidget(app('/link'));
+      await t.pumpWidget(app('/family/link'));
       await t.pumpAndSettle();
       expect(find.text('Siti Aminah'), findsOneWidget);
       await t.tap(find.byKey(const Key('link-unlink')));
@@ -281,7 +294,7 @@ void main() {
           generatedAt: now,
           modelUsed: 'x',
         );
-      await t.pumpWidget(app('/home'));
+      await t.pumpWidget(app('/family/home'));
       await t.pumpAndSettle();
       expect(find.text('Siti Aminah'), findsOneWidget);
       expect(find.text('Moderate Risk'), findsOneWidget);
@@ -294,7 +307,7 @@ void main() {
       repo
         ..linked = 'p1'
         ..alerts = [alert()];
-      await t.pumpWidget(app('/home'));
+      await t.pumpWidget(app('/family/home'));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('family-alert-banner')), findsOneWidget);
       await t.tap(find.byKey(const Key('family-alert-banner')));
@@ -306,7 +319,7 @@ void main() {
       repo
         ..linked = 'p1'
         ..alerts = [alert(acked: true)];
-      await t.pumpWidget(app('/home'));
+      await t.pumpWidget(app('/family/home'));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('family-alert-banner')), findsNothing);
     });
@@ -318,7 +331,7 @@ void main() {
         ..linked = 'p1'
         ..alerts = [alert()];
       health.readings = [reading(now.subtract(const Duration(minutes: 3)), 185, 110)];
-      await t.pumpWidget(app('/alert/e1'));
+      await t.pumpWidget(app('/family/alert/e1'));
       await t.pumpAndSettle();
       expect(find.text('Critical BP reading'), findsOneWidget);
       expect(find.text('Detected 2 minutes ago'), findsOneWidget);
@@ -339,7 +352,7 @@ void main() {
       repo
         ..linked = 'p1'
         ..alerts = [alert(trigger: 'sos', located: false, phone: null)];
-      await t.pumpWidget(app('/alert/e1'));
+      await t.pumpWidget(app('/family/alert/e1'));
       await t.pumpAndSettle();
       expect(find.text('SOS pressed'), findsOneWidget);
       expect(find.byKey(const Key('alert-no-location')), findsOneWidget);
@@ -412,5 +425,56 @@ void main() {
     expect(alert(trigger: 'critical_risk').title, 'Critical health risk');
     expect(agoLabel(now.subtract(const Duration(minutes: 1)), now), '1 minute ago');
     expect(agoLabel(now.subtract(const Duration(hours: 3)), now), '3 hours ago');
+  });
+
+  group('location problems are explained (D-62 follow-up)', () {
+    tallTest('GPS off: Family page offers to turn it on', (t) async {
+      location
+        ..here = null
+        ..access = LocationAccess.serviceOff;
+      await t.pumpWidget(app('/family-requests', uid: 'p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('family-location-allow')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('location (GPS) is turned off'), findsOneWidget);
+      expect(find.text('Turn on location'), findsOneWidget);
+      await t.tap(find.byKey(const Key('family-location-allow')));
+      await t.pumpAndSettle();
+      expect(location.settings, [LocationAccess.serviceOff]);
+    });
+
+    tallTest('permission refused for good: SOS points to app settings', (t) async {
+      location
+        ..here = null
+        ..access = LocationAccess.deniedForever;
+      await t.pumpWidget(app('/sos', uid: 'p1'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Allow it for CareFlow'), findsOneWidget);
+      await t.tap(find.byKey(const Key('sos-location-retry')));
+      await t.pumpAndSettle();
+      expect(location.settings, [LocationAccess.deniedForever]);
+    });
+
+    tallTest('an SOS alert explains the patient asked for help', (t) async {
+      repo
+        ..linked = 'p1'
+        ..alerts = [alert(trigger: 'sos')];
+      await t.pumpWidget(app('/family/alert/e1'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Siti Aminah asked for help'), findsOneWidget);
+    });
+  });
+
+  group('D-63 one app for patients and family', () {
+    test('each role lands on its own home and stays out of the other side', () {
+      expect(patientAppGuard('/start', UserRole.familyMember), '/family/home');
+      expect(patientAppGuard('/start', UserRole.patient), '/dashboard');
+      expect(patientAppGuard('/dashboard', UserRole.familyMember), '/family/home');
+      expect(patientAppGuard('/family-requests', UserRole.familyMember), '/family/home');
+      expect(patientAppGuard('/family/home', UserRole.patient), '/dashboard');
+      expect(patientAppGuard('/family-requests', UserRole.patient), isNull);
+      expect(patientAppGuard('/family/alert/e1', UserRole.familyMember), isNull);
+      expect(patientAppGuard('/login', null), isNull);
+    });
   });
 }

@@ -289,7 +289,8 @@ SELF_REGISTER_ROLES = frozenset({UserRole.PATIENT, UserRole.FAMILY_MEMBER})  # F
 
 # Which role each client app serves (D-14, D-26).
 APP_ROLES: dict[ClientApp, frozenset[UserRole]] = {
-    ClientApp.PATIENT: frozenset({UserRole.PATIENT}),
+    # D-63: the CareFlow mobile app serves patients and family members.
+    ClientApp.PATIENT: frozenset({UserRole.PATIENT, UserRole.FAMILY_MEMBER}),
     ClientApp.FAMILY: frozenset({UserRole.FAMILY_MEMBER}),
     ClientApp.STAFF: STAFF_ROLES,
 }

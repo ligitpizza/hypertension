@@ -101,7 +101,8 @@ void main() {
     });
 
     test('D-26 / NFR-3.2 role must match the app', () {
-      expect(redirect(profile: user(role: UserRole.familyMember)), '/wrong-app');
+      // D-63: the CareFlow app serves family members too; staff still cannot use it.
+      expect(redirect(profile: user(role: UserRole.familyMember)), isNot('/wrong-app'));
       expect(redirect(profile: user(role: UserRole.doctor)), '/wrong-app');
       expect(redirect(app: ClientApp.staff, profile: user()), '/wrong-app');
       expect(
@@ -134,7 +135,7 @@ void main() {
   group('D-26 wrong-app messages', () {
     test('each app accepts only its roles', () {
       expect(wrongAppMessage(UserRole.patient, ClientApp.patient), isNull);
-      expect(wrongAppMessage(UserRole.familyMember, ClientApp.patient), AuthMessages.useFamilyApp);
+      expect(wrongAppMessage(UserRole.familyMember, ClientApp.patient), isNull); // D-63
       expect(wrongAppMessage(UserRole.patient, ClientApp.family), AuthMessages.usePatientApp);
       expect(wrongAppMessage(UserRole.doctor, ClientApp.patient), AuthMessages.useStaffPortal);
       for (final r in [UserRole.doctor, UserRole.pharmacist, UserRole.admin]) {

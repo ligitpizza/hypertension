@@ -797,13 +797,13 @@ def task_dev() -> None:
 
 
 def task_phone_live() -> None:
-    """Build the release apps (live cloud) and install the patient and family apps."""
+    """Build the release apps (live cloud) and install the CareFlow app (D-63: patients
+    and family members use the same app)."""
     if not _phone_connected():
         sys.exit("No phone connected. Plug it in (USB debugging on) and try again.")
     task_build_apk()
     out = APP / "build" / "app" / "outputs" / "flutter-apk"
-    for flavor in ("patient", "family"):  # FR-14.2: the family app is a separate install
-        run([_adb(), "install", "-r", str(out / f"app-{flavor}-release.apk")])
+    run([_adb(), "install", "-r", str(out / "app-patient-release.apk")])
     run(
         [
             _adb(),
@@ -816,7 +816,7 @@ def task_phone_live() -> None:
             "1",
         ]
     )
-    print("Live-cloud patient and family apps installed. They no longer need this PC.")
+    print("Live-cloud CareFlow app installed. It no longer needs this PC.")
 
 
 def task_bootstrap_admin() -> None:

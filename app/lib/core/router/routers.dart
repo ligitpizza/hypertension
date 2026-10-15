@@ -86,17 +86,49 @@ GoRouter _guardedRouter(
   );
 }
 
+/// FR-14.2 family screens (Figs 4.3.16.1-4.3.16.3; D-62). D-63: served by the CareFlow
+/// app to family-member accounts (and by the legacy Family build).
+final List<RouteBase> familyRoutes = [
+  ShellRoute(
+    builder: (_, state, child) => FamilyShell(location: state.matchedLocation, child: child),
+    routes: [
+      GoRoute(path: '/family/home', builder: (_, _) => const FamilyDashboardPage()),
+      GoRoute(path: '/family/link', builder: (_, _) => const LinkPage()),
+      GoRoute(path: '/family/settings', builder: (_, _) => const FamilySettingsPage()),
+    ],
+  ),
+  GoRoute(
+    path: '/family/alert/:alertId',
+    builder: (_, s) => AlertPage(alertId: s.pathParameters['alertId']!),
+  ),
+];
+
+/// D-63: one CareFlow app for patients and family members; each lands on its own home and
+/// cannot open the other's screens.
+String? patientAppGuard(String location, UserRole? role) {
+  final family = role == UserRole.familyMember;
+  if (location == '/start') return family ? '/family/home' : '/dashboard';
+  if (role == null) return null;
+  final inFamily = location.startsWith('/family/');
+  if (family && !inFamily) return '/family/home';
+  if (!family && inFamily) return '/dashboard';
+  return null;
+}
+
 final patientRouterProvider = Provider<GoRouter>(
   (ref) => _guardedRouter(
     ref,
     app: ClientApp.patient,
-    home: '/dashboard',
+    home: '/start',
+    roleGuard: (location) => patientAppGuard(location, ref.read(currentUserProvider).value?.role),
     routes: [
+      GoRoute(path: '/start', builder: (_, _) => const SplashPage()),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
       GoRoute(path: '/onboard', builder: (_, _) => const OnboardingPage()),
       GoRoute(path: '/onboard/complete', builder: (_, _) => const OnboardingCompletePage()),
       ...patientFeatureRoutes,
+      ...familyRoutes,
     ],
   ),
 );
@@ -105,23 +137,11 @@ final familyRouterProvider = Provider<GoRouter>(
   (ref) => _guardedRouter(
     ref,
     app: ClientApp.family,
-    home: '/home',
+    home: '/family/home',
     routes: [
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
-      // FR-14.2 Family app (Figs 4.3.16.1-4.3.16.3; D-62).
-      ShellRoute(
-        builder: (_, state, child) => FamilyShell(location: state.matchedLocation, child: child),
-        routes: [
-          GoRoute(path: '/home', builder: (_, _) => const FamilyDashboardPage()),
-          GoRoute(path: '/link', builder: (_, _) => const LinkPage()),
-          GoRoute(path: '/settings', builder: (_, _) => const FamilySettingsPage()),
-        ],
-      ),
-      GoRoute(
-        path: '/alert/:alertId',
-        builder: (_, s) => AlertPage(alertId: s.pathParameters['alertId']!),
-      ),
+      ...familyRoutes,
     ],
   ),
 );

@@ -265,12 +265,10 @@ void main() {
     AppUser u(UserRole role) =>
         AppUser(uid: 'u', email: 'e@x.my', name: 'Nur', role: role, isActive: true);
 
-    tallTest('D-26 wrong-app page tells a family member which app to use', (t) async {
-      await t.pumpWidget(
-        withUser(const WrongAppPage(), u(UserRole.familyMember), ClientApp.patient),
-      );
+    tallTest('D-26 wrong-app page tells staff to use the portal', (t) async {
+      await t.pumpWidget(withUser(const WrongAppPage(), u(UserRole.doctor), ClientApp.patient));
       await t.pumpAndSettle();
-      expect(find.text(AuthMessages.useFamilyApp), findsOneWidget);
+      expect(find.text(AuthMessages.useStaffPortal), findsOneWidget);
     });
 
     tallTest('staff shell shows the signed-in role and a sign-out action', (t) async {

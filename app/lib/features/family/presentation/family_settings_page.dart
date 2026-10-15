@@ -37,7 +37,7 @@ class FamilySettingsPage extends ConsumerWidget {
               ),
               subtitle: const Text('Manage under Patients'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.go('/link'),
+              onTap: () => context.go('/family/link'),
             ),
           ),
           const Card(

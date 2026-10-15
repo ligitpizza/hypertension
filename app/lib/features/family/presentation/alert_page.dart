@@ -58,7 +58,7 @@ class _AlertPageState extends ConsumerState<AlertPage> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(
-          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/family/home'),
         ),
         title: const Text('Family Dashboard'),
       ),
@@ -127,10 +127,17 @@ class _AlertPageState extends ConsumerState<AlertPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   color: red.withValues(alpha: 0.08),
-                  child: const Text(
-                    'Severe risk zone. Contact them now; call 999 if they are unwell or do not '
-                    'answer.',
-                  ),
+                  child: Text(switch (a.trigger) {
+                    'sos' =>
+                      '$name asked for help. Contact them now; call 999 if they '
+                          'are unwell or do not answer.',
+                    'triage' =>
+                      '$name reported symptoms that need emergency care. Contact '
+                          'them now; call 999 if they do not answer.',
+                    _ =>
+                      'Severe risk zone. Contact them now; call 999 if they are unwell or '
+                          'do not answer.',
+                  }),
                 ),
                 const SizedBox(height: 12),
                 if (a.hasLocation) ...[
@@ -173,9 +180,13 @@ class _AlertPageState extends ConsumerState<AlertPage> {
                   label: const Text('Call 999'),
                 ),
                 const SizedBox(height: 8),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
                   children: [
-                    Expanded(
+                    SizedBox(
+                      width: 150,
                       child: OutlinedButton.icon(
                         key: const Key('alert-navigate'),
                         onPressed: a.hasLocation ? () => open(directionsUrl(a.lat!, a.lng!)) : null,
@@ -183,8 +194,8 @@ class _AlertPageState extends ConsumerState<AlertPage> {
                         label: const Text('Navigate'),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
+                    SizedBox(
+                      width: 170,
                       child: OutlinedButton.icon(
                         key: const Key('alert-ack'),
                         onPressed: a.isAcknowledged || _busy ? null : () => _acknowledge(a),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/services/api/api_client.dart';
 import '../../auth/state/auth_providers.dart';
+import '../data/location_source.dart';
 import '../state/family_providers.dart';
 
 /// Patient: family link requests and linked members (`/family-requests`; UC15.1, D-06, D-62).
@@ -161,6 +162,7 @@ class FamilyRequestsPage extends ConsumerWidget {
 }
 
 /// D-62: location is only used in emergencies; the patient grants it here or at SOS.
+/// Explains GPS off / permission refused and opens the right settings screen.
 class _LocationSetting extends ConsumerStatefulWidget {
   const _LocationSetting();
 
@@ -168,38 +170,79 @@ class _LocationSetting extends ConsumerStatefulWidget {
   ConsumerState<_LocationSetting> createState() => _LocationSettingState();
 }
 
-class _LocationSettingState extends ConsumerState<_LocationSetting> {
+class _LocationSettingState extends ConsumerState<_LocationSetting> with WidgetsBindingObserver {
   bool? _granted;
+  LocationAccess? _problem;
 
   @override
   void initState() {
     super.initState();
-    ref.read(locationSourceProvider).granted().then((g) {
-      if (mounted) setState(() => _granted = g);
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Back from the phone's settings: check again.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final g = await ref.read(locationSourceProvider).granted();
+    if (mounted) {
+      setState(() {
+        _granted = g;
+        if (g) _problem = null;
+      });
+    }
+  }
+
+  Future<void> _allow() async {
+    final source = ref.read(locationSourceProvider);
+    final problem = _problem;
+    if (problem == LocationAccess.serviceOff || problem == LocationAccess.deniedForever) {
+      await source.openSettings(problem!);
+      return;
+    }
+    final access = await source.request();
+    if (!mounted) return;
+    setState(() {
+      _granted = access == LocationAccess.granted;
+      _problem = access == LocationAccess.granted ? null : access;
     });
   }
 
   @override
-  Widget build(BuildContext context) => Card(
-    key: const Key('family-location'),
-    child: ListTile(
-      leading: Icon(_granted == true ? Icons.location_on : Icons.location_off),
-      title: const Text('Share my location in emergencies'),
-      subtitle: Text(
-        _granted == true
-            ? 'On. Your location is sent only with an emergency alert to your family.'
-            : 'Off. Turn on so family can find you if an emergency is detected.',
+  Widget build(BuildContext context) {
+    final problem = _problem;
+    final (advice, action) = problem == null ? ('', null) : locationAdvice(problem);
+    return Card(
+      key: const Key('family-location'),
+      child: ListTile(
+        leading: Icon(_granted == true ? Icons.location_on : Icons.location_off),
+        title: const Text('Share my location in emergencies'),
+        subtitle: Text(
+          _granted == true
+              ? 'On. Your location is sent only with an emergency alert to your family.'
+              : problem != null
+              ? advice
+              : 'Off. Turn on so family can find you if an emergency is detected.',
+          key: const Key('family-location-status'),
+        ),
+        trailing: _granted == true
+            ? null
+            : TextButton(
+                key: const Key('family-location-allow'),
+                onPressed: _allow,
+                child: Text(action ?? 'Allow'),
+              ),
       ),
-      trailing: _granted == true
-          ? null
-          : TextButton(
-              key: const Key('family-location-allow'),
-              onPressed: () async {
-                final loc = await ref.read(locationSourceProvider).current(ask: true);
-                if (mounted) setState(() => _granted = loc != null);
-              },
-              child: const Text('Allow'),
-            ),
-    ),
-  );
+    );
+  }
 }

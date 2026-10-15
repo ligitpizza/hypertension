@@ -7,6 +7,7 @@ import '../../../shared/models/health_models.dart';
 import '../../appointments/domain/appointment_text.dart' show dateLabel, timeLabel;
 import '../../dashboard/state/dashboard_providers.dart';
 import '../../symptom_checker/state/symptom_providers.dart' show dialerProvider;
+import '../data/location_source.dart';
 import '../state/family_providers.dart';
 
 /// Shares text (share sheet); tests record it.
@@ -39,13 +40,26 @@ class _SosPageState extends ConsumerState<SosPage> {
   bool _notifyFamily = true;
   bool _busy = false;
   Map<String, double>? _here;
+  LocationAccess? _problem;
+  bool _locating = true;
 
   @override
   void initState() {
     super.initState();
-    // Asking here is expected: the patient opened SOS on purpose.
-    ref.read(locationSourceProvider).current(ask: true).then((loc) {
-      if (mounted) setState(() => _here = loc);
+    _locate();
+  }
+
+  /// Asking here is expected: the patient opened SOS on purpose.
+  Future<void> _locate() async {
+    setState(() => _locating = true);
+    final source = ref.read(locationSourceProvider);
+    final access = await source.request();
+    final here = access == LocationAccess.granted ? await source.current() : null;
+    if (!mounted) return;
+    setState(() {
+      _locating = false;
+      _problem = access == LocationAccess.granted ? null : access;
+      _here = here;
     });
   }
 
@@ -119,7 +133,17 @@ class _SosPageState extends ConsumerState<SosPage> {
             key: const Key('sos-map'),
             height: 200,
             child: _here == null
-                ? const Center(child: Text('Finding your location…'))
+                ? _NoLocation(
+                    locating: _locating,
+                    problem: _problem,
+                    onRetry: () async {
+                      final p = _problem;
+                      if (p == LocationAccess.serviceOff || p == LocationAccess.deniedForever) {
+                        await ref.read(locationSourceProvider).openSettings(p!);
+                      }
+                      await _locate();
+                    },
+                  )
                 : map(_here!['lat']!, _here!['lng']!, 'You are here'),
           ),
           Padding(
@@ -179,6 +203,40 @@ class _SosPageState extends ConsumerState<SosPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NoLocation extends StatelessWidget {
+  const _NoLocation({required this.locating, required this.problem, required this.onRetry});
+
+  final bool locating;
+  final LocationAccess? problem;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (locating) return const Center(child: Text('Finding your location…'));
+    final (advice, action) = problem == null
+        ? ('Your location could not be found. Your family will be alerted without it.', null)
+        : locationAdvice(problem!);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.location_off),
+            const SizedBox(height: 4),
+            Text(advice, key: const Key('sos-location-advice'), textAlign: TextAlign.center),
+            TextButton(
+              key: const Key('sos-location-retry'),
+              onPressed: onRetry,
+              child: Text(action ?? 'Try again'),
+            ),
+          ],
+        ),
       ),
     );
   }

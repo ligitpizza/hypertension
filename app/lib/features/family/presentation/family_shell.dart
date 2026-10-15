@@ -8,7 +8,7 @@ class FamilyShell extends StatelessWidget {
   final String location;
   final Widget child;
 
-  static const _tabs = ['/home', '/link', '/settings'];
+  static const _tabs = ['/family/home', '/family/link', '/family/settings'];
 
   @override
   Widget build(BuildContext context) {
