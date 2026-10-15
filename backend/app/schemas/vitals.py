@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.enums import AlertLevel, BpCategory
+from app.schemas.family import Location
 
 
 class LogReadingRequest(BaseModel):
@@ -16,6 +17,8 @@ class LogReadingRequest(BaseModel):
     diastolic: int = Field(ge=0, le=1000)
     heartRate: int | None = Field(default=None, ge=0, le=1000)  # PPG estimate (UC3.3)
     note: str | None = Field(default=None, max_length=500)  # UC3.2
+    # D-62: the phone's GPS position; kept only if the reading raises a family emergency.
+    location: Location | None = None
 
     @field_validator("note")
     @classmethod

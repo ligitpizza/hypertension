@@ -218,10 +218,13 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | _id | String | Primary key | Auto-generated |
 | patientId | Reference (users) | Patient whose risk triggered the alert | Required |
 | familyMemberId | Reference (users) | Recipient family member | Required |
-| riskScoreId | Reference (risk_scores) | Risk score document that triggered the alert | Required |
-| gpsLocation | GeoPoint | Patient's location at the time of the alert | Required |
+| riskScoreId | Reference (risk_scores) | Risk score document that triggered the alert | Required for reading/risk triggers; optional for SOS/triage (D-62) |
+| gpsLocation | GeoPoint | Patient's location at the time of the alert | Required; null when the phone gave no location (D-62) |
 | sentAt | Timestamp | When the alert was sent | Required |
 | acknowledgedAt | Timestamp | When the family member opened the alert | Optional |
+| trigger | String | emergency_reading / critical_risk / sos / triage (D-62) | Required |
+| patientPhone | String | Copied from the health profile for "Call patient" (D-62) | Optional |
+| locationUpdatedAt | Timestamp | Last GPS update while the alert is open (D-62) | Optional |
 
 > Records each Critical-level emergency alert (FR-14.2) so it can be retrieved by alertId when the family member opens it, and so acknowledgement can be tracked.
 

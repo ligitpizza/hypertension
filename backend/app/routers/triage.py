@@ -26,6 +26,7 @@ from app.core.enums import (
 )
 from app.core.errors import ApiError
 from app.integrations.push import PushMessage
+from app.schemas.family import Location
 from app.services.agent_context import AgentDataRepository, get_agent_data_repository
 from app.services.bp import HEART_RATE_MAX, HEART_RATE_MIN
 from app.services.bp import classify as classify_bp
@@ -61,6 +62,8 @@ class TriageRequest(BaseModel):
     # reading is the BP entered in the checker and saved just before (POST /vitals).
     heartRate: int = Field(ge=HEART_RATE_MIN, le=HEART_RATE_MAX)  # noqa: N815
     vitalReadingId: str = Field(min_length=1, max_length=128)  # noqa: N815
+    # D-62: the phone's GPS position, used only for a family emergency alert.
+    location: Location | None = None
 
 
 _ALERT_SEVERITY = {
@@ -155,6 +158,8 @@ def submit(
             {"type": "triage", "outcome": decision.outcome.value},
             urgent=emergency,
         )
+        if emergency:
+            plan.family_emergency = "triage"
         plan.agent_note = CALM_NOTE if emergency else AVOID_EXERTION_NOTE
     elif inputs.systolic is not None and inputs.diastolic is not None:
         # D-37 Mild band (130-139 / 80-89): doctor gets the daily BP report by email.
@@ -181,6 +186,7 @@ def submit(
             profile.get("assignedDoctorId"),
             now,
             reading_id=inputs.reading_id,
+            location=body.location.as_dict() if body.location else None,
         )
     if plan.agent_note:
         try:  # the outcome is saved; a chat note failure must not hide the result

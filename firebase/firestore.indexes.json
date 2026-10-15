@@ -42,6 +42,10 @@
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "dateTime", "order": "DESCENDING" } ] },
     { "collectionGroup": "health_records", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "uploadedAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "emergency_alerts", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "familyMemberId", "order": "ASCENDING" }, { "fieldPath": "sentAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "emergency_alerts", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "sentAt", "order": "ASCENDING" } ] },
     { "collectionGroup": "health_records", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "sharedWithDoctor", "order": "ASCENDING" },
       { "fieldPath": "uploadedAt", "order": "DESCENDING" } ] },

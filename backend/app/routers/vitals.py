@@ -158,6 +158,7 @@ def log_reading(
             datetime.now(UTC),
             risk_score_id=score_id,
             reading_id=reading_id,
+            location=body.location.as_dict() if body.location else None,
         )
     except Exception:
         # The reading and risk score are already saved; an alerting failure must not

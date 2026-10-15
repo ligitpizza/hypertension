@@ -43,6 +43,7 @@ from app.integrations.email import EmailClient, EmailMessage, get_email_client
 from app.integrations.push import PushMessage
 from app.ml.risk_inputs import CONDITION_COLUMNS
 from app.ml.risk_model import RiskPrediction
+from app.services.family import EmergencyAlerts, get_emergency_alerts
 from app.services.notifications import Notifier, get_notifier
 
 log = logging.getLogger("careflow.escalation")
@@ -71,6 +72,9 @@ class EscalationPlan:
     patient_push: PushMessage | None = None
     doctor_alerts: list[DoctorAlert] = field(default_factory=list)
     family_push: PushMessage | None = None
+    # D-62: an emergency for the family (emergency_reading | critical_risk | triage):
+    # emergency_alerts with GPS instead of a plain push.
+    family_emergency: str | None = None
     book_appointment_prompt: bool = False
     # Effective alert level after the follow-up rule (Mild -> Moderate), for the response.
     alert_level: AlertLevel | None = None
@@ -223,6 +227,7 @@ def plan_escalation(
             data,
             urgent=True,
         )
+        plan.family_emergency = "emergency_reading"
         plan.book_appointment_prompt = True
         plan.agent_note = CALM_NOTE
 
@@ -249,6 +254,8 @@ def plan_escalation(
                 {"type": "risk", "level": overall.value},
                 urgent=overall is RiskLevel.CRITICAL,
             )
+        if overall is RiskLevel.CRITICAL:
+            plan.family_emergency = plan.family_emergency or "critical_risk"
         if overall is RiskLevel.CRITICAL and plan.family_push is None:
             plan.family_push = PushMessage(
                 f"{patient_name}: critical health risk",
@@ -377,11 +384,13 @@ class Escalator:
         notifier: Notifier,
         audit: AuditLogger,
         email: EmailClient | None = None,
+        emergency: EmergencyAlerts | None = None,
     ) -> None:
         self._alerts = alerts
         self._notifier = notifier
         self._audit = audit
         self._email = email
+        self._emergency = emergency
 
     def apply(
         self,
@@ -391,8 +400,10 @@ class Escalator:
         now: datetime,
         risk_score_id: str | None = None,
         reading_id: str | None = None,
+        location: dict[str, float] | None = None,
     ) -> list[str]:
-        """Execute the plan; returns ids of created clinical alerts."""
+        """Execute the plan; returns ids of created clinical alerts. [location] is the
+        phone's GPS position, used only for family emergency alerts (D-62)."""
         created: list[str] = []
         if plan.patient_push:
             self._notifier.notify(patient_id, plan.patient_push)
@@ -437,7 +448,19 @@ class Escalator:
                 target_type=Collection.CLINICAL_ALERTS.value,
                 target_id=alert_id,
             )
-        if plan.family_push:
+        if plan.family_emergency and self._emergency is not None:
+            try:
+                self._emergency.raise_alerts(
+                    patient_id,
+                    plan.family_emergency,
+                    location,
+                    now,
+                    risk_score_id=risk_score_id,
+                    push=plan.family_push,
+                )
+            except Exception:  # family alerting must never break the clinical flow
+                log.exception("Family emergency alert failed for %s", patient_id)
+        elif plan.family_push:
             for member in self._alerts.family_member_ids(patient_id):
                 self._notifier.notify(member, plan.family_push)
         return created
@@ -472,8 +495,9 @@ def get_escalator(
     notifier: Notifier = Depends(get_notifier),
     audit: AuditLogger = Depends(get_audit_logger),
     email: EmailClient = Depends(get_email_client),
+    emergency: EmergencyAlerts = Depends(get_emergency_alerts),
 ) -> Escalator:
-    return Escalator(alerts, notifier, audit, email)
+    return Escalator(alerts, notifier, audit, email, emergency)
 
 
 def diagnosed_complications(conditions: list[str]) -> set[Complication]:

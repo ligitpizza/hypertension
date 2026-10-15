@@ -149,6 +149,7 @@ def check(probe: Probe, reader: AuditReader, settings: Settings, now: datetime) 
         "operational" if settings.gemini_api_key else "simulated",
         note="Gemini" if settings.gemini_api_key else "Offline replies (no Gemini key).",
     )
+    add("sms", "SMS (family emergencies)", "simulated", note="Messages are logged (D-62).")
     for key, name in (("stripe", "Stripe payments"), ("grab", "Grab delivery API")):
         add(key, name, "simulated", note="Test-mode adapter; ordering arrives with Module 13.")
 

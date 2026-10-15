@@ -42,7 +42,12 @@ service cloud.firestore {
         || (hasRole('doctor') && resource.data.role == 'doctor')
         // D-42: a patient reads their own assigned doctor (name + public key for messaging).
         || (hasRole('patient')
-            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedDoctorId == uid);
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedDoctorId == uid)
+        // FR-14.2: a family member reads the patient they follow; a patient reads the
+        // family members linked to them (D-62).
+        || isLinkedFamilyOf(uid)
+        || (hasRole('patient') && resource.data.role == 'family_member'
+            && resource.data.patientId == request.auth.uid);
 
       allow create, delete: if false;
 
@@ -247,6 +252,22 @@ service cloud.firestore {
     // ---- users/{uid}/fcmTokens (D-33): registered through FastAPI, server-only ----
     match /users/{uid}/fcmTokens/{token} {
       allow read, write: if false;
+    }
+
+    // ---- FR-14.2 family monitoring (D-06, D-62) ----
+    // Written only through FastAPI. Each side reads its own requests and alerts.
+    match /family_link_requests/{requestId} {
+      allow read: if request.auth != null
+        && (resource.data.familyMemberId == request.auth.uid
+            || resource.data.patientId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /emergency_alerts/{alertId} {
+      allow read: if request.auth != null
+        && (resource.data.familyMemberId == request.auth.uid
+            || resource.data.patientId == request.auth.uid);
+      allow write: if false;
     }
 
     // ---- audit_logs: server-only writes (FR-1.5); admin viewer in Module 11 ----

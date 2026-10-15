@@ -34,6 +34,7 @@ from app.core.rate_limit import RateLimiter
 from app.integrations.email import ConsoleEmailClient, EmailMessage, get_email_client
 from app.integrations.gemini import FakeLlmClient, Turn, get_llm_client
 from app.integrations.push import LogPushClient
+from app.integrations.sms import LogSmsClient, get_sms_client
 from app.main import create_app
 from app.ml.risk_model import get_risk_model
 from app.routers.agent import get_agent_limiter
@@ -46,6 +47,7 @@ from app.services.assignments import get_assignment_repository
 from app.services.audit_view import get_audit_reader
 from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
+from app.services.family import get_family_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
 from app.services.medications import MedicationDoc, get_medication_repository
 from app.services.notifications import Notifier, get_notifier, get_token_repository
@@ -392,6 +394,84 @@ class InMemorySettingsRepository:
         self._users.health_profiles.pop(uid, None)
         self._users.users.pop(uid, None)
         return len(gone) + 2
+
+
+class InMemoryFamilyRepository:
+    """FR-14.2 (D-06, D-62): users come from the user repo; requests and alerts here."""
+
+    def __init__(self, users: "InMemoryUserRepository") -> None:
+        self._users = users
+        self.requests: dict[str, dict[str, Any]] = {}
+        self.alerts: dict[str, dict[str, Any]] = {}
+        self.profiles: dict[str, dict[str, Any]] = {}
+
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def update_user(self, uid: str, data: dict[str, Any]) -> None:
+        self._users.users[uid].update(data)
+
+    def patient_by_code(self, code: str) -> str | None:
+        return next(
+            (
+                uid
+                for uid, u in self._users.users.items()
+                if u.get("linkCode") == code
+                and u.get("role") == "patient"
+                and u.get("isActive") is not False
+            ),
+            None,
+        )
+
+    def family_of(self, patient_id: str) -> list[str]:
+        return [
+            uid
+            for uid, u in self._users.users.items()
+            if u.get("role") == "family_member"
+            and u.get("patientId") == patient_id
+            and u.get("isActive") is not False
+        ]
+
+    def health_profile(self, patient_id: str) -> dict[str, Any] | None:
+        return self.profiles.get(patient_id)
+
+    def create_request(self, data: dict[str, Any]) -> str:
+        rid = f"r{len(self.requests) + 1}"
+        self.requests[rid] = dict(data)
+        return rid
+
+    def get_request(self, request_id: str) -> dict[str, Any] | None:
+        r = self.requests.get(request_id)
+        return dict(r) if r else None
+
+    def update_request(self, request_id: str, data: dict[str, Any]) -> None:
+        self.requests[request_id].update(data)
+
+    def pending_for_member(self, member_id: str) -> list[tuple[str, dict[str, Any]]]:
+        return [
+            (k, r)
+            for k, r in self.requests.items()
+            if r["familyMemberId"] == member_id and r["status"] == "pending"
+        ]
+
+    def create_alert(self, data: dict[str, Any]) -> str:
+        aid = f"e{len(self.alerts) + 1}"
+        self.alerts[aid] = dict(data)
+        return aid
+
+    def get_alert(self, alert_id: str) -> dict[str, Any] | None:
+        a = self.alerts.get(alert_id)
+        return dict(a) if a else None
+
+    def update_alert(self, alert_id: str, data: dict[str, Any]) -> None:
+        self.alerts[alert_id].update(data)
+
+    def alerts_since(self, patient_id: str, since: datetime) -> list[tuple[str, dict[str, Any]]]:
+        return [
+            (k, dict(a))
+            for k, a in self.alerts.items()
+            if a["patientId"] == patient_id and a["sentAt"] >= since
+        ]
 
 
 class InMemoryAuditReader:
@@ -980,6 +1060,16 @@ def audit_reader() -> InMemoryAuditReader:
 
 
 @pytest.fixture
+def family_repo(repo: InMemoryUserRepository) -> InMemoryFamilyRepository:
+    return InMemoryFamilyRepository(repo)
+
+
+@pytest.fixture
+def sms() -> LogSmsClient:
+    return LogSmsClient()
+
+
+@pytest.fixture
 def analytics(repo: InMemoryUserRepository) -> InMemoryAnalyticsSource:
     return InMemoryAnalyticsSource(repo)
 
@@ -1021,6 +1111,8 @@ def make_client(
     file_store: InMemoryFileStore,
     audit_reader: InMemoryAuditReader,
     analytics: InMemoryAnalyticsSource,
+    family_repo: InMemoryFamilyRepository,
+    sms: LogSmsClient,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -1053,6 +1145,8 @@ def make_client(
         app.dependency_overrides[get_file_store] = lambda: file_store
         app.dependency_overrides[get_audit_reader] = lambda: audit_reader
         app.dependency_overrides[get_analytics_source] = lambda: analytics
+        app.dependency_overrides[get_family_repository] = lambda: family_repo
+        app.dependency_overrides[get_sms_client] = lambda: sms
         return TestClient(app)
 
     return _make

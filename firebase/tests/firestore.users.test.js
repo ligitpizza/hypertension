@@ -69,8 +69,9 @@ describe('FR-1.3 users: read access per role', () => {
     await assertSucceeds(getDocs(q));
     await assertFails(getDocs(query(collection(doctor(), 'users'), where('role', '==', 'patient'))));
   });
-  test('family member cannot read the patient users doc', async () => {
-    await assertFails(getDoc(doc(family(), `users/${PATIENT}`)));
+  test('a linked family member reads only the patient they follow (FR-14.2, D-62)', async () => {
+    await assertSucceeds(getDoc(doc(family(), `users/${PATIENT}`)));
+    await assertFails(getDoc(doc(family(), `users/${OTHER_PATIENT}`)));
   });
   test('family member reads own profile', async () => {
     await assertSucceeds(getDoc(doc(family(), 'users/u-family_member')));

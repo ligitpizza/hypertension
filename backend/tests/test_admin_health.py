@@ -54,7 +54,7 @@ def test_fr11_3_all_services_listed_with_latency(make_client: MakeClient) -> Non
         gemini_api_key="g",
     )
     s = by_key(body)
-    assert set(s) == {"api", "firestore", "ml", "push", "email", "ai", "stripe", "grab"}
+    assert set(s) == {"api", "firestore", "ml", "push", "email", "ai", "sms", "stripe", "grab"}
     assert s["firestore"]["status"] == "operational" and s["firestore"]["latencyMs"] is not None
     assert s["ml"]["status"] == "operational"
     assert s["push"]["status"] == "operational" and s["email"]["status"] == "operational"
