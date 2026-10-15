@@ -3,24 +3,67 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/enums.dart';
 import '../../../shared/services/api/api_client.dart';
+import '../../admin/presentation/team_availability.dart';
 import '../data/appointments_repository.dart';
 import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
 
-/// Admin: doctor assignment requests (FR-7.2, UC7.3; D-54).
+/// Admin: Patient Assignments (Fig 4.3.14.2; FR-7.2, FR-11.2, UC7.3, UC11.2; D-54, D-59):
+/// requests on the left, each doctor's caseload against their limit on the right.
 class AdminAssignmentsPage extends ConsumerWidget {
   const AdminAssignmentsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final header = [
+      Text('Patient assignments', style: Theme.of(context).textTheme.headlineSmall),
+      const SizedBox(height: 4),
+      const Text(
+        'New patients asking for a doctor, and doctors asking to hand a patient over. '
+        'Check each doctor\'s caseload before assigning.',
+      ),
+      const SizedBox(height: 16),
+    ];
+    return LayoutBuilder(
+      builder: (context, box) {
+        const requests = _Requests();
+        const team = TeamAvailability();
+        if (box.maxWidth < 900) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [...header, requests, const SizedBox(height: 24), team],
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            ...header,
+            const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: requests),
+                SizedBox(width: 24),
+                Expanded(child: team),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _Requests extends ConsumerWidget {
+  const _Requests();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final requests = ref.watch(pendingAssignmentRequestsProvider);
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Doctor assignment requests', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 4),
-        const Text('New patients asking for a doctor, and doctors asking to hand a patient over.'),
-        const SizedBox(height: 16),
+        Text('Doctor assignment requests', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
         requests.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, _) => const Text('Could not load requests.'),
@@ -171,22 +214,52 @@ class _ChooseDoctorState extends ConsumerState<_ChooseDoctor> {
       for (final d in ref.watch(doctorsProvider).value ?? const <PersonName>[])
         if (d.uid != widget.exclude) d,
     ];
+    // D-59: show each doctor's caseload; warn before assigning to a full one.
+    final loads = ref.watch(doctorCaseloadsProvider).value ?? const {};
+    final chosen = loads[_doctor];
+    final full = chosen != null && chosen.capacity == Capacity.full;
     return AlertDialog(
       key: const Key('choose-doctor'),
       title: const Text('Assign a doctor'),
-      content: DropdownButtonFormField<String>(
-        key: const Key('choose-doctor-field'),
-        initialValue: doctors.any((d) => d.uid == _doctor) ? _doctor : null,
-        decoration: const InputDecoration(labelText: 'Doctor'),
-        items: [for (final d in doctors) DropdownMenuItem(value: d.uid, child: Text(d.name))],
-        onChanged: (v) => setState(() => _doctor = v),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String>(
+            key: const Key('choose-doctor-field'),
+            initialValue: doctors.any((d) => d.uid == _doctor) ? _doctor : null,
+            decoration: const InputDecoration(labelText: 'Doctor'),
+            items: [
+              for (final d in doctors)
+                DropdownMenuItem(
+                  value: d.uid,
+                  child: Text(
+                    loads[d.uid] == null
+                        ? d.name
+                        : '${d.name} · ${loads[d.uid]!.caseload ?? 0}/'
+                              '${loads[d.uid]!.maxPatients ?? 30}',
+                  ),
+                ),
+            ],
+            onChanged: (v) => setState(() => _doctor = v),
+          ),
+          if (full)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '${chosen.name} is at capacity (${chosen.caseload}/${chosen.maxPatients}).',
+                key: const Key('doctor-full'),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+        ],
       ),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
         FilledButton(
           key: const Key('choose-doctor-confirm'),
           onPressed: _doctor == null ? null : () => Navigator.of(context).pop(_doctor),
-          child: const Text('Assign'),
+          child: Text(full ? 'Assign anyway' : 'Assign'),
         ),
       ],
     );

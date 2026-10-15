@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
+import 'package:hypertension/features/admin/state/admin_providers.dart';
 import 'package:hypertension/features/appointments/data/appointments_repository.dart';
 import 'package:hypertension/features/appointments/presentation/admin_appointments_page.dart';
 import 'package:hypertension/features/appointments/presentation/admin_assignments_page.dart';
@@ -19,6 +20,7 @@ import 'package:hypertension/features/provider_portal/state/portal_providers.dar
 import 'package:hypertension/shared/models/health_models.dart';
 
 import '../helpers/fakes.dart';
+import 'admin_users_test.dart' show FakeAdminRepository, user;
 
 // Module 7 screens (Figs 4.3.6.1, 4.3.6.2, 4.3.12.3; FR-7.1-7.4; UC7.1-UC7.5; D-53, D-54).
 
@@ -258,6 +260,7 @@ Widget app(FakeAppointmentsRepository repo, {String initial = '/appointments', S
   return ProviderScope(
     overrides: [
       appointmentsRepositoryProvider.overrideWithValue(repo),
+      adminRepositoryProvider.overrideWithValue(admin),
       nowProvider.overrideWithValue(() => now),
       authUidProvider.overrideWith((ref) => Stream.value(uid)),
       assignedPatientsProvider.overrideWith(
@@ -267,6 +270,12 @@ Widget app(FakeAppointmentsRepository repo, {String initial = '/appointments', S
     child: MaterialApp.router(routerConfig: router),
   );
 }
+
+final admin = FakeAdminRepository()
+  ..all = [
+    user('d1', 'Dr John', UserRole.doctor, caseload: 12),
+    user('d2', 'Dr Aminah', UserRole.doctor, caseload: 30),
+  ];
 
 void main() {
   late FakeAppointmentsRepository repo;
@@ -522,6 +531,20 @@ void main() {
       await t.tap(find.byKey(const Key('decline-confirm')));
       await t.pumpAndSettle();
       expect(repo.calls, ['decline:r1:Please visit the clinic.']);
+    });
+
+    tallTest('D-59 caseloads beside the requests; a full doctor is flagged', (t) async {
+      repo.pending = [req];
+      await t.pumpWidget(app(repo, initial: '/admin', uid: 'admin'));
+      await t.pumpAndSettle();
+      expect(find.text('12 / 30 patients'), findsOneWidget);
+      expect(find.text('30 / 30 patients'), findsOneWidget);
+      expect(find.text('Full'), findsWidgets);
+      await t.tap(find.byKey(const Key('approve-r1')));
+      await t.pumpAndSettle();
+      // Dr Aminah (d2) is suggested and full.
+      expect(find.byKey(const Key('doctor-full')), findsOneWidget);
+      expect(find.text('Assign anyway'), findsOneWidget);
     });
 
     tallTest('no pending requests', (t) async {
