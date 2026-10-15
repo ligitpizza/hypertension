@@ -74,11 +74,14 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
       for (final p in ref.watch(assignedPatientsProvider).value ?? const <PortalPatient>[])
         p.uid: p.name,
     };
-    final list = [
-      for (final a in appts.value ?? const <Appointment>[])
-        if (a.status != AppointmentStatus.cancelled) a,
+    // Cancelled ones stay visible (struck through) so the doctor sees what changed.
+    final list = appts.value ?? const <Appointment>[];
+    final active = [
+      for (final a in list)
+        if (!a.isCancelled) a,
     ];
-    final emergencies = list.where((a) => a.type == AppointmentType.emergency).length;
+    final cancelledCount = list.length - active.length;
+    final emergencies = active.where((a) => a.type == AppointmentType.emergency).length;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -96,8 +99,9 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 Text(
-                  '${list.length} scheduled appointments · $emergencies '
-                  '${emergencies == 1 ? 'emergency' : 'emergencies'}',
+                  '${active.length} scheduled appointments · $emergencies '
+                  '${emergencies == 1 ? 'emergency' : 'emergencies'}'
+                  '${cancelledCount > 0 ? ' · $cancelledCount cancelled' : ''}',
                   key: const Key('calendar-counts'),
                 ),
               ],
@@ -150,6 +154,11 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
         ),
         const SizedBox(height: 12),
         if (appts.hasError) const Text('Could not load appointments.'),
+        if (cancelledCount > 0)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('Cancelled appointments are shown struck through.'),
+          ),
         switch (_view) {
           CalendarView.month => _MonthGrid(
             month: _anchor,
@@ -264,8 +273,10 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = appointmentColor(appointment.type);
+    final cancelled = appointment.isCancelled;
+    final color = cancelled ? Colors.grey : appointmentColor(appointment.type);
     return Container(
+      key: Key('chip-${appointment.id}'),
       margin: const EdgeInsets.only(top: 2),
       padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
       decoration: BoxDecoration(
@@ -276,7 +287,11 @@ class _Chip extends StatelessWidget {
         text,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 10),
+        style: TextStyle(
+          fontSize: 10,
+          decoration: cancelled ? TextDecoration.lineThrough : null,
+          color: cancelled ? Colors.grey : null,
+        ),
       ),
     );
   }
@@ -317,12 +332,34 @@ class _AgendaList extends StatelessWidget {
             Card(
               key: Key('agenda-${a.id}'),
               child: ListTile(
-                leading: Container(width: 6, height: 40, color: appointmentColor(a.type)),
-                title: Text('${timeLabel(a.dateTime)} · ${names[a.patientId] ?? 'Patient'}'),
-                subtitle: Text(
-                  '${a.type.label}${a.status == AppointmentStatus.completed ? ' · completed' : ''}',
+                leading: Container(
+                  width: 6,
+                  height: 40,
+                  color: a.isCancelled ? Colors.grey : appointmentColor(a.type),
                 ),
-                trailing: const Icon(Icons.chevron_right),
+                title: Text(
+                  '${timeLabel(a.dateTime)} · ${names[a.patientId] ?? 'Patient'}',
+                  style: a.isCancelled
+                      ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.grey)
+                      : null,
+                ),
+                subtitle: Text(
+                  '${a.type.label}${switch (a.status) {
+                    AppointmentStatus.completed => ' · completed',
+                    AppointmentStatus.rescheduled => ' · rescheduled',
+                    _ => '',
+                  }}',
+                ),
+                trailing: a.isCancelled
+                    ? Chip(
+                        key: Key('cancelled-${a.id}'),
+                        label: Text(
+                          a.updatedAt == null
+                              ? 'Cancelled'
+                              : 'Cancelled ${dateLabel(a.updatedAt!)}, ${timeLabel(a.updatedAt!)}',
+                        ),
+                      )
+                    : const Icon(Icons.chevron_right),
                 onTap: () => showAppointmentDetails(context, a, names[a.patientId]),
               ),
             ),

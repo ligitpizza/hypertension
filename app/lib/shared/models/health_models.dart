@@ -166,6 +166,7 @@ class Appointment {
     required this.status,
     this.doctorId,
     this.type = AppointmentType.checkup,
+    this.updatedAt,
   });
 
   final String id;
@@ -177,6 +178,11 @@ class Appointment {
   /// D-53.
   final AppointmentType type;
 
+  /// Last change by the API (e.g. when it was cancelled); null if never changed.
+  final DateTime? updatedAt;
+
+  bool get isCancelled => status == AppointmentStatus.cancelled;
+
   bool get isActive =>
       status == AppointmentStatus.booked || status == AppointmentStatus.rescheduled;
 
@@ -187,6 +193,7 @@ class Appointment {
     dateTime: _time(d['dateTime']),
     status: AppointmentStatus.fromValue(d['status'] as String),
     type: AppointmentType.fromValue(d['type'] as String?),
+    updatedAt: (d['updatedAt'] as Timestamp?)?.toDate(),
   );
 }
 

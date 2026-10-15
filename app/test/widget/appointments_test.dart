@@ -364,6 +364,30 @@ void main() {
     });
   });
 
+  tallTest('a cancelled appointment stays on the calendar, struck through and labelled', (t) async {
+    repo.upcoming = [
+      appt('a1', myt(16, 10)),
+      Appointment(
+        id: 'a2',
+        patientId: 'p1',
+        doctorId: 'd1',
+        dateTime: myt(16, 15),
+        status: AppointmentStatus.cancelled,
+        updatedAt: myt(15, 9),
+      ),
+    ];
+    await t.pumpWidget(app(repo, initial: '/calendar', uid: 'd1'));
+    await t.pumpAndSettle();
+    expect(find.text('1 scheduled appointments · 0 emergencies · 1 cancelled'), findsOneWidget);
+    final chip = t.widget<Text>(
+      find.descendant(of: find.byKey(const Key('chip-a2')), matching: find.byType(Text)),
+    );
+    expect(chip.style?.decoration, TextDecoration.lineThrough);
+    await t.tap(find.byKey(const Key('cal-day-16')));
+    await t.pumpAndSettle();
+    expect(find.text('Cancelled Thu 15 Oct, 9:00 AM'), findsOneWidget);
+  });
+
   group('D-54 admin and doctor', () {
     final req = AssignmentRequest(
       id: 'r1',

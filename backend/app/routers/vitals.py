@@ -166,13 +166,21 @@ def log_reading(
     if plan.alert_level is AlertLevel.EMERGENCY:
         # docs/06 Emergency band / D-53: book the next free slot with the patient's doctor.
         try:
-            auto_book_emergency(
+            booked = auto_book_emergency(
                 appointments,
                 notifier,
                 user.uid,
                 profile.get("assignedDoctorId"),
                 datetime.now(UTC),
             )
+            if booked:
+                audit.log(
+                    user_id="system:escalation",
+                    action="AUTO_BOOK_EMERGENCY",
+                    details="Emergency appointment booked after an Emergency-band reading.",
+                    target_type=Collection.APPOINTMENTS.value,
+                    target_id=booked,
+                )
         except Exception:
             log.exception("Emergency auto-booking failed for reading %s", reading_id)
     if plan.agent_note:

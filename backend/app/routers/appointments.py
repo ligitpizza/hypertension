@@ -140,7 +140,7 @@ def book(
     audit.log(
         user_id=user.uid,
         action="BOOK_APPOINTMENT",
-        details=f"{body.type} appointment booked.",
+        details=f"{body.type} appointment booked for {when_text(moment)} (MYT).",
         target_type=Collection.APPOINTMENTS.value,
         target_id=appt_id,
     )
@@ -217,8 +217,9 @@ def change(
     audit.log(
         user_id=user.uid,
         action=action,
-        details=f"Appointment {result}"
-        f"{' within 24 hours' if appt.data['dateTime'] - now < LATE_CHANGE else ''}.",
+        details=f"Appointment {result}: {when_text(appt.data['dateTime'])}"
+        f"{f' -> {when_text(moment)}' if result == AppointmentStatus.RESCHEDULED.value else ''}"
+        f" (MYT){' within 24 hours' if appt.data['dateTime'] - now < LATE_CHANGE else ''}.",
         target_type=Collection.APPOINTMENTS.value,
         target_id=appointment_id,
     )

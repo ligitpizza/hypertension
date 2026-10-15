@@ -871,3 +871,9 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Deviations vs Chapter 4: D-53, D-54 (new collection). The mockup's location line shows the
   clinic name only; "Complete intake form" is not built; docs/06's "reassign if the doctor
   is unavailable" for emergencies is replaced by booking the personal doctor's next slot.
+- **After Ping's first booking test:** cancelled appointments now stay on the doctor's
+  calendar, greyed and struck through, labelled "Cancelled <date, time>" (from `updatedAt`,
+  which the API already sets on every change; noted under D-53), with a cancelled count in
+  the header. Audit entries for booking, rescheduling and cancelling now name the times
+  (e.g. "Appointment cancelled: Thu 16 Oct, 10:00 AM (MYT)"), and the automatic emergency
+  booking is audited as AUTO_BOOK_EMERGENCY. The admin audit-log viewer arrives with M11.
