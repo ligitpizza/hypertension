@@ -1,3 +1,5 @@
+import '../../features/family/presentation/family_requests_page.dart';
+import '../../features/family/presentation/sos_page.dart';
 import '../../features/records/presentation/records_page.dart';
 import '../../features/medications/data/medications_repository.dart';
 import '../../features/medications/presentation/medication_form_page.dart';
@@ -41,6 +43,9 @@ final List<RouteBase> patientFeatureRoutes = [
     ],
   ),
   GoRoute(path: '/vitals/log', builder: (_, _) => const LogVitalsPage()),
+  // FR-14.2 (D-62): family requests and the SOS screen (Fig 4.3.9.1).
+  GoRoute(path: '/family-requests', builder: (_, _) => const FamilyRequestsPage()),
+  GoRoute(path: '/sos', builder: (_, _) => const SosPage()),
   GoRoute(
     path: '/vitals/saved',
     redirect: (_, state) => state.extra is LoggedReading ? null : '/vitals',

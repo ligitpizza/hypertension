@@ -72,6 +72,7 @@ def test_uc15_1_link_request_then_patient_approves(
     assert res.status_code == 201
     rid = res.json()["id"]
     assert family_repo.requests[rid]["status"] == "pending"
+    assert family_repo.requests[rid]["familyMemberName"] == "Aisyah"
     assert "Family link request" in titles(push, P)
     assert repo.users[F]["patientId"] is None  # E1: pending until approved
     res = client.post(f"/api/v1/family/link-requests/{rid}/approve", headers=PATIENT)

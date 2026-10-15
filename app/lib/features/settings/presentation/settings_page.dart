@@ -129,11 +129,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ListTile(
                     key: const Key('settings-link-code'),
                     leading: const Icon(Icons.family_restroom),
-                    title: const Text('Family link code'),
+                    title: const Text('Family'),
                     subtitle: Text(
-                      'Share ${user!.linkCode} with a family member to let them follow '
-                      'your readings.',
+                      'Link code ${user!.linkCode} · approve requests, manage who follows you',
                     ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/family-requests'),
                   ),
                 const _NavTile(
                   key: Key('settings-privacy'),

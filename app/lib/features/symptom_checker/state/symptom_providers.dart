@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../family/state/family_providers.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/providers/api_providers.dart';
@@ -7,7 +9,11 @@ import '../../auth/state/auth_providers.dart';
 import '../data/symptom_repository.dart';
 
 final symptomRepositoryProvider = Provider<SymptomRepository>(
-  (ref) => ApiSymptomRepository(FirebaseFirestore.instance, ref.watch(apiClientProvider)),
+  (ref) => ApiSymptomRepository(
+    FirebaseFirestore.instance,
+    ref.watch(apiClientProvider),
+    ref.watch(locationSourceProvider),
+  ),
 );
 
 final symptomCatalogProvider = StreamProvider<List<SymptomOption>>(

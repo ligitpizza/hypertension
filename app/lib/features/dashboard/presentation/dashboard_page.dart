@@ -23,7 +23,19 @@ class DashboardPage extends ConsumerWidget {
     final now = ref.watch(nowProvider)();
     final firstName = (user?.name ?? '').split(' ').first;
     return Scaffold(
-      appBar: AppBar(title: const Text('Home')),
+      appBar: AppBar(
+        title: const Text('Home'),
+        actions: [
+          // Fig 4.3.9.1: one tap to the Emergency SOS screen (FR-14.2).
+          IconButton(
+            key: const Key('dashboard-sos'),
+            tooltip: 'Emergency SOS',
+            color: Colors.red.shade700,
+            icon: const Icon(Icons.sos),
+            onPressed: () => context.push('/sos'),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref

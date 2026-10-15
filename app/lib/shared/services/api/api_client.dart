@@ -170,11 +170,14 @@ class ApiClient {
     required int diastolic,
     int? heartRate,
     String? note,
+    Map<String, double>? location,
   }) => _post('/vitals', {
     'systolic': systolic,
     'diastolic': diastolic,
     'heartRate': ?heartRate,
     if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+    // D-62: GPS, kept by the backend only if the reading raises a family emergency.
+    'location': ?location,
   });
 
   // ---- Module 8 doctor actions (FR-8.3) ----
@@ -223,12 +226,39 @@ class ApiClient {
     required String severity,
     required int heartRate,
     required String vitalReadingId,
+    Map<String, double>? location,
   }) => _post('/triage', {
     'symptoms': symptoms,
     'severity': severity,
     'heartRate': heartRate,
     'vitalReadingId': vitalReadingId,
+    'location': ?location,
   });
+
+  // ---- FR-14.2 family monitoring (D-06, D-62) ----
+
+  Future<Map<String, dynamic>> requestFamilyLink(String code) =>
+      _post('/family/link-requests', {'code': code});
+
+  Future<void> withdrawFamilyLink(String id) => _send('DELETE', '/family/link-requests/$id', null);
+
+  Future<Map<String, dynamic>> decideFamilyLink(String id, {required bool approve}) =>
+      _post('/family/link-requests/$id/${approve ? 'approve' : 'reject'}', const {});
+
+  Future<void> unlinkFamily() => _send('DELETE', '/family/link', null);
+
+  Future<void> removeFamilyMember(String uid) => _send('DELETE', '/family/members/$uid', null);
+
+  Future<Map<String, dynamic>> sos({Map<String, double>? location, bool notifyFamily = true}) =>
+      _post('/emergency/sos', {'location': ?location, 'notifyFamily': notifyFamily});
+
+  Future<Map<String, dynamic>> openEmergencies() => _getQuery('/emergency/open', const {});
+
+  Future<Map<String, dynamic>> updateEmergencyLocation(Map<String, double> location) =>
+      _send('PUT', '/emergency/location', {'location': location});
+
+  Future<Map<String, dynamic>> acknowledgeEmergency(String alertId) =>
+      _post('/emergency/alerts/$alertId/acknowledge', const {});
 
   // ---- FR-14.1 AI Health Agent (D-34) ----
 

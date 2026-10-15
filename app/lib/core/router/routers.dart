@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/family/presentation/alert_page.dart';
+import '../../features/family/presentation/family_dashboard_page.dart';
+import '../../features/family/presentation/family_settings_page.dart';
+import '../../features/family/presentation/family_shell.dart';
+import '../../features/family/presentation/link_page.dart';
 import '../../features/appointments/presentation/admin_appointments_page.dart';
 import '../../features/appointments/presentation/admin_assignments_page.dart';
 import '../../features/appointments/presentation/doctor_calendar_page.dart';
@@ -30,7 +35,6 @@ import '../../features/provider_portal/presentation/doctor_dashboard_page.dart';
 import '../../features/provider_portal/presentation/patient_detail_page.dart';
 import '../../features/provider_portal/presentation/prescription_page.dart';
 import '../../features/staff_shell/staff_shell.dart';
-import '../../shared/widgets/home_placeholder.dart';
 import '../constants/enums.dart';
 import 'patient_routes.dart';
 
@@ -105,7 +109,19 @@ final familyRouterProvider = Provider<GoRouter>(
     routes: [
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
-      GoRoute(path: '/home', builder: (_, _) => const HomePlaceholder()),
+      // FR-14.2 Family app (Figs 4.3.16.1-4.3.16.3; D-62).
+      ShellRoute(
+        builder: (_, state, child) => FamilyShell(location: state.matchedLocation, child: child),
+        routes: [
+          GoRoute(path: '/home', builder: (_, _) => const FamilyDashboardPage()),
+          GoRoute(path: '/link', builder: (_, _) => const LinkPage()),
+          GoRoute(path: '/settings', builder: (_, _) => const FamilySettingsPage()),
+        ],
+      ),
+      GoRoute(
+        path: '/alert/:alertId',
+        builder: (_, s) => AlertPage(alertId: s.pathParameters['alertId']!),
+      ),
     ],
   ),
 );

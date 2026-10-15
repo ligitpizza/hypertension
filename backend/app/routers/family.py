@@ -90,6 +90,8 @@ def request_link(
     request_id = repo.create_request(
         {
             "familyMemberId": user.uid,
+            # D-62: shown to the patient, who cannot read an unlinked user's document.
+            "familyMemberName": str(me.get("name") or "A family member"),
             "patientId": patient_id,
             "status": FamilyLinkStatus.PENDING.value,
         }

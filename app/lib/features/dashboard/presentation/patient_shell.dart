@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../family/presentation/emergency_location_updater.dart';
+
 /// Bottom navigation for the patient app: Home, Vitals, Meds, Records, Settings
 /// (Fig 4.3.11.1; Fig 4.3.2.1 showed "More" before Settings existed).
 class PatientShell extends StatelessWidget {
@@ -28,7 +30,8 @@ class PatientShell extends StatelessWidget {
         if (!didPop) context.go(tabs.first.$1);
       },
       child: Scaffold(
-        body: child,
+        // D-62: keeps an open emergency alert's location fresh while the app is on screen.
+        body: EmergencyLocationUpdater(child: child),
         bottomNavigationBar: NavigationBar(
           selectedIndex: index < 0 ? 0 : index,
           onDestinationSelected: (i) => context.go(tabs[i].$1),

@@ -1,4 +1,5 @@
 import '../../../core/constants/enums.dart';
+import '../../family/data/location_source.dart';
 import '../../../shared/services/api/api_client.dart';
 
 /// Risk score generated after the reading (UC9.1), as returned by the API.
@@ -96,9 +97,12 @@ abstract interface class VitalsRepository {
 }
 
 class ApiVitalsRepository implements VitalsRepository {
-  ApiVitalsRepository(this._api);
+  ApiVitalsRepository(this._api, [this._location = const NoLocationSource()]);
 
   final ApiClient _api;
+
+  /// D-62: attached silently (no prompt) so an emergency reading can alert family with GPS.
+  final LocationSource _location;
 
   @override
   Future<LoggedReading> logReading({
@@ -112,6 +116,7 @@ class ApiVitalsRepository implements VitalsRepository {
       diastolic: diastolic,
       heartRate: heartRate,
       note: note,
+      location: await _location.current(),
     );
     return LoggedReading.fromApi(res, DateTime.now());
   }

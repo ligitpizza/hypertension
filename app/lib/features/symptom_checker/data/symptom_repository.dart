@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/constants/enums.dart';
+import '../../family/data/location_source.dart';
 import '../../../shared/services/api/api_client.dart';
 
 /// `symptom_catalog` entry (Table 4.2.3.18; `isRedFlag` per D-10).
@@ -115,10 +116,13 @@ abstract interface class SymptomRepository {
 }
 
 class ApiSymptomRepository implements SymptomRepository {
-  ApiSymptomRepository(this._db, this._api);
+  ApiSymptomRepository(this._db, this._api, [this._location = const NoLocationSource()]);
 
   final FirebaseFirestore _db;
   final ApiClient _api;
+
+  /// D-62: GPS for a "seek emergency care" family alert; never prompts.
+  final LocationSource _location;
 
   @override
   Stream<List<SymptomOption>> catalog() => _db
@@ -147,6 +151,7 @@ class ApiSymptomRepository implements SymptomRepository {
       severity: severity.value,
       heartRate: heartRate,
       vitalReadingId: vitalReadingId,
+      location: await _location.current(),
     ),
   );
 }

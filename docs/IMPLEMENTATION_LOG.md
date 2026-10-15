@@ -1030,3 +1030,46 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   main.dart.js, the Flutter bootstrap/service-worker files, version.json and the manifest,
   so each deploy shows on the next load (unchanged files still come from cache via ETag).
 - Tests: backend 4 (`test_admin_detail.py`); Flutter 5 new (493 total).
+
+### 2026-10-16 — Increment 3 — FR-14.2: Family Monitoring & Emergency Alert
+
+- FRs / UCs: FR-14.2 (and FR-9.5 family part); UC15.1 (E1 pending), UC15.2 (E1 no family),
+  UC15.3. Sequence Fig 4.1.1.15; mockups Figs 4.3.16.1-4.3.16.3 and 4.3.9.1 (SOS).
+  Decision D-62 (agreed with Ping); answers open question 4 (family always sees readings).
+- **Linking** (D-06): `POST /family/link-requests` (code, case/dash-insensitive) →
+  `family_link_requests` pending with `familyMemberName` → patient approves/rejects on
+  `/family-requests` (pushed both ways) → `users.patientId` set. Withdraw, unlink (family)
+  and remove member (patient) are available. One patient per family member.
+- **Emergency alerts**: Emergency-band readings, Critical risk, "seek emergency care"
+  triage and SOS create one `emergency_alerts` doc per linked member (`trigger`,
+  `gpsLocation`, `patientPhone`, `locationUpdatedAt`, `acknowledgedAt`), an urgent push with
+  the alert id, and a simulated SMS to the onboarding emergency contact. Reading-based alerts
+  are not repeated within 30 minutes (the location is refreshed instead); SOS always sends.
+  Escalation now routes family emergencies through the new `EmergencyAlerts` service;
+  Moderate-band family pushes are unchanged.
+- **Location** (D-62): the phone's GPS is attached silently (no prompt) to readings and
+  triage, and on purpose at SOS; the backend keeps it only inside emergency alerts. The
+  patient grants it from Family → "Share my location in emergencies" or at SOS. While an
+  alert is open (< 1 h, unacknowledged) the patient app updates it every minute when open
+  (`EmergencyLocationUpdater` in the patient shell); no background tracking.
+- **Family app** (`main_family.dart`): bottom nav Dashboard / Patients / Settings;
+  dashboard (current status, today's BP with change from yesterday, heart rate (estimate),
+  7-day trend, emergency banner); link page (code, pending/withdraw, linked/unlink);
+  alert page (triggering reading, embedded Google Map with "updated n minutes ago", Call
+  patient, Call 999, Navigate, Acknowledge); settings (account, theme, sign out).
+- **Patient app**: SOS icon on Home → `/sos` (map, nearest hospitals via Google Maps search,
+  Call 999 which first alerts family/doctor, share recent vitals, notify toggle); Settings →
+  Family → `/family-requests`.
+- **Maps**: google_maps_flutter + geolocator added (Ping approved); Maps SDK for Android
+  enabled on the project; an API key restricted to that SDK is kept in
+  `app/android/local.properties` (git-ignored) and injected through a manifest placeholder.
+  Navigate / hospitals open the Google Maps app (no Places API).
+- Backend: `app/routers/family.py`, `app/services/family.py`, `app/schemas/family.py`,
+  `app/integrations/sms.py` (fake); System Health lists SMS as Simulated. Rules: family reads
+  the followed patient's user doc; patients list their linked family; requests and alerts
+  readable by the two parties only; all writes API-only. Indexes: emergency_alerts
+  (familyMemberId, sentAt desc) and (patientId, sentAt).
+- Tests: backend 13 (`test_family.py`); rules 7 new (193 total; one Increment 1 test updated
+  because linked family may now read the patient); Flutter 13 (`family_test.dart`, 506 total).
+  Family debug APK builds with the key in the merged manifest.
+- Deviations vs Chapter 4: D-62 (alert fields, triggers, unlinking, requester name, SMS fake).
