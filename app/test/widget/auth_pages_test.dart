@@ -293,6 +293,7 @@ void main() {
       expect(staffHome(UserRole.admin), '/admin/users');
       expect(staffDestinations(UserRole.admin).map((d) => d.path), [
         '/admin/users',
+        '/admin/calendar', // D-60
         '/admin/appointments', // D-55
         '/admin/assignments', // D-54
         '/admin/audit-logs', // UC11.3

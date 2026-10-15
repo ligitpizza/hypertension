@@ -7,6 +7,7 @@ import '../../../shared/services/api/api_client.dart';
 import '../domain/appointment_text.dart';
 import '../../dashboard/state/dashboard_providers.dart';
 import '../state/appointment_providers.dart';
+import 'admin_booking_dialog.dart';
 import 'pre_visit_summary_page.dart';
 
 /// Doctor (calendar) or admin (overview) opens an appointment: its pending request
@@ -113,6 +114,8 @@ class _DetailsDialogState extends ConsumerState<_DetailsDialog> {
               '${dateLabel(a.dateTime)}, ${timeLabel(a.dateTime)} · ${a.status.label}'
               '${widget.doctorName == null ? '' : ' · ${widget.doctorName}'}',
             ),
+            if (a.isAdminAssigned)
+              const Padding(padding: EdgeInsets.only(top: 4), child: AdminAssignedBadge()),
             if (a.isCancelled)
               Text(
                 'Cancelled${a.cancelledBy == null ? '' : ' by ${a.cancelledBy}'}'
@@ -240,6 +243,16 @@ class _DetailsDialogState extends ConsumerState<_DetailsDialog> {
                     await _run(() => repo.staffCancel(a.id, reason), 'Appointment cancelled.');
                   },
             child: const Text('Cancel appointment'),
+          ),
+        // D-60: the admin changes time, doctor or type straight away.
+        if (widget.forAdmin && active)
+          TextButton(
+            key: const Key('details-edit'),
+            onPressed: () async {
+              final nav = Navigator.of(context);
+              if (await showAdminBooking(context, editing: a)) nav.pop();
+            },
+            child: const Text('Edit'),
           ),
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
         if (!widget.forAdmin)

@@ -212,6 +212,10 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/admin/appointments', builder: (_, _) => const AdminAppointmentsPage()),
+          GoRoute(
+            path: '/admin/calendar',
+            builder: (_, _) => const DoctorCalendarPage(admin: true),
+          ),
           GoRoute(path: '/admin/audit-logs', builder: (_, _) => const AuditLogsPage()),
           GoRoute(path: '/admin/system-health', builder: (_, _) => const SystemHealthPage()),
           GoRoute(

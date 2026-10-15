@@ -10,6 +10,7 @@ import '../../medications/domain/med_schedule.dart';
 import '../data/appointments_repository.dart';
 import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
+import 'admin_booking_dialog.dart' show AdminAssignedBadge;
 import 'change_reason_dialog.dart';
 
 /// Fig 4.3.6.1 Appointments (FR-7.1, FR-7.4; UC7.1, UC7.2, UC7.5; D-53, D-54).
@@ -416,6 +417,8 @@ class AppointmentCard extends ConsumerWidget {
               '${whenLabel(a.dateTime, now)}',
               style: TextStyle(color: scheme.primary),
             ),
+            if (a.isAdminAssigned)
+              const Padding(padding: EdgeInsets.only(top: 4), child: AdminAssignedBadge()),
             const SizedBox(height: 4),
             Text(doctor?.name ?? 'Your doctor', style: Theme.of(context).textTheme.titleLarge),
             Text('${a.type.label} · $clinicName'),
@@ -813,6 +816,7 @@ class AppointmentHistoryPage extends ConsumerWidget {
                     title: Text(whenLabel(a.dateTime, now)),
                     subtitle: Text(
                       '${a.type.label} · ${a.status.label}'
+                      '${a.isAdminAssigned ? ' · Admin assigned' : ''}'
                       '${a.changeReason == null ? '' : ' · ${a.changeReason}'}',
                     ),
                     onTap: a.status == AppointmentStatus.cancelled

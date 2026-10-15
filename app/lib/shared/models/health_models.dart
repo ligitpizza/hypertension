@@ -210,6 +210,7 @@ class Appointment {
     this.pendingChange,
     this.changeReason,
     this.cancelledBy,
+    this.bookedBy,
   });
 
   final String id;
@@ -235,6 +236,16 @@ class Appointment {
   /// patient | doctor | admin | system
   final String? cancelledBy;
 
+  /// D-60: patient | admin | system (absent on older bookings = patient).
+  final String? bookedBy;
+
+  /// D-60: shown as "Admin assigned" to patient, doctor and admin.
+  bool get isAdminAssigned => bookedBy == 'admin';
+
+  /// D-60: booked by the patient themselves (not emergency, not admin).
+  bool get isOwnBooking =>
+      bookedBy == 'patient' || (bookedBy == null && type != AppointmentType.emergency);
+
   bool get isActive =>
       status == AppointmentStatus.booked || status == AppointmentStatus.rescheduled;
 
@@ -256,6 +267,7 @@ class Appointment {
     pendingChange: PendingChange.fromMap(d['pendingChange']),
     changeReason: d['changeReason'] as String?,
     cancelledBy: d['cancelledBy'] as String?,
+    bookedBy: d['bookedBy'] as String?,
   );
 }
 

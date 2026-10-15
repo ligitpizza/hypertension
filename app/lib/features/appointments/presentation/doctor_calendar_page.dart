@@ -10,14 +10,20 @@ import '../../provider_portal/domain/portal_models.dart';
 import '../../provider_portal/state/portal_providers.dart';
 import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
+import '../../admin/data/admin_repository.dart';
+import '../../admin/state/admin_providers.dart';
+import 'admin_booking_dialog.dart';
 import 'appointment_details_dialog.dart';
 
 enum CalendarView { month, week, day }
 
 /// Fig 4.3.12.3 Doctor schedule (FR-7.1, FR-7.4): monthly / weekly / daily, coloured by
-/// type (D-53). Cancelled appointments are hidden.
+/// type (D-53). Cancelled appointments stay visible, struck through.
+/// With [admin] (D-60) it shows every doctor, with a doctor filter and "Book for patient".
 class DoctorCalendarPage extends ConsumerStatefulWidget {
-  const DoctorCalendarPage({super.key});
+  const DoctorCalendarPage({super.key, this.admin = false});
+
+  final bool admin;
 
   @override
   ConsumerState<DoctorCalendarPage> createState() => _DoctorCalendarPageState();
@@ -26,6 +32,7 @@ class DoctorCalendarPage extends ConsumerStatefulWidget {
 class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
   CalendarView _view = CalendarView.month;
   late DateTime _anchor = _today();
+  String? _doctor; // admin filter
 
   DateTime _today() {
     final l = toMyt(ref.read(nowProvider)());
@@ -68,13 +75,28 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
     final uid = ref.watch(authUidProvider).value;
     if (uid == null) return const Center(child: CircularProgressIndicator());
     final (start, end) = _range;
-    final appts = ref.watch(doctorAppointmentsProvider((uid, _utc(start), _utc(end))));
+    final admin = widget.admin;
+    final appts = admin
+        ? ref.watch(allAppointmentsProvider((_utc(start), _utc(end))))
+        : ref.watch(doctorAppointmentsProvider((uid, _utc(start), _utc(end))));
+    final doctors = admin
+        ? ref.watch(adminUsersProvider((UserRole.doctor, ''))).value ?? const <AdminUser>[]
+        : const <AdminUser>[];
+    final doctorNames = {for (final d in doctors) d.uid: d.name};
     final names = <String, String>{
-      for (final p in ref.watch(assignedPatientsProvider).value ?? const <PortalPatient>[])
-        p.uid: p.name,
+      if (admin)
+        for (final p
+            in ref.watch(adminUsersProvider((UserRole.patient, ''))).value ?? const <AdminUser>[])
+          p.uid: p.name
+      else
+        for (final p in ref.watch(assignedPatientsProvider).value ?? const <PortalPatient>[])
+          p.uid: p.name,
     };
     // Cancelled ones stay visible (struck through) so the doctor sees what changed.
-    final list = appts.value ?? const <Appointment>[];
+    final list = [
+      for (final a in appts.value ?? const <Appointment>[])
+        if (_doctor == null || a.doctorId == _doctor) a,
+    ];
     final active = [
       for (final a in list)
         if (!a.isCancelled) a,
@@ -104,12 +126,30 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
                   '${active.length} scheduled appointments · $emergencies '
                   '${emergencies == 1 ? 'emergency' : 'emergencies'}'
                   '${cancelledCount > 0 ? ' · $cancelledCount cancelled' : ''}'
-                  '${requests > 0 ? ' · $requests waiting for you' : ''}'
+                  '${requests > 0 ? ' · $requests ${admin ? 'waiting for a decision' : 'waiting for you'}' : ''}'
                   '${overdue > 0 ? ' · $overdue to complete' : ''}',
                   key: const Key('calendar-counts'),
                 ),
               ],
             ),
+            if (admin) ...[
+              DropdownButton<String?>(
+                key: const Key('calendar-doctor'),
+                value: _doctor,
+                hint: const Text('All doctors'),
+                items: [
+                  const DropdownMenuItem(child: Text('All doctors')),
+                  for (final d in doctors) DropdownMenuItem(value: d.uid, child: Text(d.name)),
+                ],
+                onChanged: (v) => setState(() => _doctor = v),
+              ),
+              FilledButton.icon(
+                key: const Key('calendar-book'),
+                onPressed: () => showAdminBooking(context, day: _anchor),
+                icon: const Icon(Icons.add),
+                label: const Text('Book for patient'),
+              ),
+            ],
             SegmentedButton<CalendarView>(
               key: const Key('calendar-view'),
               segments: const [
@@ -173,7 +213,11 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
               _view = CalendarView.day;
             }),
           ),
-          _ => _AgendaList(appointments: list, names: names),
+          _ => _AgendaList(
+            appointments: list,
+            names: names,
+            doctorNames: admin ? doctorNames : null,
+          ),
         },
       ],
     );
@@ -309,10 +353,13 @@ class _Chip extends ConsumerWidget {
 }
 
 class _AgendaList extends ConsumerWidget {
-  const _AgendaList({required this.appointments, required this.names});
+  const _AgendaList({required this.appointments, required this.names, this.doctorNames});
 
   final List<Appointment> appointments;
   final Map<String, String> names;
+
+  /// Admin view (D-60): show and pass on each appointment's doctor.
+  final Map<String, String>? doctorNames;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -356,6 +403,8 @@ class _AgendaList extends ConsumerWidget {
                       : null,
                 ),
                 subtitle: Text(
+                  '${doctorNames == null ? '' : '${doctorNames![a.doctorId] ?? 'Doctor'} · '}'
+                  '${a.isAdminAssigned ? 'Admin assigned · ' : ''}'
                   '${a.pendingChange != null && !a.isCancelled ? (a.pendingChange!.isCancel ? 'Cancellation requested · ' : 'Reschedule requested · ') : ''}'
                   '${a.type.label}${switch (a.status) {
                     AppointmentStatus.completed => ' · completed',
@@ -386,7 +435,13 @@ class _AgendaList extends ConsumerWidget {
                         ),
                       )
                     : const Icon(Icons.chevron_right),
-                onTap: () => showAppointmentDetails(context, a, patientName: names[a.patientId]),
+                onTap: () => showAppointmentDetails(
+                  context,
+                  a,
+                  patientName: names[a.patientId],
+                  doctorName: doctorNames?[a.doctorId],
+                  forAdmin: doctorNames != null,
+                ),
               ),
             ),
         ],

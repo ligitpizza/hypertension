@@ -229,6 +229,15 @@ abstract interface class AdminRepository {
 
   Future<SystemHealth> systemHealth();
 
+  /// D-60: returns the setup link when it could not be emailed.
+  Future<String?> createPatient({
+    required String name,
+    required String email,
+    required String icNumber,
+  });
+
+  Future<void> deleteUser(String uid);
+
   Future<HospitalAnalytics> hospitalAnalytics({int months = 6});
 
   Future<SystemAnalytics> systemAnalytics({int days = 7});
@@ -302,4 +311,17 @@ class ApiAdminRepository implements AdminRepository {
   @override
   Future<Uint8List> report(DateTime from, DateTime to) async =>
       Uint8List.fromList(await _api.adminReport(AuditQuery._day(from), AuditQuery._day(to)));
+
+  @override
+  Future<String?> createPatient({
+    required String name,
+    required String email,
+    required String icNumber,
+  }) async {
+    final res = await _api.adminCreatePatient(name: name, email: email, icNumber: icNumber);
+    return res['emailSent'] == true ? null : res['setupLink'] as String?;
+  }
+
+  @override
+  Future<void> deleteUser(String uid) => _api.adminDeleteUser(uid);
 }

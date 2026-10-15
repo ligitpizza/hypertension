@@ -24,14 +24,15 @@ final myUpcomingAppointmentsProvider = StreamProvider<List<Appointment>>((ref) {
       .patientAppointments(uid, DateTime(now.year, now.month, now.day));
 }, retry: _noRetry);
 
-/// D-56: the patient's earliest active appointment (past or future), if any.
+/// D-56: the patient's earliest active appointment of their own (past or future), if any.
+/// D-60: emergency and admin-assigned visits don't count towards the patient's limit.
 final myActiveAppointmentProvider = StreamProvider<Appointment?>((ref) {
   final uid = ref.watch(authUidProvider).value;
   if (uid == null) return Stream.value(null);
   return ref
       .watch(appointmentsRepositoryProvider)
       .activeAppointments(uid)
-      .map((l) => l.isEmpty ? null : l.first);
+      .map((l) => l.where((a) => a.isOwnBooking).firstOrNull);
 }, retry: _noRetry);
 
 final myAppointmentHistoryProvider = StreamProvider.autoDispose<List<Appointment>>((ref) {

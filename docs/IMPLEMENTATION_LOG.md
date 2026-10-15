@@ -995,3 +995,23 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   Flutter 33 new widget tests (481 total). New shared test fake `test/helpers/admin_fakes.dart`.
 - Deviations vs Chapter 4: D-59 (maxPatients; no auto-assign or direct reassign; uptime
   from the sweep heartbeat; "department" = doctor specialty).
+- **D-60 after Ping's cross-check of the admin panel:**
+  - **Admin calendar** (`/admin/calendar`): the doctor calendar in admin mode, showing every
+    doctor's appointments (monthly / weekly / daily) with a doctor filter; agenda rows name
+    the doctor; tapping opens the details dialog with Edit, request decisions and Cancel.
+  - **Book for patient** (calendar and Appointments page): patient (searchable), any active
+    doctor, type and any date/minute in Malaysia time (`POST /admin/appointments`). The doctor
+    must be free within 30 minutes (the clash check now covers overlaps, not only equal start
+    times, for everyone). Stored with `bookedBy: admin` and labelled **"Admin assigned"** on
+    the patient's card and history, the doctor's calendar and dialog, and the admin views.
+  - **Limits**: the patient's own booking limit (D-56) counts only `bookedBy` patient; the
+    emergency auto-booking is `bookedBy: system`; one active admin-assigned visit per
+    patient, so up to three in total.
+  - **Edit** (`PATCH /admin/appointments/{id}`): time, doctor or type at once, no approval;
+    clears a pending request; patient and both doctors pushed. **Delete** = the existing
+    Cancel (kept in history as cancelled by admin), as Ping chose.
+  - **Users**: "Add new user" → Staff account or **Patient account** (name, email, IC;
+    setup link emailed or shown); **Delete permanently** (type DELETE): patients through the
+    D-46 cascade now, staff/family by removing login and account; refused for a doctor
+    with patients or upcoming visits, for oneself and the last admin.
+  - Tests: backend 13 (`test_admin_d60.py`); Flutter 7 new (488 total).

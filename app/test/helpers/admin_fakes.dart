@@ -92,4 +92,21 @@ class FakeAdminRepository implements AdminRepository {
     );
     return Uint8List.fromList('%PDF'.codeUnits);
   }
+
+  @override
+  Future<String?> createPatient({
+    required String name,
+    required String email,
+    required String icNumber,
+  }) async {
+    if (error != null) throw error!;
+    calls.add('createPatient:$name:$email:$icNumber');
+    return 'https://example.test/setup';
+  }
+
+  @override
+  Future<void> deleteUser(String uid) async {
+    if (error != null) throw error!;
+    calls.add('delete:$uid');
+  }
 }

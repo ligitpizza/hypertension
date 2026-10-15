@@ -311,6 +311,41 @@ class ApiClient {
   Future<Map<String, dynamic>> staffCancelAppointment(String id, String reason) =>
       _post('/appointments/$id/staff-cancel', {'reason': reason.trim()});
 
+  /// D-60: the admin books for a patient with any doctor at any minute.
+  Future<Map<String, dynamic>> adminBookAppointment({
+    required String patientId,
+    required String doctorId,
+    required DateTime dateTime,
+    required String type,
+  }) => _post('/admin/appointments', {
+    'patientId': patientId,
+    'doctorId': doctorId,
+    'dateTime': dateTime.toUtc().toIso8601String(),
+    'type': type,
+  });
+
+  /// D-60: the admin moves time, doctor or type instantly.
+  Future<Map<String, dynamic>> adminEditAppointment(
+    String id, {
+    DateTime? dateTime,
+    String? doctorId,
+    String? type,
+  }) => _send('PATCH', '/admin/appointments/$id', {
+    if (dateTime != null) 'dateTime': dateTime.toUtc().toIso8601String(),
+    'doctorId': ?doctorId,
+    'type': ?type,
+  });
+
+  /// D-60: patient account opened by the admin.
+  Future<Map<String, dynamic>> adminCreatePatient({
+    required String name,
+    required String email,
+    required String icNumber,
+  }) => _post('/admin/patients', {'name': name, 'email': email, 'icNumber': icNumber});
+
+  /// D-60: permanent removal.
+  Future<void> adminDeleteUser(String uid) => _send('DELETE', '/admin/users/$uid', null);
+
   Future<Map<String, dynamic>> preVisitSummary(String appointmentId) =>
       _get('/appointments/$appointmentId/pre-visit-summary');
 

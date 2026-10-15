@@ -109,6 +109,25 @@ class FakeAppointmentsRepository implements AppointmentsRepository {
   Future<void> staffCancel(String id, String reason) async => calls.add('staffCancel:$id:$reason');
 
   @override
+  Future<String> adminBook({
+    required String patientId,
+    required String doctorId,
+    required DateTime time,
+    required AppointmentType type,
+  }) async {
+    calls.add('adminBook:$patientId:$doctorId:${time.toIso8601String()}:${type.value}');
+    return 'adm1';
+  }
+
+  @override
+  Future<void> adminEdit(
+    String id, {
+    DateTime? time,
+    String? doctorId,
+    AppointmentType? type,
+  }) async => calls.add('adminEdit:$id:${time?.toIso8601String()}:$doctorId:${type?.value}');
+
+  @override
   Future<void> recordOutcome(String id, {required bool completed}) async =>
       calls.add('outcome:$id:${completed ? 'completed' : 'no_show'}');
 
@@ -188,6 +207,7 @@ Appointment appt(
   PendingChange? pending,
   String? changeReason,
   String? cancelledBy,
+  String? bookedBy,
 }) => Appointment(
   id: id,
   patientId: 'p1',
@@ -198,6 +218,7 @@ Appointment appt(
   pendingChange: pending,
   changeReason: changeReason,
   cancelledBy: cancelledBy,
+  bookedBy: bookedBy,
 );
 
 Future<void> pickReason(WidgetTester t, String code, {String? note}) async {
@@ -230,6 +251,10 @@ Widget app(FakeAppointmentsRepository repo, {String initial = '/appointments', S
       GoRoute(
         path: '/calendar',
         builder: (_, _) => const Scaffold(body: DoctorCalendarPage()),
+      ),
+      GoRoute(
+        path: '/admin-calendar',
+        builder: (_, _) => const Scaffold(body: DoctorCalendarPage(admin: true)),
       ),
       GoRoute(
         path: '/admin',
@@ -275,6 +300,7 @@ final admin = FakeAdminRepository()
   ..all = [
     user('d1', 'Dr John', UserRole.doctor, caseload: 12),
     user('d2', 'Dr Aminah', UserRole.doctor, caseload: 30),
+    user('p1', 'Siti Aminah', UserRole.patient),
   ];
 
 void main() {
@@ -823,6 +849,84 @@ void main() {
       await t.tap(find.byKey(const Key('book-appointment')));
       await t.pumpAndSettle();
       expect(repo.booked.single.$1, myt(14, 9));
+    });
+  });
+
+  group('D-60 admin calendar, booking and editing', () {
+    tallTest('every doctor on one calendar, with a doctor filter', (t) async {
+      repo.all = [
+        appt('a1', myt(16, 10)),
+        appt('a2', myt(16, 11), doctorId: 'd2', bookedBy: 'admin'),
+      ];
+      await t.pumpWidget(app(repo, initial: '/admin-calendar', uid: 'admin'));
+      await t.pumpAndSettle();
+      expect(find.text('2 scheduled appointments · 0 emergencies'), findsOneWidget);
+      await t.tap(find.byKey(const Key('calendar-doctor')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Dr Aminah').last);
+      await t.pumpAndSettle();
+      expect(find.text('1 scheduled appointments · 0 emergencies'), findsOneWidget);
+      await t.tap(find.byKey(const Key('cal-day-16')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Dr Aminah · Admin assigned · Regular checkup'), findsOneWidget);
+    });
+
+    tallTest('book for a patient: patient, doctor, type, date and time', (t) async {
+      await t.pumpWidget(app(repo, initial: '/admin-calendar', uid: 'admin'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('calendar-book')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('admin-book-save')));
+      await t.pumpAndSettle();
+      expect(find.text('Choose a patient and a doctor.'), findsOneWidget);
+      await t.tap(find.byKey(const Key('admin-book-patient')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Siti Aminah').last);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('admin-book-doctor')));
+      await t.pumpAndSettle();
+      await t.tap(find.textContaining('Dr John').last);
+      await t.pumpAndSettle();
+      await t.tap(
+        find.descendant(
+          of: find.byKey(const Key('admin-book-type')),
+          matching: find.text('Follow-up'),
+        ),
+      );
+      await t.pump();
+      await t.tap(find.byKey(const Key('admin-book-save')));
+      await t.pumpAndSettle();
+      // Today (14 Oct) at the next hour, 10:00 MYT.
+      expect(repo.calls.last, 'adminBook:p1:d1:${myt(14, 10).toIso8601String()}:follow_up');
+    });
+
+    tallTest('admin edits an appointment from its details', (t) async {
+      repo.all = [appt('a1', myt(16, 10))];
+      await t.pumpWidget(app(repo, initial: '/admin-calendar', uid: 'admin'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('cal-day-16')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('agenda-a1')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('details-edit')));
+      await t.pumpAndSettle();
+      expect(find.text('Edit appointment'), findsOneWidget);
+      await t.tap(find.text('Emergency').last);
+      await t.pump();
+      await t.tap(find.byKey(const Key('admin-book-save')));
+      await t.pumpAndSettle();
+      expect(repo.calls.last, 'adminEdit:a1:null:null:emergency');
+    });
+
+    tallTest('the patient sees "Admin assigned" and can still book their own', (t) async {
+      repo
+        ..upcoming = [appt('a1', myt(20, 10), bookedBy: 'admin')]
+        ..active = [appt('a1', myt(20, 10), bookedBy: 'admin')];
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('admin-assigned')), findsOneWidget);
+      // An admin-assigned visit doesn't use up the patient's own booking.
+      expect(find.byKey(const Key('one-at-a-time')), findsNothing);
     });
   });
 }

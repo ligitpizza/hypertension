@@ -7,6 +7,7 @@ import '../../dashboard/state/dashboard_providers.dart';
 import '../../medications/domain/med_schedule.dart';
 import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
+import 'admin_booking_dialog.dart';
 import 'appointment_details_dialog.dart';
 
 /// Status filter for the admin overview (D-55). [requested] = a change awaiting a decision.
@@ -69,9 +70,19 @@ class _AdminAppointmentsPageState extends ConsumerState<AdminAppointmentsPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Appointments', style: Theme.of(context).textTheme.headlineSmall),
+        Row(
+          children: [
+            Expanded(child: Text('Appointments', style: Theme.of(context).textTheme.headlineSmall)),
+            FilledButton.icon(
+              key: const Key('admin-book'),
+              onPressed: () => showAdminBooking(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Book for patient'),
+            ),
+          ],
+        ),
         const SizedBox(height: 4),
-        const Text('All doctors. Open an appointment to decide a request or cancel it.'),
+        const Text('All doctors. Open an appointment to edit it, decide a request or cancel it.'),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -186,7 +197,10 @@ class _Row extends ConsumerWidget {
           '${dateLabel(a.dateTime)}, ${timeLabel(a.dateTime)} · ${patient ?? '…'}',
           style: a.isCancelled ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
         ),
-        subtitle: Text('${doctorName ?? 'Doctor'} · ${a.type.label}\n$detail'),
+        subtitle: Text(
+          '${doctorName ?? 'Doctor'} · ${a.type.label}'
+          '${a.isAdminAssigned ? ' · Admin assigned' : ''}\n$detail',
+        ),
         isThreeLine: true,
         trailing: p != null ? const Chip(label: Text('Decide')) : null,
         onTap: () => showAppointmentDetails(

@@ -27,6 +27,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
   ],
   UserRole.admin => const [
     StaffDestination('/admin/users', 'Users', Icons.manage_accounts_outlined),
+    StaffDestination('/admin/calendar', 'Calendar', Icons.calendar_month_outlined),
     StaffDestination('/admin/appointments', 'Appointments', Icons.event_note_outlined),
     StaffDestination('/admin/assignments', 'Assignments', Icons.assignment_ind_outlined),
     StaffDestination('/admin/audit-logs', 'Audit logs', Icons.policy_outlined),

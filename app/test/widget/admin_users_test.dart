@@ -139,6 +139,52 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('add-user')));
     await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('add-staff')));
+    await t.pumpAndSettle();
     expect(find.text('ADD STAFF'), findsOneWidget);
+  });
+
+  tallTest('D-60 create a patient account; the setup link is shown when not emailed', (t) async {
+    await t.pumpWidget(host());
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('add-user')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('add-patient')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('patient-save')));
+    await t.pumpAndSettle();
+    expect(find.text('Enter a 12-digit IC number.'), findsOneWidget);
+    await t.enterText(find.byKey(const Key('patient-name')), 'Mei Ling');
+    await t.enterText(find.byKey(const Key('patient-email')), 'mei@example.com');
+    await t.enterText(find.byKey(const Key('patient-ic')), '900101-14-5677');
+    await t.tap(find.byKey(const Key('patient-save')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('createPatient:Mei Ling:mei@example.com:900101-14-5677'));
+    expect(find.textContaining('https://example.test/setup'), findsOneWidget);
+  });
+
+  tallTest('D-60 delete permanently needs DELETE typed', (t) async {
+    await t.pumpWidget(host());
+    await t.pumpAndSettle();
+    await menu(t, 'p1', 'Delete permanently');
+    expect(find.textContaining('Notes, prescriptions and care plans'), findsOneWidget);
+    expect(t.widget<FilledButton>(find.byKey(const Key('delete-confirm'))).onPressed, isNull);
+    await t.enterText(find.byKey(const Key('delete-type')), 'DELETE');
+    await t.pump();
+    await t.tap(find.byKey(const Key('delete-confirm')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('delete:p1'));
+  });
+
+  tallTest('a refused delete shows the reason', (t) async {
+    repo.error = ApiException('DOCTOR_IN_USE', 'This doctor still has 12 assigned patients.');
+    await t.pumpWidget(host());
+    await t.pumpAndSettle();
+    await menu(t, 'd1', 'Delete permanently');
+    await t.enterText(find.byKey(const Key('delete-type')), 'DELETE');
+    await t.pump();
+    await t.tap(find.byKey(const Key('delete-confirm')));
+    await t.pumpAndSettle();
+    expect(find.text('This doctor still has 12 assigned patients.'), findsOneWidget);
   });
 }

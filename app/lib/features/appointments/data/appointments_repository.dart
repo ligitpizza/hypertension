@@ -138,6 +138,17 @@ abstract interface class AppointmentsRepository {
 
   Future<void> staffCancel(String id, String reason);
 
+  /// D-60 (admin): book for a patient; returns the appointment id.
+  Future<String> adminBook({
+    required String patientId,
+    required String doctorId,
+    required DateTime time,
+    required AppointmentType type,
+  });
+
+  /// D-60 (admin): change time, doctor or type at once.
+  Future<void> adminEdit(String id, {DateTime? time, String? doctorId, AppointmentType? type});
+
   /// D-56 (doctor or admin): [completed] or no-show.
   Future<void> recordOutcome(String id, {required bool completed});
 
@@ -275,6 +286,19 @@ class ApiAppointmentsRepository implements AppointmentsRepository {
 
   @override
   Future<void> staffCancel(String id, String reason) => _api.staffCancelAppointment(id, reason);
+
+  @override
+  Future<String> adminBook({
+    required String patientId,
+    required String doctorId,
+    required DateTime time,
+    required AppointmentType type,
+  }) async =>
+      '${(await _api.adminBookAppointment(patientId: patientId, doctorId: doctorId, dateTime: time, type: type.value))['id']}';
+
+  @override
+  Future<void> adminEdit(String id, {DateTime? time, String? doctorId, AppointmentType? type}) =>
+      _api.adminEditAppointment(id, dateTime: time, doctorId: doctorId, type: type?.value);
 
   @override
   Future<void> recordOutcome(String id, {required bool completed}) =>

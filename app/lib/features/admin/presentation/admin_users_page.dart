@@ -74,6 +74,96 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
     );
   }
 
+  /// D-60: open a patient account; the setup link is shown if it could not be emailed.
+  Future<void> _createPatient() async {
+    final created = await showDialog<(String, String?)>(
+      context: context,
+      builder: (_) => const _PatientDialog(),
+    );
+    if (created == null || !mounted) return;
+    _refresh();
+    final (name, link) = created;
+    if (link == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Account created. $name was emailed a setup link.')));
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Account created'),
+        content: SelectableText(
+          'The email could not be sent. Give $name this link to set a password:\n\n$link',
+          key: const Key('patient-setup-link'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: link));
+              Navigator.of(c).pop();
+            },
+            child: const Text('Copy and close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// D-60: permanent removal, after typing DELETE.
+  Future<void> _delete(AdminUser u) async {
+    final typed = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setState) => AlertDialog(
+          title: Text('Permanently delete ${u.name}?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                u.role == UserRole.patient
+                    ? 'Their readings, medications, records, orders and messages to the AI agent '
+                          'are deleted now. Notes, prescriptions and care plans written by doctors, '
+                          'and the audit log, are kept. This cannot be undone.'
+                    : 'Their login and account are removed. This cannot be undone. To keep '
+                          'their history, deactivate instead.',
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('delete-type'),
+                controller: typed,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Type DELETE to confirm'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('Back')),
+            FilledButton(
+              key: const Key('delete-confirm'),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(c).colorScheme.error),
+              onPressed: typed.text.trim() == 'DELETE' ? () => Navigator.of(c).pop(true) : null,
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(adminRepositoryProvider).deleteUser(u.uid);
+      messenger.showSnackBar(SnackBar(content: Text('${u.name} was deleted.')));
+      _refresh();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('Something went wrong. Try again.')));
+    }
+  }
+
   Future<void> _toggleActive(AdminUser u) async {
     final repo = ref.read(adminRepositoryProvider);
     if (!u.isActive) {
@@ -162,11 +252,27 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
                 }),
               ),
             ),
-            FilledButton.icon(
-              key: const Key('add-user'),
-              onPressed: () => context.push('/admin/users/new'),
-              icon: const Icon(Icons.add),
-              label: const Text('Add new user'),
+            MenuAnchor(
+              builder: (context, controller, _) => FilledButton.icon(
+                key: const Key('add-user'),
+                onPressed: () => controller.isOpen ? controller.close() : controller.open(),
+                icon: const Icon(Icons.add),
+                label: const Text('Add new user'),
+              ),
+              menuChildren: [
+                MenuItemButton(
+                  key: const Key('add-staff'),
+                  leadingIcon: const Icon(Icons.badge_outlined),
+                  onPressed: () => context.push('/admin/users/new'),
+                  child: const Text('Staff account'),
+                ),
+                MenuItemButton(
+                  key: const Key('add-patient'),
+                  leadingIcon: const Icon(Icons.person_add_alt),
+                  onPressed: _createPatient,
+                  child: const Text('Patient account'),
+                ),
+              ],
             ),
           ],
         ),
@@ -225,6 +331,7 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
                             user: u,
                             onEdit: () => _edit(u),
                             onToggle: () => _toggleActive(u),
+                            onDelete: () => _delete(u),
                           ),
                         const Divider(),
                         Row(
@@ -265,11 +372,17 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
 }
 
 class _UserRow extends StatelessWidget {
-  const _UserRow({required this.user, required this.onEdit, required this.onToggle});
+  const _UserRow({
+    required this.user,
+    required this.onEdit,
+    required this.onToggle,
+    required this.onDelete,
+  });
 
   final AdminUser user;
   final VoidCallback onEdit;
   final VoidCallback onToggle;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -309,10 +422,15 @@ class _UserRow extends StatelessWidget {
           ),
           PopupMenuButton<String>(
             key: Key('user-menu-${u.uid}'),
-            onSelected: (a) => a == 'edit' ? onEdit() : onToggle(),
+            onSelected: (a) => switch (a) {
+              'edit' => onEdit(),
+              'delete' => onDelete(),
+              _ => onToggle(),
+            },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'edit', child: Text('Edit')),
               PopupMenuItem(value: 'toggle', child: Text(u.isActive ? 'Deactivate' : 'Reactivate')),
+              const PopupMenuItem(value: 'delete', child: Text('Delete permanently')),
             ],
           ),
         ],
@@ -422,4 +540,116 @@ class _EditDialogState extends State<_EditDialog> {
       ],
     );
   }
+}
+
+/// D-60: name, email and IC (the IC fills the date of birth and gender, D-51).
+class _PatientDialog extends ConsumerStatefulWidget {
+  const _PatientDialog();
+
+  @override
+  ConsumerState<_PatientDialog> createState() => _PatientDialogState();
+}
+
+class _PatientDialogState extends ConsumerState<_PatientDialog> {
+  final _form = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _ic = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    for (final c in [_name, _email, _ic]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_form.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final link = await ref
+          .read(adminRepositoryProvider)
+          .createPatient(
+            name: _name.text.trim(),
+            email: _email.text.trim(),
+            icNumber: _ic.text.trim(),
+          );
+      if (mounted) Navigator.of(context).pop((_name.text.trim(), link));
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } catch (_) {
+      setState(() => _error = 'Something went wrong. Try again.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    key: const Key('patient-dialog'),
+    title: const Text('Create patient account'),
+    content: SizedBox(
+      width: 400,
+      child: Form(
+        key: _form,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              key: const Key('patient-name'),
+              controller: _name,
+              decoration: const InputDecoration(labelText: 'Full name'),
+              validator: (v) => (v ?? '').trim().length < 2 ? 'Enter the full name.' : null,
+            ),
+            TextFormField(
+              key: const Key('patient-email'),
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Email'),
+              validator: (v) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch((v ?? '').trim())
+                  ? null
+                  : 'Enter a valid email.',
+            ),
+            TextFormField(
+              key: const Key('patient-ic'),
+              controller: _ic,
+              decoration: const InputDecoration(labelText: 'IC number', hintText: '900101-14-5677'),
+              validator: (v) => RegExp(r'^\d{6}-?\d{2}-?\d{4}$').hasMatch((v ?? '').trim())
+                  ? null
+                  : 'Enter a 12-digit IC number.',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'A setup link is emailed. The patient signs in to the app and completes their '
+              'health profile; a doctor request is then created automatically.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _error!,
+                  key: const Key('patient-error'),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+      FilledButton(
+        key: const Key('patient-save'),
+        onPressed: _busy ? null : _save,
+        child: const Text('Create'),
+      ),
+    ],
+  );
 }
