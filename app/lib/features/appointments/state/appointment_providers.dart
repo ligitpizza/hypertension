@@ -69,3 +69,10 @@ final doctorAppointmentsProvider = StreamProvider.autoDispose
       (ref, k) => ref.watch(appointmentsRepositoryProvider).doctorAppointments(k.$1, k.$2, k.$3),
       retry: _noRetry,
     );
+
+/// (start, end) -> all appointments (admin overview, D-55).
+final allAppointmentsProvider = StreamProvider.autoDispose
+    .family<List<Appointment>, (DateTime, DateTime)>(
+      (ref, k) => ref.watch(appointmentsRepositoryProvider).allAppointments(k.$1, k.$2),
+      retry: _noRetry,
+    );

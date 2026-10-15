@@ -157,6 +157,46 @@ class DoseLog {
   );
 }
 
+/// D-55: reasons a patient gives for cancelling or rescheduling (codes match the API).
+const changeReasons = {
+  'feeling_better': 'Feeling better',
+  'schedule_conflict': 'Schedule conflict',
+  'transport': 'Transport problem',
+  'cost': 'Cost',
+  'other_doctor': 'Seeing another doctor',
+  'other': 'Other',
+};
+
+/// D-55: a patient's request waiting for the doctor.
+class PendingChange {
+  const PendingChange({required this.kind, required this.reason, this.note, this.dateTime});
+
+  /// cancel | reschedule
+  final String kind;
+  final String reason;
+  final String? note;
+
+  /// The requested new time (reschedule only).
+  final DateTime? dateTime;
+
+  bool get isCancel => kind == 'cancel';
+
+  String get reasonText {
+    final label = changeReasons[reason] ?? reason;
+    return note == null || note!.isEmpty ? label : '$label: $note';
+  }
+
+  static PendingChange? fromMap(Object? raw) {
+    if (raw is! Map) return null;
+    return PendingChange(
+      kind: '${raw['kind']}',
+      reason: '${raw['reason']}',
+      note: raw['note'] as String?,
+      dateTime: (raw['dateTime'] as Timestamp?)?.toDate(),
+    );
+  }
+}
+
 /// `appointments` (docs/04 Table 4.2.3.9).
 class Appointment {
   const Appointment({
@@ -167,6 +207,9 @@ class Appointment {
     this.doctorId,
     this.type = AppointmentType.checkup,
     this.updatedAt,
+    this.pendingChange,
+    this.changeReason,
+    this.cancelledBy,
   });
 
   final String id;
@@ -183,6 +226,15 @@ class Appointment {
 
   bool get isCancelled => status == AppointmentStatus.cancelled;
 
+  /// D-55.
+  final PendingChange? pendingChange;
+
+  /// Reason of the last applied change (cancel / reschedule).
+  final String? changeReason;
+
+  /// patient | doctor | admin | system
+  final String? cancelledBy;
+
   bool get isActive =>
       status == AppointmentStatus.booked || status == AppointmentStatus.rescheduled;
 
@@ -194,6 +246,9 @@ class Appointment {
     status: AppointmentStatus.fromValue(d['status'] as String),
     type: AppointmentType.fromValue(d['type'] as String?),
     updatedAt: (d['updatedAt'] as Timestamp?)?.toDate(),
+    pendingChange: PendingChange.fromMap(d['pendingChange']),
+    changeReason: d['changeReason'] as String?,
+    cancelledBy: d['cancelledBy'] as String?,
   );
 }
 

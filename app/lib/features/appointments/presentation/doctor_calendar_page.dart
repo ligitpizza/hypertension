@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/enums.dart';
 import '../../../shared/models/health_models.dart';
@@ -11,7 +10,7 @@ import '../../provider_portal/domain/portal_models.dart';
 import '../../provider_portal/state/portal_providers.dart';
 import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
-import 'pre_visit_summary_page.dart';
+import 'appointment_details_dialog.dart';
 
 enum CalendarView { month, week, day }
 
@@ -82,6 +81,7 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
     ];
     final cancelledCount = list.length - active.length;
     final emergencies = active.where((a) => a.type == AppointmentType.emergency).length;
+    final requests = active.where((a) => a.pendingChange != null).length;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -101,7 +101,8 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
                 Text(
                   '${active.length} scheduled appointments · $emergencies '
                   '${emergencies == 1 ? 'emergency' : 'emergencies'}'
-                  '${cancelledCount > 0 ? ' · $cancelledCount cancelled' : ''}',
+                  '${cancelledCount > 0 ? ' · $cancelledCount cancelled' : ''}'
+                  '${requests > 0 ? ' · $requests waiting for you' : ''}',
                   key: const Key('calendar-counts'),
                 ),
               ],
@@ -274,7 +275,12 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cancelled = appointment.isCancelled;
-    final color = cancelled ? Colors.grey : appointmentColor(appointment.type);
+    final pending = !cancelled && appointment.pendingChange != null;
+    final color = cancelled
+        ? Colors.grey
+        : pending
+        ? Colors.amber.shade800
+        : appointmentColor(appointment.type);
     return Container(
       key: Key('chip-${appointment.id}'),
       margin: const EdgeInsets.only(top: 2),
@@ -344,13 +350,20 @@ class _AgendaList extends StatelessWidget {
                       : null,
                 ),
                 subtitle: Text(
+                  '${a.pendingChange != null && !a.isCancelled ? (a.pendingChange!.isCancel ? 'Cancellation requested · ' : 'Reschedule requested · ') : ''}'
                   '${a.type.label}${switch (a.status) {
                     AppointmentStatus.completed => ' · completed',
                     AppointmentStatus.rescheduled => ' · rescheduled',
                     _ => '',
                   }}',
                 ),
-                trailing: a.isCancelled
+                trailing: a.pendingChange != null && !a.isCancelled
+                    ? Chip(
+                        key: Key('request-${a.id}'),
+                        backgroundColor: Colors.amber.withValues(alpha: 0.3),
+                        label: const Text('Decide'),
+                      )
+                    : a.isCancelled
                     ? Chip(
                         key: Key('cancelled-${a.id}'),
                         label: Text(
@@ -360,44 +373,11 @@ class _AgendaList extends StatelessWidget {
                         ),
                       )
                     : const Icon(Icons.chevron_right),
-                onTap: () => showAppointmentDetails(context, a, names[a.patientId]),
+                onTap: () => showAppointmentDetails(context, a, patientName: names[a.patientId]),
               ),
             ),
         ],
       ],
     );
   }
-}
-
-/// Doctor taps an appointment: pre-visit summary (UC7.5) + open the patient.
-void showAppointmentDetails(BuildContext context, Appointment a, String? patientName) {
-  showDialog<void>(
-    context: context,
-    builder: (c) => AlertDialog(
-      key: const Key('appointment-details'),
-      title: Text('${patientName ?? 'Patient'} · ${a.type.label}'),
-      content: SizedBox(
-        width: 520,
-        height: 480,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${dateLabel(a.dateTime)}, ${timeLabel(a.dateTime)} · ${a.status.value}'),
-            const Divider(),
-            Expanded(child: PreVisitSummaryView(appointmentId: a.id)),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(c).pop(), child: const Text('Close')),
-        FilledButton(
-          onPressed: () {
-            Navigator.of(c).pop();
-            context.go('/doctor/patient/${a.patientId}');
-          },
-          child: const Text('Open patient'),
-        ),
-      ],
-    ),
-  );
 }

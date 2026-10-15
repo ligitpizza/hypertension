@@ -226,15 +226,35 @@ class ApiClient {
     required String type,
   }) => _post('/appointments', {'dateTime': dateTime.toUtc().toIso8601String(), 'type': type});
 
-  /// UC7.2: a new time, or cancel.
+  /// UC7.2 / D-55: ask for a new time or a cancellation (with a reason), or withdraw.
   Future<Map<String, dynamic>> changeAppointment(
     String id, {
     DateTime? dateTime,
     bool cancel = false,
+    bool withdraw = false,
+    String? reason,
+    String? note,
   }) => _send('PATCH', '/appointments/$id', {
     if (dateTime != null) 'dateTime': dateTime.toUtc().toIso8601String(),
     if (cancel) 'cancel': true,
+    if (withdraw) 'withdraw': true,
+    'reason': ?reason,
+    if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
   });
+
+  /// D-55: the doctor or admin approves / declines a pending change.
+  Future<Map<String, dynamic>> decideAppointment(
+    String id, {
+    required bool approve,
+    String? note,
+  }) => _post('/appointments/$id/decision', {
+    'approve': approve,
+    if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+  });
+
+  /// D-55: the doctor or admin cancels with a reason.
+  Future<Map<String, dynamic>> staffCancelAppointment(String id, String reason) =>
+      _post('/appointments/$id/staff-cancel', {'reason': reason.trim()});
 
   Future<Map<String, dynamic>> preVisitSummary(String appointmentId) =>
       _get('/appointments/$appointmentId/pre-visit-summary');

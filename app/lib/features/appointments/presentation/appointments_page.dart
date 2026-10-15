@@ -10,6 +10,7 @@ import '../../medications/domain/med_schedule.dart';
 import '../data/appointments_repository.dart';
 import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
+import 'change_reason_dialog.dart';
 
 /// Fig 4.3.6.1 Appointments (FR-7.1, FR-7.4; UC7.1, UC7.2, UC7.5; D-53, D-54).
 /// With [rescheduling], the same screen picks a new time for that appointment.
@@ -64,18 +65,29 @@ class _AppointmentsPageState extends ConsumerState<AppointmentsPage> {
     final repo = ref.read(appointmentsRepositoryProvider);
     final messenger = ScaffoldMessenger.of(context);
     final old = widget.rescheduling;
-    if (old != null &&
-        isLateChange(old.dateTime, ref.read(nowProvider)()) &&
-        !await _confirmLateChange(context, 'reschedule')) {
-      return;
+    (String, String?)? reason;
+    if (old != null) {
+      if (isLateChange(old.dateTime, ref.read(nowProvider)()) &&
+          !await _confirmLateChange(context, 'reschedule')) {
+        return;
+      }
+      if (!mounted) return;
+      reason = await askChangeReason(context, title: 'Why do you need to reschedule?');
+      if (reason == null) return;
     }
     setState(() => _busy = true);
     try {
       if (old != null) {
-        await repo.reschedule(old.id, slot);
+        // D-55: a request; the doctor approves it (the new time is held meanwhile).
+        await repo.requestReschedule(old.id, slot, reason!.$1, note: reason.$2);
         if (!mounted) return;
         messenger.showSnackBar(
-          SnackBar(content: Text('Rescheduled to ${whenLabel(slot, ref.read(nowProvider)())}.')),
+          SnackBar(
+            content: Text(
+              'Request sent: ${whenLabel(slot, ref.read(nowProvider)())}. '
+              'Your doctor will confirm.',
+            ),
+          ),
         );
         context.pop();
       } else {
@@ -259,38 +271,47 @@ Future<bool> _confirmLateChange(BuildContext context, String what) async =>
     ) ??
     false;
 
-/// Cancel with the UC7.2 E1 warning; true when cancelled.
+/// UC7.2 / D-55: a cancellation request with a reason (after the < 24 h warning).
+/// Returns true when a request was sent or the appointment was cancelled.
 Future<bool> cancelAppointment(BuildContext context, WidgetRef ref, Appointment a) async {
-  final late = isLateChange(a.dateTime, ref.read(nowProvider)());
-  final ok = late
-      ? await _confirmLateChange(context, 'cancel')
-      : await showDialog<bool>(
-              context: context,
-              builder: (c) => AlertDialog(
-                title: const Text('Cancel this appointment?'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(c).pop(false),
-                    child: const Text('Keep it'),
-                  ),
-                  FilledButton(
-                    key: const Key('cancel-confirm'),
-                    onPressed: () => Navigator.of(c).pop(true),
-                    child: const Text('Cancel appointment'),
-                  ),
-                ],
-              ),
-            ) ??
-            false;
-  if (!ok || !context.mounted) return false;
+  if (isLateChange(a.dateTime, ref.read(nowProvider)()) &&
+      !await _confirmLateChange(context, 'cancel')) {
+    return false;
+  }
+  if (!context.mounted) return false;
+  final reason = await askChangeReason(context, title: 'Why do you need to cancel?');
+  if (reason == null || !context.mounted) return false;
   final messenger = ScaffoldMessenger.of(context);
   try {
-    await ref.read(appointmentsRepositoryProvider).cancel(a.id);
-    messenger.showSnackBar(const SnackBar(content: Text('Appointment cancelled.')));
+    final cancelledNow = await ref
+        .read(appointmentsRepositoryProvider)
+        .requestCancel(a.id, reason.$1, note: reason.$2);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          cancelledNow
+              ? 'Appointment cancelled.'
+              : 'Cancellation request sent. Your doctor will confirm.',
+        ),
+      ),
+    );
     return true;
-  } catch (_) {
-    messenger.showSnackBar(const SnackBar(content: Text('Could not cancel. Please try again.')));
+  } on ApiException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
     return false;
+  } catch (_) {
+    messenger.showSnackBar(const SnackBar(content: Text('Could not send. Please try again.')));
+    return false;
+  }
+}
+
+Future<void> _withdraw(BuildContext context, WidgetRef ref, Appointment a) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await ref.read(appointmentsRepositoryProvider).withdrawRequest(a.id);
+    messenger.showSnackBar(const SnackBar(content: Text('Request withdrawn.')));
+  } catch (_) {
+    messenger.showSnackBar(const SnackBar(content: Text('Could not withdraw. Please try again.')));
   }
 }
 
@@ -358,27 +379,68 @@ class AppointmentCard extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/appointments/${a.id}/summary'),
             ),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    key: Key('reschedule-${a.id}'),
-                    onPressed: () => context.push('/appointments/reschedule', extra: a),
-                    icon: const Icon(Icons.edit_calendar_outlined),
-                    label: const Text('Reschedule'),
+            if (a.pendingChange != null)
+              _PendingBanner(appointment: a, now: now)
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: Key('reschedule-${a.id}'),
+                      onPressed: () => context.push('/appointments/reschedule', extra: a),
+                      icon: const Icon(Icons.edit_calendar_outlined),
+                      label: const Text('Reschedule'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    key: Key('cancel-${a.id}'),
-                    style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
-                    onPressed: () => cancelAppointment(context, ref, a),
-                    icon: const Icon(Icons.cancel_outlined),
-                    label: const Text('Cancel'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: Key('cancel-${a.id}'),
+                      style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
+                      onPressed: () => cancelAppointment(context, ref, a),
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Cancel'),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// D-55: what the patient asked for, waiting for the doctor; can be withdrawn.
+class _PendingBanner extends ConsumerWidget {
+  const _PendingBanner({required this.appointment, required this.now});
+
+  final Appointment appointment;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = appointment.pendingChange!;
+    final text = p.isCancel
+        ? 'Cancellation requested'
+        : 'Move to ${whenLabel(p.dateTime!, now)} requested';
+    return Card(
+      key: Key('pending-${appointment.id}'),
+      color: Colors.amber.withValues(alpha: 0.2),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$text · waiting for your doctor'),
+            Text('Reason: ${p.reasonText}', style: Theme.of(context).textTheme.bodySmall),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                key: Key('withdraw-${appointment.id}'),
+                onPressed: () => _withdraw(context, ref, appointment),
+                child: const Text('Withdraw request'),
+              ),
             ),
           ],
         ),
@@ -673,7 +735,10 @@ class AppointmentHistoryPage extends ConsumerWidget {
                     key: Key('history-${a.id}'),
                     leading: Icon(Icons.circle, size: 12, color: appointmentColor(a.type)),
                     title: Text(whenLabel(a.dateTime, now)),
-                    subtitle: Text('${a.type.label} · ${a.status.value}'),
+                    subtitle: Text(
+                      '${a.type.label} · ${a.status.value}'
+                      '${a.changeReason == null ? '' : ' · ${a.changeReason}'}',
+                    ),
                     onTap: a.status == AppointmentStatus.cancelled
                         ? null
                         : () => context.push('/appointments/${a.id}/summary'),

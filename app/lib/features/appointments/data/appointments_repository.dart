@@ -109,9 +109,22 @@ abstract interface class AppointmentsRepository {
 
   Future<String> book(DateTime time, AppointmentType type);
 
-  Future<void> reschedule(String id, DateTime time);
+  /// D-55: ask the doctor to move it (the new time is held meanwhile).
+  Future<void> requestReschedule(String id, DateTime time, String reason, {String? note});
 
-  Future<void> cancel(String id);
+  /// D-55: ask the doctor to cancel (applied at once within 2 hours of the visit).
+  /// Returns true when it was cancelled immediately.
+  Future<bool> requestCancel(String id, String reason, {String? note});
+
+  Future<void> withdrawRequest(String id);
+
+  /// D-55 (doctor or admin).
+  Future<void> decide(String id, {required bool approve, String? note});
+
+  Future<void> staffCancel(String id, String reason);
+
+  /// Admin overview: every doctor's appointments in [start, end).
+  Stream<List<Appointment>> allAppointments(DateTime start, DateTime end);
 
   Future<Map<String, dynamic>> preVisitSummary(String appointmentId);
 
@@ -216,9 +229,9 @@ class ApiAppointmentsRepository implements AppointmentsRepository {
   }
 
   @override
-  Future<void> reschedule(String id, DateTime time) async {
+  Future<void> requestReschedule(String id, DateTime time, String reason, {String? note}) async {
     try {
-      await _api.changeAppointment(id, dateTime: time);
+      await _api.changeAppointment(id, dateTime: time, reason: reason, note: note);
     } on ApiException catch (e) {
       if (e.code == 'SLOT_TAKEN') throw const SlotTakenException([]);
       rethrow;
@@ -226,7 +239,27 @@ class ApiAppointmentsRepository implements AppointmentsRepository {
   }
 
   @override
-  Future<void> cancel(String id) => _api.changeAppointment(id, cancel: true);
+  Future<bool> requestCancel(String id, String reason, {String? note}) async =>
+      (await _api.changeAppointment(id, cancel: true, reason: reason, note: note))['status'] ==
+      AppointmentStatus.cancelled.value;
+
+  @override
+  Future<void> withdrawRequest(String id) => _api.changeAppointment(id, withdraw: true);
+
+  @override
+  Future<void> decide(String id, {required bool approve, String? note}) =>
+      _api.decideAppointment(id, approve: approve, note: note);
+
+  @override
+  Future<void> staffCancel(String id, String reason) => _api.staffCancelAppointment(id, reason);
+
+  @override
+  Stream<List<Appointment>> allAppointments(DateTime start, DateTime end) => _appts
+      .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+      .where('dateTime', isLessThan: Timestamp.fromDate(end))
+      .orderBy('dateTime')
+      .snapshots()
+      .map(_list);
 
   @override
   Future<Map<String, dynamic>> preVisitSummary(String appointmentId) =>

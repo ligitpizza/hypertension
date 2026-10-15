@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/appointments/presentation/admin_appointments_page.dart';
 import '../../features/appointments/presentation/admin_assignments_page.dart';
 import '../../features/appointments/presentation/doctor_calendar_page.dart';
 
@@ -182,6 +183,7 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(path: '/admin/users', builder: (_, _) => const CreateStaffPage()),
+          GoRoute(path: '/admin/appointments', builder: (_, _) => const AdminAppointmentsPage()),
           GoRoute(path: '/admin/assignments', builder: (_, _) => const AdminAssignmentsPage()),
         ],
       ),

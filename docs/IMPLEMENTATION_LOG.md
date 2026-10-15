@@ -881,3 +881,18 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   "new patient needs a doctor" request automatically (audited), so every new patient shows
   in the admin's Assignments list; the button stays for older accounts. Dashboard quick
   actions are a 4-column grid that grows by rows, with a new Appointments shortcut.
+- **D-55 doctor-approved changes (Ping's request):** a patient's cancel or reschedule is
+  now a request with a reason (Feeling better, Schedule conflict, Transport problem, Cost,
+  Seeing another doctor, Other; Other needs a note). A reschedule holds the requested time
+  and keeps the original until the doctor decides. Within 2 hours of the visit a
+  cancellation applies at once and a reschedule is refused; an undecided request lapses 2
+  hours before (the cancel is applied by `system`, the reschedule keeps the original time).
+  The patient's card shows an amber "waiting for your doctor" banner with Withdraw. The
+  doctor's calendar colours requested appointments amber, counts "waiting for you", and the
+  shared details dialog (`appointment_details_dialog.dart`) offers Approve, Decline (optional
+  message) and Cancel appointment (reason required). New admin page `/admin/appointments`
+  lists every doctor's appointments by month with status filters (All, Change requested,
+  Booked, Rescheduled, Cancelled, Completed), a doctor filter, the reasons, and the same
+  decide/cancel dialog. No new index: the admin query is a range on `dateTime` only.
+- Tests: backend D-55 suite (`test_appointment_changes.py`); Flutter 10 new widget tests
+  (431 total).
