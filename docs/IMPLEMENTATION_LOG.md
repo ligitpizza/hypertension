@@ -1090,3 +1090,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   "Welcome, family member", "Sign In as Family", a read-only note, and "Create a family
   account", which opens registration with Family preselected (`/register?role=family`).
   Registration and the family screens use the same teal. Tests: Flutter 512.
+- **D-64 real SMS and email (Brevo):** `BrevoSmsClient` (POST /v3/transactionalSMS/send,
+  sender `SMS_SENDER`, Malaysian numbers converted to international form) replaces the fake
+  when INTEGRATIONS_MODE=real, a key and a sender are set; refusals/outages are logged and
+  never block the alert. Linked family members also get an emergency email with the map
+  link. Found that the live backend had never sent real email (INTEGRATIONS_MODE=fake, no
+  key on Cloud Run): new `set-brevo-secret` task stores the key in Secret Manager and
+  deploy-backend switches to real Brevo when that secret exists. Tests: backend 9 new.

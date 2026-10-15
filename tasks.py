@@ -27,6 +27,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
   create-scheduler-jobs   Idempotent Cloud Scheduler jobs calling /internal/jobs/*
   seed-catalog-live       Write the symptom_catalog reference list to the live project
                           (idempotent; also run by deploy-all)
+  set-brevo-secret        One-time (and when the key changes): store EMAIL_API_KEY (Brevo
+                          email + SMS) from backend/.env in Secret Manager for Cloud Run
   set-gemini-secret       One-time (and when the key changes): store GEMINI_API_KEY from
                           backend/.env in Secret Manager for the live AI agent
   build-apk               Release APKs for the patient and family flavors
@@ -65,6 +67,8 @@ JOBS_AUDIENCE = "careflow-internal-jobs"
 TIMEZONE = "Asia/Kuala_Lumpur"
 # Secret Manager secret holding the Gemini key (FR-14.1); created by set-gemini-secret.
 GEMINI_SECRET = "gemini-api-key"
+# Brevo key for real email and SMS (D-22, D-64); created by set-brevo-secret.
+BREVO_SECRET = "brevo-api-key"
 # demo- prefix: emulator-only project, can never reach the cloud (rules tests).
 RULES_TEST_PROJECT = "demo-careflow-rules"
 
@@ -273,11 +277,12 @@ def _secret_exists(name: str) -> bool:
     return code == 0
 
 
-def task_set_gemini_secret() -> None:
-    """Store GEMINI_API_KEY from backend/.env in Secret Manager for Cloud Run (FR-14.1)."""
-    key = _local_env("GEMINI_API_KEY")
+def _store_secret(secret: str, env_key: str, what: str) -> None:
+    """Store [env_key] from backend/.env in Secret Manager as [secret], readable only by the
+    Cloud Run service account. The value goes over stdin and is never printed."""
+    key = _local_env(env_key)
     if not key:
-        sys.exit("GEMINI_API_KEY is empty in backend/.env. Add the key there first.")
+        sys.exit(f"{env_key} is empty in backend/.env. Add it there first.")
     gcloud = exe("gcloud")
     code, number = capture(
         [gcloud, "projects", "describe", PROJECT_ID, "--format=value(projectNumber)"]
@@ -293,12 +298,12 @@ def task_set_gemini_secret() -> None:
         "--project",
         PROJECT_ID,
     ]
-    exists = _secret_exists(GEMINI_SECRET) if ASSUME_YES else False
+    exists = _secret_exists(secret) if ASSUME_YES else False
     create = [
         gcloud,
         "secrets",
         "create",
-        GEMINI_SECRET,
+        secret,
         "--project",
         PROJECT_ID,
         "--replication-policy=user-managed",
@@ -309,7 +314,7 @@ def task_set_gemini_secret() -> None:
         "secrets",
         "versions",
         "add",
-        GEMINI_SECRET,
+        secret,
         "--project",
         PROJECT_ID,
         "--data-file=-",
@@ -318,36 +323,49 @@ def task_set_gemini_secret() -> None:
         gcloud,
         "secrets",
         "add-iam-policy-binding",
-        GEMINI_SECRET,
+        secret,
         "--project",
         PROJECT_ID,
         f"--member=serviceAccount:{runtime_sa}",
         "--role=roles/secretmanager.secretAccessor",
     ]
     confirm_cloud(
-        "enable Secret Manager and store the Gemini key from backend/.env as secret "
-        f"'{GEMINI_SECRET}' ({REGION}), readable only by the Cloud Run service account "
+        f"enable Secret Manager and store the {what} from backend/.env as secret "
+        f"'{secret}' ({REGION}), readable only by the Cloud Run service account "
         "(the key is passed on stdin and never printed)",
         [enable, create, add_version + ["   <- key from backend/.env on stdin"], grant],
     )
     run(enable)
-    if not exists and not _secret_exists(GEMINI_SECRET):
+    if not exists and not _secret_exists(secret):
         run(create)
     print(f"\n> {' '.join(add_version)}   (key from backend/.env on stdin)", flush=True)
     result = subprocess.run(add_version, input=key, text=True, check=False)
     if result.returncode != 0:
         sys.exit(result.returncode)
     run(grant)
-    print(
-        "\nDone. Now run deploy-backend (or deploy-all) so Cloud Run uses the secret."
-    )
+    print("\nDone. Now run deploy-backend (or deploy-all) so Cloud Run uses the secret.")
+
+
+def task_set_gemini_secret() -> None:
+    """Store GEMINI_API_KEY from backend/.env in Secret Manager for Cloud Run (FR-14.1)."""
+    _store_secret(GEMINI_SECRET, "GEMINI_API_KEY", "Gemini key")
+
+
+def task_set_brevo_secret() -> None:
+    """Store EMAIL_API_KEY (Brevo: email and SMS) for Cloud Run (D-22, D-64)."""
+    _store_secret(BREVO_SECRET, "EMAIL_API_KEY", "Brevo API key")
 
 
 def task_deploy_backend() -> None:
+    brevo = _secret_exists(BREVO_SECRET)
     env_vars = ",".join(
         [
             "APP_ENV=prod",
-            "INTEGRATIONS_MODE=fake",
+            # D-64: real Brevo email/SMS once the key is in Secret Manager.
+            f"INTEGRATIONS_MODE={'real' if brevo else 'fake'}",
+            f"EMAIL_FROM={_local_env('EMAIL_FROM')}",
+            f"EMAIL_FROM_NAME={_local_env('EMAIL_FROM_NAME') or 'CareFlow'}",
+            f"SMS_SENDER={_local_env('SMS_SENDER')}",
             "INTERNAL_JOBS_AUTH=oidc",
             f"JOBS_OIDC_AUDIENCE={JOBS_AUDIENCE}",
             f"JOBS_SERVICE_ACCOUNT={SCHEDULER_SA}",
@@ -384,14 +402,24 @@ def task_deploy_backend() -> None:
         "--set-env-vars",
         env_vars,
     ]
+    # The keys never appear in the command or the service settings, only references.
+    secrets = []
     if _secret_exists(GEMINI_SECRET):
-        # The key never appears in the command or the service settings, only a reference.
-        cmd += ["--set-secrets", f"GEMINI_API_KEY={GEMINI_SECRET}:latest"]
+        secrets.append(f"GEMINI_API_KEY={GEMINI_SECRET}:latest")
     else:
         print(
             "Note: no Gemini secret yet, so the live AI agent uses offline replies. "
             "Run: python tasks.py set-gemini-secret --yes"
         )
+    if brevo:
+        secrets.append(f"EMAIL_API_KEY={BREVO_SECRET}:latest")
+    else:
+        print(
+            "Note: no Brevo secret yet, so live email and SMS are only logged. "
+            "Run: python tasks.py set-brevo-secret --yes"
+        )
+    if secrets:
+        cmd += ["--set-secrets", ",".join(secrets)]
     confirm_cloud(
         "deploy FastAPI to Cloud Run (Cloud Build builds backend/Dockerfile)", [cmd]
     )
@@ -930,6 +958,7 @@ TASKS = {
     "set-storage-cors": task_set_storage_cors,
     "create-scheduler-jobs": task_create_scheduler_jobs,
     "set-gemini-secret": task_set_gemini_secret,
+    "set-brevo-secret": task_set_brevo_secret,
     "seed-catalog-live": task_seed_catalog_live,
     "build-apk": task_build_apk,
     "backend-url": task_backend_url,

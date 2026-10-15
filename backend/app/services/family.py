@@ -6,6 +6,8 @@ linked member with the phone's GPS position, an urgent push, and a (simulated) S
 patient's emergency contact.
 """
 
+import html
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
@@ -16,10 +18,13 @@ from google.cloud import firestore as gfs
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.enums import Collection, FamilyLinkStatus, UserRole
 from app.core.firebase import get_firestore
+from app.integrations.email import EmailClient, EmailMessage, get_email_client
 from app.integrations.push import PushMessage
 from app.integrations.sms import SmsClient, get_sms_client
 from app.services.notifications import Notifier, get_notifier
 from app.services.settings import parse_profile_field
+
+log = logging.getLogger("careflow.family")
 
 # A new reading-based alert is not repeated while one is still fresh (SOS always sends).
 REPEAT_WINDOW = timedelta(minutes=30)
@@ -169,6 +174,7 @@ class EmergencyAlerts:
     notifier: Notifier
     sms: SmsClient
     audit: AuditLogger
+    email: EmailClient | None = None  # D-64: emergency email to each family member
 
     def raise_alerts(
         self,
@@ -221,6 +227,7 @@ class EmergencyAlerts:
                 data["patientPhone"] = phone
             alert_id = self.repo.create_alert(data)
             created.append(alert_id)
+            self._email_member(member, name, what, location)
             message = push or PushMessage(f"Emergency: {name}", "", {})
             self.notifier.notify(
                 member,
@@ -254,6 +261,44 @@ class EmergencyAlerts:
         )
         return created
 
+    def _email_member(
+        self, member_id: str, name: str, what: str, location: dict[str, float] | None
+    ) -> None:
+        member = self.repo.user(member_id) or {}
+        address = member.get("email")
+        if self.email is None or not address:
+            return
+        link = maps_link(location)
+        text = (
+            f"{name} {what}.\n\nLast known location: {link}\n\n"
+            "Contact them now. If they are unwell or do not answer, call 999.\n"
+            "Open the CareFlow app (Family) to see the alert and the map.\n"
+        )
+        safe = html.escape(name)
+        body = (
+            f"<p><b>{safe} {html.escape(what)}.</b></p>"
+            + (
+                f'<p><a href="{html.escape(link, quote=True)}">Open their location in Google Maps'
+                "</a></p>"
+                if location
+                else "<p>Their phone did not share a location.</p>"
+            )
+            + "<p>Contact them now. If they are unwell or do not answer, call <b>999</b>.</p>"
+            "<p>Open the CareFlow app (Family) to see the alert and the map.</p>"
+        )
+        try:
+            self.email.send(
+                EmailMessage(
+                    to_email=str(address),
+                    to_name=str(member.get("name") or "Family member"),
+                    subject=f"CareFlow emergency: {name}",
+                    text=text,
+                    html=body,
+                )
+            )
+        except Exception:  # email must never stop the alert
+            log.exception("Emergency email to %s failed", member_id)
+
     def update_location(self, patient_id: str, location: dict[str, float], now: datetime) -> int:
         """D-62: while an alert is open, the patient app refreshes the position."""
         updated = 0
@@ -278,8 +323,9 @@ def get_emergency_alerts(
     notifier: Notifier = Depends(get_notifier),
     sms: SmsClient = Depends(get_sms_client),
     audit: AuditLogger = Depends(get_audit_logger),
+    email: EmailClient = Depends(get_email_client),
 ) -> EmergencyAlerts:
-    return EmergencyAlerts(repo, notifier, sms, audit)
+    return EmergencyAlerts(repo, notifier, sms, audit, email)
 
 
 def now_utc() -> datetime:

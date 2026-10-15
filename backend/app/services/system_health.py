@@ -14,6 +14,7 @@ from typing import Any
 from app.core.config import Settings, get_settings
 from app.core.enums import Collection
 from app.core.firebase import get_firestore
+from app.integrations.sms import sms_is_real
 from app.ml.risk_model import RiskModel, get_risk_model
 from app.services.audit_view import AuditReader, get_audit_reader
 
@@ -149,7 +150,13 @@ def check(probe: Probe, reader: AuditReader, settings: Settings, now: datetime) 
         "operational" if settings.gemini_api_key else "simulated",
         note="Gemini" if settings.gemini_api_key else "Offline replies (no Gemini key).",
     )
-    add("sms", "SMS (family emergencies)", "simulated", note="Messages are logged (D-62).")
+    live_sms = sms_is_real(settings)
+    add(
+        "sms",
+        "SMS (family emergencies)",
+        "operational" if live_sms else "simulated",
+        note=f"Brevo SMS as {settings.sms_sender}" if live_sms else "Messages are logged.",
+    )
     for key, name in (("stripe", "Stripe payments"), ("grab", "Grab delivery API")):
         add(key, name, "simulated", note="Test-mode adapter; ordering arrives with Module 13.")
 
