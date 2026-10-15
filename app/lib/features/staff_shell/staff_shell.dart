@@ -30,6 +30,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     StaffDestination('/admin/appointments', 'Appointments', Icons.event_note_outlined),
     StaffDestination('/admin/assignments', 'Assignments', Icons.assignment_ind_outlined),
     StaffDestination('/admin/audit-logs', 'Audit logs', Icons.policy_outlined),
+    StaffDestination('/admin/system-health', 'System health', Icons.health_and_safety_outlined),
   ],
   _ => const [],
 };

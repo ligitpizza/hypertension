@@ -62,4 +62,12 @@ class FakeAdminRepository implements AdminRepository {
     calls.add('csv:${query.action}');
     return Uint8List.fromList('timestamp,userId'.codeUnits);
   }
+
+  SystemHealth health = const SystemHealth(overall: 'operational', services: []);
+
+  @override
+  Future<SystemHealth> systemHealth() async {
+    calls.add('health');
+    return health;
+  }
 }

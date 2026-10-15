@@ -152,6 +152,63 @@ class AuditQuery {
   int get hashCode => Object.hash(from, to, action, text, offset, limit);
 }
 
+/// One service on System Health (Fig 4.3.14.7; D-59).
+class ServiceHealth {
+  const ServiceHealth({
+    required this.key,
+    required this.name,
+    required this.status,
+    this.latencyMs,
+    this.uptime,
+    this.note = '',
+  });
+
+  final String key;
+  final String name;
+
+  /// operational | degraded | down | simulated | not_configured
+  final String status;
+  final double? latencyMs;
+  final double? uptime;
+  final String note;
+
+  factory ServiceHealth.fromJson(Map<String, dynamic> j) => ServiceHealth(
+    key: '${j['key']}',
+    name: j['name'] as String? ?? '',
+    status: j['status'] as String? ?? 'down',
+    latencyMs: (j['latencyMs'] as num?)?.toDouble(),
+    uptime: (j['uptime'] as num?)?.toDouble(),
+    note: j['note'] as String? ?? '',
+  );
+}
+
+class SystemHealth {
+  const SystemHealth({
+    required this.overall,
+    required this.services,
+    this.checkedAt,
+    this.uptime,
+    this.averageLatencyMs,
+  });
+
+  final String overall;
+  final List<ServiceHealth> services;
+  final DateTime? checkedAt;
+  final double? uptime;
+  final double? averageLatencyMs;
+
+  factory SystemHealth.fromJson(Map<String, dynamic> j) => SystemHealth(
+    overall: j['overall'] as String? ?? 'down',
+    services: [
+      for (final s in (j['services'] as List? ?? const []).cast<Map<dynamic, dynamic>>())
+        ServiceHealth.fromJson(Map<String, dynamic>.from(s)),
+    ],
+    checkedAt: j['checkedAt'] == null ? null : DateTime.parse('${j['checkedAt']}'),
+    uptime: (j['uptime'] as num?)?.toDouble(),
+    averageLatencyMs: (j['averageLatencyMs'] as num?)?.toDouble(),
+  );
+}
+
 /// Module 11 admin data, all through FastAPI (aggregation and audit logging live there).
 abstract interface class AdminRepository {
   Future<List<AdminUser>> users({UserRole? role, String? query});
@@ -168,6 +225,8 @@ abstract interface class AdminRepository {
   Future<AuditPage> auditLogs(AuditQuery query);
 
   Future<Uint8List> auditCsv(AuditQuery query);
+
+  Future<SystemHealth> systemHealth();
 }
 
 class ApiAdminRepository implements AdminRepository {
@@ -219,4 +278,8 @@ class ApiAdminRepository implements AdminRepository {
   @override
   Future<Uint8List> auditCsv(AuditQuery query) async =>
       Uint8List.fromList(await _api.adminAuditCsv(query.toQuery(paged: false)));
+
+  @override
+  Future<SystemHealth> systemHealth() async =>
+      SystemHealth.fromJson(await _api.adminSystemHealth());
 }

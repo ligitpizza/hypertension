@@ -1,8 +1,8 @@
-"""Module 11 admin panel: audit logs (D-59). System health, analytics and the
-hospital-wide report are added alongside.
+"""Module 11 admin panel (D-59).
 
 GET /admin/audit-logs        filter by date range, action, user, text; summary counts
 GET /admin/audit-logs.csv    the same rows as CSV (FR-11.3); the export itself is audited
+GET /admin/system-health     live check and latency per service, uptime (FR-11.3)
 """
 
 from datetime import UTC, date, datetime, time, timedelta
@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
+from app.core.config import Settings, get_settings
 from app.core.enums import UserRole
 from app.core.errors import ApiError
 from app.services.audit_view import (
@@ -21,6 +22,7 @@ from app.services.audit_view import (
     summarise,
     to_csv,
 )
+from app.services.system_health import Probe, get_probe, system_health
 from app.services.users import UserRepository, get_user_repository
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -65,6 +67,8 @@ def _rows(
     for log_id, e in reader.between(lo, hi):
         if action and e.get("action") != action:
             continue
+        if not action and e.get("action") == "JOB_HEARTBEAT":
+            continue  # 96 a day from the sweep; shown only when filtered for
         if user_id and e.get("userId") != user_id:
             continue
         who = people.get(str(e.get("userId")), {})
@@ -139,3 +143,14 @@ def audit_logs_csv(
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="careflow-audit-log.csv"'},
     )
+
+
+@router.get("/system-health")
+def get_system_health(
+    _: CurrentUser = Depends(admin_only),
+    probe: Probe = Depends(get_probe),
+    reader: AuditReader = Depends(get_audit_reader),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """Fig 4.3.14.7: API, database, ML model, push, email, AI agent, Stripe, Grab."""
+    return system_health(probe, reader, settings)

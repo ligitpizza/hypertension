@@ -21,3 +21,9 @@ final auditLogsProvider = FutureProvider.autoDispose.family<AuditPage, AuditQuer
   (ref, q) => ref.watch(adminRepositoryProvider).auditLogs(q),
   retry: _noRetry,
 );
+
+/// Fig 4.3.14.7; refreshed by invalidating.
+final systemHealthProvider = FutureProvider.autoDispose<SystemHealth>(
+  (ref) => ref.watch(adminRepositoryProvider).systemHealth(),
+  retry: _noRetry,
+);

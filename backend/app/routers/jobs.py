@@ -95,6 +95,7 @@ def run_escalation(
     job: UnansweredAlertJob = Depends(get_unanswered_alert_job),
     meds: MedicationJob = Depends(get_medication_job),
     appointments: AppointmentJob = Depends(get_appointment_job),
+    audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
     """Every 15 minutes: D-37 unanswered-alert escalation, and D-43 medication sweep
     (missed doses, backup reminders) so no extra Cloud Scheduler job is needed."""
@@ -109,6 +110,13 @@ def run_escalation(
     except Exception:
         log.exception("Appointment sweep failed")
         result["appointmentSweep"] = "failed"
+    # D-59: one heartbeat per run; System Health counts them for uptime.
+    audit.log(
+        user_id=SYSTEM_SCHEDULER_USER,
+        action="JOB_HEARTBEAT",
+        details="15-minute sweep ran.",
+        target_type="sweep",
+    )
     return result
 
 

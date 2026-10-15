@@ -113,6 +113,9 @@ class ApiClient {
   Future<List<int>> adminAuditCsv(Map<String, dynamic> query) =>
       _bytes('/admin/audit-logs.csv', query);
 
+  /// Fig 4.3.14.7: live check per service.
+  Future<Map<String, dynamic>> adminSystemHealth() => _getQuery('/admin/system-health', const {});
+
   /// UC11.1: edit name / specialty / caseload limit, or (de)activate.
   Future<Map<String, dynamic>> updateUser(String uid, Map<String, dynamic> body) =>
       _send('PATCH', '/admin/users/$uid', body);
