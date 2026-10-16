@@ -83,7 +83,7 @@ void main() {
   });
 
   group('Fig 4.3.14.5 hospital analytics', () {
-    tallTest('risk distribution, trend, consultations, adherence; delivery waits', (t) async {
+    tallTest('risk distribution, trend, consultations, adherence, delivery', (t) async {
       await t.pumpWidget(host(const HospitalAnalyticsPage()));
       await t.pumpAndSettle();
       expect(
@@ -96,7 +96,38 @@ void main() {
       expect(find.byKey(const Key('panel-risk-trend')), findsOneWidget);
       expect(find.text('Oct'), findsWidgets);
       expect(find.text('87%'), findsOneWidget);
-      expect(find.textContaining('Module 13'), findsOneWidget);
+      // D-72: no orders in the fixture.
+      expect(find.text('No medication orders in this period.'), findsOneWidget);
+    });
+
+    tallTest('D-72 delivery panel shows orders, success rate and courier fee', (t) async {
+      final h = repo.hospital!;
+      repo.hospital = HospitalAnalytics(
+        activePatients: h.activePatients,
+        risk: h.risk,
+        riskTrend: h.riskTrend,
+        consultations: h.consultations,
+        adherence: h.adherence,
+        adherenceDaily: h.adherenceDaily,
+        delivery: const DeliveryStats(
+          orders: 6,
+          homeDelivery: 4,
+          selfCollection: 2,
+          paid: 5,
+          delivered: 3,
+          collected: 1,
+          inProgress: 1,
+          failed: 1,
+          revenue: 210.4,
+          averageCourierFee: 12.5,
+        ),
+      );
+      await t.pumpWidget(host(const HospitalAnalyticsPage()));
+      await t.pumpAndSettle();
+      expect(t.widget<Text>(find.byKey(const Key('delivery-rate'))).data, '75%');
+      expect(find.text('4 / 2'), findsOneWidget);
+      expect(find.text('RM210.40'), findsOneWidget);
+      expect(find.text('RM12.50'), findsOneWidget);
     });
 
     tallTest('UC11.5 generate the report for a chosen period', (t) async {

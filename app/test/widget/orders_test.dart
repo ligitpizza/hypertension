@@ -579,6 +579,9 @@ void main() {
       await t.pumpWidget(host('/admin/deliveries'));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('oos-flags')), findsOneWidget);
+      // D-72: read-only courier card.
+      expect(find.text('Delivery partner: Lalamove'), findsOneWidget);
+      expect(find.text('Sandbox connected'), findsOneWidget);
       expect(find.textContaining('Ali: Amlodipine'), findsOneWidget);
       expect(find.text('GRB-1'), findsOneWidget);
       await t.ensureVisible(find.byKey(const Key('simulate-fail-$id')));

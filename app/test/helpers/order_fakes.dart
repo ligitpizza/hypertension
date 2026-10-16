@@ -243,6 +243,19 @@ class FakeOrdersRepository implements OrdersRepository {
   @override
   Future<DeliveryOverview> deliveries() async => overview;
 
+  Map<String, dynamic> courier = const {
+    'provider': 'Lalamove',
+    'name': 'Lalamove (sandbox, driver simulated)',
+    'simulated': false,
+    'pickupAddress': '77, Lorong Lembah Permai Tiga, Tanjung Bungah',
+    'pickupPhone': '+60143997403',
+    'webhookUrl': 'https://hypertension-dd85f.web.app/api/v1/webhooks/lalamove',
+    'keysConfigured': true,
+  };
+
+  @override
+  Future<Map<String, dynamic>> courierSettings() async => courier;
+
   @override
   Future<void> dispatch(String id) async => calls.add('dispatch:$id');
 

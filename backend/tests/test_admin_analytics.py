@@ -86,7 +86,7 @@ def test_fr11_4_hospital_analytics(client: TestClient) -> None:
     assert sum(c["completed"] for c in months.values()) == 1
     assert sum(c["noShow"] for c in months.values()) == 1
     assert body["adherence"]["current"] == 80.0
-    assert body["delivery"] is None  # Module 13
+    assert body["delivery"]["orders"] == 0  # D-72: no orders in the fixture
 
 
 def test_monthly_trend_counts_each_patient_once_per_month(

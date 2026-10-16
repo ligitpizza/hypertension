@@ -81,6 +81,9 @@ abstract interface class OrdersRepository {
   Future<void> saveAddress(String address, {double? lat, double? lng});
 
   Future<DeliveryOverview> deliveries();
+
+  /// D-72: the courier as configured on the server (read-only).
+  Future<Map<String, dynamic>> courierSettings();
   Future<void> dispatch(String id);
   Future<void> simulateFailure(String id);
 }
@@ -315,6 +318,9 @@ class ApiOrdersRepository implements OrdersRepository {
       simulated: d['simulated'] == true,
     );
   }
+
+  @override
+  Future<Map<String, dynamic>> courierSettings() => _api.adminCourier();
 
   @override
   Future<void> dispatch(String id) => _api.adminDispatch(id);

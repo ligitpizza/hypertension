@@ -126,6 +126,11 @@ class FakeDoseLogs implements MedicationsRepository {
 final doseLogs = FakeDoseLogs();
 
 class FakePortalRepository implements PortalRepository {
+  Map<String, dynamic> delivery = const {'method': null, 'orders': 0};
+
+  @override
+  Future<Map<String, dynamic>> deliveryPreference(String patientId) async => delivery;
+
   final consolidated = <List<Map<String, dynamic>>>[];
 
   /// D-69: same interaction behaviour as [issuePrescription] (records rxCalls too).
@@ -614,6 +619,21 @@ void main() {
       await t.tap(find.byKey(const Key('rx-delete-confirm')));
       await t.pumpAndSettle();
       expect(repo.deletedRx, ['a']);
+    });
+
+    tallTest('D-72 the doctor sees the medication delivery preference', (t) async {
+      repo.delivery = const {
+        'method': 'home_delivery',
+        'latestStatus': 'ready_for_delivery',
+        'orders': 2,
+      };
+      addTearDown(() => repo.delivery = const {'method': null, 'orders': 0});
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Medications'));
+      await t.pumpAndSettle();
+      expect(find.text('Medication delivery: Home delivery'), findsOneWidget);
+      expect(find.text('2 order(s) · latest ready for delivery'), findsOneWidget);
     });
 
     tallTest('UC13.1 the issuing doctor makes a prescription repeat monthly', (t) async {

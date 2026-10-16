@@ -65,7 +65,11 @@ class ProactiveUpdate {
     this.riskLevel,
     this.actions = const [],
     this.fallback = false,
+    this.emergencyContactPhone,
   });
+
+  /// D-72: dialled by "Call emergency contact".
+  final String? emergencyContactPhone;
 
   final String text;
   final RiskLevel? riskLevel;
@@ -80,6 +84,7 @@ class ProactiveUpdate {
         ?AgentAction.tryParse(a as String),
     ],
     fallback: j['fallback'] as bool? ?? false,
+    emergencyContactPhone: j['emergencyContactPhone'] as String?,
   );
 }
 

@@ -19,6 +19,11 @@ from app.integrations.gemini import LlmClient, get_llm_client
 from app.services.agent import HealthAgent, NoReadingError
 from app.services.agent_context import AgentDataRepository, get_agent_data_repository
 from app.services.escalation import Escalator, get_escalator
+from app.services.settings import (
+    SettingsRepository,
+    get_settings_repository,
+    parse_profile_field,
+)
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -71,6 +76,7 @@ def proactive(
     user: CurrentUser = Depends(require_roles(UserRole.PATIENT)),
     agent: HealthAgent = Depends(get_health_agent),
     limiter: RateLimiter = Depends(get_agent_limiter),
+    profiles: SettingsRepository = Depends(get_settings_repository),
 ) -> dict[str, Any]:
     _limit(user, limiter)
     try:
@@ -82,4 +88,16 @@ def proactive(
         "riskLevel": result.risk_level.value if result.risk_level else None,
         "actions": result.actions,
         "fallback": result.fallback,
+        # D-72: the Critical "Call emergency contact" button dials this number.
+        "emergencyContactPhone": _emergency_phone(profiles, user.uid),
     }
+
+
+def _emergency_phone(profiles: SettingsRepository, uid: str) -> str | None:
+    try:
+        personal = parse_profile_field((profiles.health_profile(uid) or {}).get("personalInfo"))
+    except Exception:
+        return None
+    contact = personal.get("emergencyContact")
+    phone = contact.get("phone") if isinstance(contact, dict) else None
+    return str(phone) if phone else None

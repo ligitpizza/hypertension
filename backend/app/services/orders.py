@@ -53,6 +53,7 @@ log = logging.getLogger("careflow.orders")
 DELIVERY_FEE = 5.0  # RM, flat (D-66)
 REMINDER_AFTER = timedelta(hours=48)  # UC13.2 E1
 DISPATCH_ATTEMPTS = 2  # UC13.4 E1: retry once before asking the patient
+PREPARATION_TIME = timedelta(hours=2)  # D-72: estimated ready time after payment
 
 SELF_COLLECTION = "self_collection"
 HOME_DELIVERY = "home_delivery"
@@ -160,6 +161,10 @@ def order_view(
         "confirmedAt": _iso(o.get("confirmedAt")),
         "paidAt": _iso(o.get("paidAt")),
         "readyAt": _iso(o.get("readyAt")),
+        # D-72: the pharmacy's usual preparation time after payment.
+        "estimatedReadyAt": _iso(o["paidAt"] + PREPARATION_TIME)
+        if isinstance(o.get("paidAt"), datetime)
+        else None,
         "dispatchedAt": _iso(o.get("dispatchedAt")),
         "etaAt": _iso(o.get("etaAt")),
         "receiptRecordId": o.get("receiptRecordId"),

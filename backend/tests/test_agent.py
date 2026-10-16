@@ -289,6 +289,7 @@ def test_uc2_7_low_risk_has_no_action_buttons(
         "riskLevel": "low",
         "actions": [],
         "fallback": False,
+        "emergencyContactPhone": None,  # D-72
     }
     assert "118/76" in llm.calls[0][2]
     assert agent_repo.messages[-1] == {"patientId": P, "role": "agent", "text": body["text"]}

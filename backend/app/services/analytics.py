@@ -132,6 +132,34 @@ def _adherence(logs: Iterable[dict[str, Any]]) -> float | None:
 # ---------------- hospital analytics (Fig 4.3.14.5) ----------------
 
 
+def delivery_stats(orders: list[dict[str, Any]]) -> dict[str, Any]:
+    """D-72: medication orders by stage and method, paid revenue and courier fees."""
+    stages = Counter(str(o.get("fulfilmentStatus")) for o in orders)
+    home = [o for o in orders if o.get("method") == "home_delivery"]
+    paid = [o for o in orders if o.get("paymentStatus") == "paid"]
+    fees = [float(o.get("deliveryFee") or 0) for o in home if o.get("deliveryFee")]
+    revenue = sum(float(o.get("amount") or 0) + float(o.get("deliveryFee") or 0) for o in paid)
+    return {
+        "orders": len(orders),
+        "homeDelivery": len(home),
+        "selfCollection": sum(1 for o in orders if o.get("method") == "self_collection"),
+        "paid": len(paid),
+        "delivered": stages.get("delivered", 0),
+        "collected": stages.get("collected", 0),
+        "inProgress": sum(
+            stages.get(s, 0)
+            for s in ("preparing", "ready_for_collection", "ready_for_delivery", "out_of_stock")
+        ),
+        "failed": stages.get("failed", 0),
+        "outOfStock": stages.get("out_of_stock", 0),
+        "awaitingPatient": sum(
+            stages.get(s, 0) for s in ("awaiting_confirmation", "awaiting_payment")
+        ),
+        "revenue": round(revenue, 2),
+        "averageCourierFee": round(sum(fees) / len(fees), 2) if fees else None,
+    }
+
+
 def hospital(src: AnalyticsSource, now: datetime, months: int = 6) -> dict[str, Any]:
     users = src.users()
     active = _active_patients(users)
@@ -187,7 +215,10 @@ def hospital(src: AnalyticsSource, now: datetime, months: int = 6) -> dict[str, 
         "riskTrend": trend,
         "consultations": consultations,
         "adherence": {"current": _adherence(logs), "daily": adherence_days},
-        "delivery": None,  # D-59: arrives with Module 13
+        # D-72: orders created in the charted months.
+        "delivery": delivery_stats(
+            src.in_range(Collection.MEDICATION_ORDERS, "createdAt", starts[0], soon)
+        ),
     }
 
 
@@ -291,13 +322,16 @@ def report_data(
     triage = src.in_range(Collection.TRIAGE_OUTCOMES, "generatedAt", start, end)
     messages = src.in_range(Collection.MESSAGES, "sentAt", start, end)
     shared = src.in_range(Collection.HEALTH_RECORDS, "sharedAt", start, end)
+    orders = src.in_range(Collection.MEDICATION_ORDERS, "createdAt", start, end)
     events = [
         e
         for e in audit_entries
         if isinstance(e.get("timestamp"), datetime) and start <= e["timestamp"] < end
     ]
     logins = [e for e in events if e.get("action") == "LOGIN"]
-    if not any([new_patients, readings, scores, appts, logs, alerts, triage, messages, logins]):
+    if not any(
+        [new_patients, readings, scores, appts, logs, alerts, triage, messages, logins, orders]
+    ):
         return None
 
     statuses = Counter(a.get("status") for a in appts)
@@ -337,6 +371,7 @@ def report_data(
             "alertsResolved": sum(1 for a in alerts if a.get("status") != "open"),
             "triage": dict(Counter(t.get("outcome") for t in triage)),
         },
+        "delivery": delivery_stats(orders),  # D-72
         "usage": {
             "activeClinicians": len(clinicians),
             "messagesSent": len(messages),
@@ -409,8 +444,26 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
         + (", ".join(f"{str(k).replace('_', ' ')} {v}" for k, v in tri.items()) or "none")
     )
 
+    d = data.get("delivery")
+    if d:
+        pdf.ln(2)
+        line("4. Medication orders and delivery", 13, "B")
+        line(
+            f"Orders: {d['orders']} (home delivery {d['homeDelivery']}, self-collection "
+            f"{d['selfCollection']}); paid {d['paid']}"
+        )
+        line(
+            f"Delivered {d['delivered']}, collected {d['collected']}, in progress "
+            f"{d['inProgress']}, failed {d['failed']}, out of stock {d['outOfStock']}"
+        )
+        fee = d["averageCourierFee"]
+        line(
+            f"Paid revenue: RM{d['revenue']:.2f}; average courier fee: "
+            + ("-" if fee is None else f"RM{fee:.2f}")
+        )
+
     pdf.ln(2)
-    line("4. Platform usage", 13, "B")
+    line(f"{5 if d else 4}. Platform usage", 13, "B")
     line(f"Active clinicians: {u['activeClinicians']}")
     line(f"Messages sent: {u['messagesSent']} (contents are end-to-end encrypted)")
     line(f"Health records shared with doctors: {u['recordsShared']}")

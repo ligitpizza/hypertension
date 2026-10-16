@@ -615,6 +615,13 @@ class ApiClient {
   Future<Map<String, dynamic>> ordersOverview({String group = 'all', String query = ''}) =>
       _getQuery('/orders-overview', {'group': group, if (query.isNotEmpty) 'q': query});
 
+  /// D-72 (M8): the patient's delivery preference for their doctor.
+  Future<Map<String, dynamic>> deliveryPreference(String patientId) =>
+      _get('/provider/patients/$patientId/delivery');
+
+  /// D-72 (M11): the courier as configured on the server (read-only).
+  Future<Map<String, dynamic>> adminCourier() => _get('/admin/courier');
+
   /// D-70: admin only.
   Future<void> deleteStockItem(String id) => _send('DELETE', '/pharmacy/stock/$id', null);
 

@@ -1036,3 +1036,29 @@ def delete_stock(
         target_type=Collection.MEDICATION_STOCK.value,
         target_id=stock_id,
     )
+
+
+# ---------------- D-72: courier settings (read-only) ----------------
+
+
+@router.get("/admin/courier")
+def courier_settings(
+    _: CurrentUser = Depends(admin_only),
+    svc: OrderService = Depends(get_order_service),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """The delivery partner as configured on the server (keys stay in Secret Manager)."""
+    courier = svc.courier
+    return {
+        "provider": courier.brand,
+        "name": courier.name,
+        "simulated": courier.simulated,
+        "sandbox": not courier.simulated,
+        "pickupAddress": settings.pharmacy_address or None,
+        "pickupLat": settings.pharmacy_lat,
+        "pickupLng": settings.pharmacy_lng,
+        "pickupPhone": settings.pharmacy_phone or None,
+        "webhookUrl": f"{settings.public_base_url}/api/v1/webhooks/"
+        + ("grab" if courier.brand == "Grab" else "lalamove"),
+        "keysConfigured": not courier.simulated,
+    }

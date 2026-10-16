@@ -147,16 +147,17 @@ class HospitalAnalyticsPage extends ConsumerWidget {
                 ),
                 child: _Adherence(days: h.adherenceDaily),
               ),
-              const _Panel(
-                key: Key('panel-delivery'),
+              // D-72: medication orders and delivery in the charted months.
+              _Panel(
+                key: const Key('panel-delivery'),
                 title: 'Delivery success rate',
                 subtitle: 'Pharmacy to patient home',
-                child: Center(
-                  child: Text(
-                    'Available once medication ordering and delivery (Module 13) is live.',
-                    textAlign: TextAlign.center,
-                  ),
+                trailing: Text(
+                  h.delivery?.successRate == null ? '—' : '${h.delivery!.successRate!.round()}%',
+                  key: const Key('delivery-rate'),
+                  style: theme.textTheme.headlineSmall?.copyWith(color: Colors.teal.shade700),
                 ),
+                child: _Delivery(stats: h.delivery),
               ),
             ],
           ),
@@ -429,6 +430,42 @@ class _Adherence extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _Delivery extends StatelessWidget {
+  const _Delivery({required this.stats});
+  final DeliveryStats? stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = stats;
+    if (d == null || d.orders == 0) {
+      return const Center(child: Text('No medication orders in this period.'));
+    }
+    final fee = d.averageCourierFee;
+    Widget row(String label, String value) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+    return ListView(
+      key: const Key('delivery-stats'),
+      children: [
+        row('Orders', '${d.orders} (paid ${d.paid})'),
+        row('Home delivery / self-collection', '${d.homeDelivery} / ${d.selfCollection}'),
+        row('Delivered', '${d.delivered}'),
+        row('Collected', '${d.collected}'),
+        row('In progress', '${d.inProgress}'),
+        row('Failed deliveries', '${d.failed}'),
+        row('Paid revenue', 'RM${d.revenue.toStringAsFixed(2)}'),
+        row('Average courier fee', fee == null ? '—' : 'RM${fee.toStringAsFixed(2)}'),
+      ],
     );
   }
 }

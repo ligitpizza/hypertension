@@ -148,9 +148,11 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
               subtitle: o.paidAt == null ? null : timeLabel(o.paidAt!),
               icon: Icons.receipt_long_outlined,
             ),
-            const TimelineStep(
+            TimelineStep(
               'Preparing',
-              subtitle: 'The pharmacist is preparing your medicine.',
+              subtitle: o.estimatedReadyAt == null || o.readyAt != null
+                  ? 'The pharmacist is preparing your medicine.'
+                  : 'Estimated ready by ${readyLabel(o.estimatedReadyAt!)}',
               icon: Icons.inventory_2_outlined,
             ),
             TimelineStep(

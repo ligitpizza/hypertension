@@ -154,6 +154,7 @@ class MedicationOrder {
     this.cycleDate,
     this.paidAt,
     this.readyAt,
+    this.estimatedReadyAt,
     this.dispatchedAt,
     this.etaAt,
     this.events = const [],
@@ -210,6 +211,9 @@ class MedicationOrder {
   final DateTime? cycleDate;
   final DateTime? paidAt;
   final DateTime? readyAt;
+
+  /// D-72: about 2 hours after payment, while the pharmacy prepares the order.
+  final DateTime? estimatedReadyAt;
   final DateTime? dispatchedAt;
   final DateTime? etaAt;
   final List<TrackingEvent> events;
@@ -258,6 +262,7 @@ class MedicationOrder {
     cycleDate: _time(d['cycleDate']),
     paidAt: _time(d['paidAt']),
     readyAt: _time(d['readyAt']),
+    estimatedReadyAt: _time(d['estimatedReadyAt']),
     dispatchedAt: _time(d['dispatchedAt']),
     etaAt: _time(d['etaAt']),
     events: [

@@ -54,6 +54,9 @@ abstract interface class PortalRepository {
   /// D-44 risk before vs after starting medication.
   Future<MedicationEffect> medicationEffect(String patientId);
 
+  /// D-72 (M8): how the patient gets their medicines ({method, latestStatus, orders}).
+  Future<Map<String, dynamic>> deliveryPreference(String patientId);
+
   /// D-50: the issuing doctor deletes their own prescription.
   Future<void> deletePrescription(String patientId, String prescriptionId);
 
@@ -181,6 +184,10 @@ class FirestorePortalRepository implements PortalRepository {
       total: (res['total'] as num?)?.toDouble(),
     );
   }
+
+  @override
+  Future<Map<String, dynamic>> deliveryPreference(String patientId) =>
+      _api.deliveryPreference(patientId);
 
   @override
   Future<MedicationEffect> medicationEffect(String patientId) async =>

@@ -424,3 +424,100 @@ def test_d70_emergency_alert_falls_back_to_the_saved_location(
     alert = next(iter(family_repo.alerts.values()))
     assert alert["locationSource"] == "saved"
     assert alert["gpsLocation"] == {"lat": 5.4588, "lng": 100.2886}
+
+
+# ---------------- D-72: gaps from the feature cross-check ----------------
+
+
+def test_d72_doctor_sees_the_patient_delivery_preference(
+    client: TestClient, repo: InMemoryUserRepository
+) -> None:
+    url = f"/api/v1/provider/patients/{P}/delivery"
+    assert client.get(url, headers=DOCTOR).json()["method"] is None
+    oid = issue(client)["orderId"]
+    client.post(
+        f"/api/v1/orders/{oid}/confirm", json={"method": "self_collection"}, headers=PATIENT
+    )
+    body = client.get(url, headers=DOCTOR).json()
+    assert body["method"] == "self_collection" and body["orders"] == 1
+    assert body["latestStatus"] == "awaiting_payment"
+    repo.users[P]["assignedDoctorId"] = "someone-else"
+    assert client.get(url, headers=DOCTOR).status_code == 403
+
+
+def test_d72_estimated_ready_time_is_two_hours_after_payment(
+    client: TestClient, order_repo: InMemoryOrderRepository
+) -> None:
+    from datetime import datetime, timedelta
+
+    oid = issue(client)["orderId"]
+    pay(client, oid)
+    view = client.get(f"/api/v1/orders/{oid}", headers=PATIENT).json()
+    paid = datetime.fromisoformat(view["paidAt"])
+    assert datetime.fromisoformat(view["estimatedReadyAt"]) - paid == timedelta(hours=2)
+
+
+def test_d72_admin_courier_settings_are_read_only(client: TestClient) -> None:
+    body = client.get("/api/v1/admin/courier", headers=ADMIN).json()
+    assert body["provider"] == "Lalamove" and body["simulated"] is True
+    assert body["webhookUrl"].endswith("/api/v1/webhooks/lalamove")
+    assert "secret" not in str(body).lower()
+    assert client.get("/api/v1/admin/courier", headers=PHARM).status_code == 403
+
+
+def test_d72_delivery_stats() -> None:
+    from app.services.analytics import delivery_stats
+
+    stats = delivery_stats(
+        [
+            {
+                "method": "home_delivery",
+                "paymentStatus": "paid",
+                "fulfilmentStatus": "delivered",
+                "amount": 35.0,
+                "deliveryFee": 13.2,
+            },
+            {
+                "method": "self_collection",
+                "paymentStatus": "paid",
+                "fulfilmentStatus": "collected",
+                "amount": 20.0,
+                "deliveryFee": 0.0,
+            },
+            {
+                "method": "home_delivery",
+                "paymentStatus": "paid",
+                "fulfilmentStatus": "failed",
+                "amount": 10.0,
+                "deliveryFee": 6.8,
+            },
+            {
+                "method": None,
+                "paymentStatus": "pending",
+                "fulfilmentStatus": "awaiting_confirmation",
+                "amount": 15.0,
+                "deliveryFee": 0.0,
+            },
+        ]
+    )
+    assert stats["orders"] == 4 and stats["homeDelivery"] == 2 and stats["selfCollection"] == 1
+    assert (stats["delivered"], stats["collected"], stats["failed"]) == (1, 1, 1)
+    assert stats["awaitingPatient"] == 1 and stats["paid"] == 3
+    assert stats["revenue"] == 85.0 and stats["averageCourierFee"] == 10.0
+
+
+def test_d72_agent_offers_the_emergency_contact_number(
+    client: TestClient, repo: InMemoryUserRepository
+) -> None:
+    from app.routers.agent import _emergency_phone
+
+    profile = json.loads(repo.health_profiles[P]["personalInfo"])
+    profile["emergencyContact"] = {"name": "Mum", "phone": "013-999 8888", "relationship": "parent"}
+    repo.health_profiles[P]["personalInfo"] = json.dumps(profile)
+
+    class Profiles:
+        def health_profile(self, uid: str) -> dict[str, Any] | None:
+            return repo.health_profiles.get(uid)
+
+    assert _emergency_phone(Profiles(), P) == "013-999 8888"  # type: ignore[arg-type]
+    assert _emergency_phone(Profiles(), "nobody") is None  # type: ignore[arg-type]

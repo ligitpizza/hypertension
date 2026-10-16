@@ -112,6 +112,11 @@ final patientCarePlanProvider = StreamProvider.family<CarePlan?, String>(
   retry: _noRetry,
 );
 
+/// D-72 (M8): the patient's medication delivery preference.
+final deliveryPreferenceProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
+  (ref, id) => ref.watch(portalRepositoryProvider).deliveryPreference(id),
+);
+
 /// D-44: computed by the API on demand (not stored); the card has its own Retry.
 /// Recomputed when the patient logs a reading or changes their medicines, so an open
 /// patient page never shows a stale comparison.

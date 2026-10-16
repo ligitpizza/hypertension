@@ -6,6 +6,7 @@ import '../../../core/constants/enums.dart';
 import '../../../core/utils/risk_style.dart';
 import '../data/agent_repository.dart';
 import '../state/agent_providers.dart';
+import '../../symptom_checker/state/symptom_providers.dart' show dialerProvider;
 
 /// UC2.7 Receive Proactive Health Update (D-34): requested once when Reading Saved opens,
 /// so saving the reading itself stays fast. Also saved to the agent chat history.
@@ -33,9 +34,9 @@ class _AgentUpdateCardState extends ConsumerState<AgentUpdateCard> {
     _update = ref.read(agentRepositoryProvider).proactive();
   }
 
-  /// Buttons whose screens exist. Call Emergency Contact and Alert Family arrive with
-  /// family monitoring (FR-14.2); until then the text tells the patient to call 999.
-  static (String, IconData, String)? _button(AgentAction a) => switch (a) {
+  /// D-72: every action has a button; "Call emergency contact" dials the onboarding
+  /// contact (tel:), "Alert family" opens the SOS screen.
+  static (String, IconData, String)? _button(AgentAction a, ProactiveUpdate u) => switch (a) {
     AgentAction.bookAppointment => ('Book appointment', Icons.event_available, '/appointments'),
     AgentAction.bookEmergencyAppointment => (
       'Book emergency appointment',
@@ -43,7 +44,11 @@ class _AgentUpdateCardState extends ConsumerState<AgentUpdateCard> {
       '/appointments',
     ),
     AgentAction.viewMedications => ('View medications', Icons.medication_outlined, '/medications'),
-    AgentAction.callEmergencyContact || AgentAction.alertFamily => null,
+    AgentAction.callEmergencyContact =>
+      u.emergencyContactPhone == null
+          ? null
+          : ('Call emergency contact', Icons.phone_in_talk, 'tel:${u.emergencyContactPhone}'),
+    AgentAction.alertFamily => ('Alert family', Icons.family_restroom, '/sos'),
   };
 
   @override
@@ -103,7 +108,7 @@ class _AgentUpdateCardState extends ConsumerState<AgentUpdateCard> {
               );
             }
             final u = snap.data!;
-            final buttons = [for (final a in u.actions) ?_button(a)];
+            final buttons = [for (final a in u.actions) ?_button(a, u)];
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -118,7 +123,9 @@ class _AgentUpdateCardState extends ConsumerState<AgentUpdateCard> {
                     for (final (label, icon, route) in buttons)
                       FilledButton.icon(
                         key: Key('agent-action-$route-$label'),
-                        onPressed: () => context.push(route),
+                        onPressed: () => route.startsWith('tel:')
+                            ? ref.read(dialerProvider)(route.substring(4))
+                            : context.push(route),
                         icon: Icon(icon),
                         label: Text(label),
                       ),

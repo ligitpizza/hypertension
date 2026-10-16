@@ -1274,3 +1274,26 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   the Penang branch → Sungai Ara); Grab uses its quotes endpoint; the simulator or a
   failed quote keeps the flat RM5. Real SMS dropped (simulated). Tests: backend 4 new
   (661 total); Flutter updated (558).
+
+### 2026-10-17 — Full feature cross-check and gap fixes (D-72)
+
+- Ping's complete feature list was checked against the code and decision log. Everything
+  was present except five gaps, now fixed:
+  1. **M8 delivery preference:** `GET /provider/patients/{id}/delivery`; the doctor's
+     Medications tab shows "Medication delivery: Home delivery / Self-collection" with the
+     latest order stage.
+  2. **M11 delivery reports:** hospital analytics `delivery` (orders, home vs
+     collection, delivered, collected, failed, paid revenue, average courier fee) with a
+     delivery success rate panel; the PDF report gains "Medication orders and delivery".
+  3. **M11 partnership settings:** read-only Courier card on admin Deliveries
+     (`GET /admin/courier`: provider, mode, pickup address/phone, webhook URL; keys stay
+     in Secret Manager).
+  4. **Feature 1 Critical buttons:** "Call emergency contact" dials the onboarding
+     emergency contact; "Alert family" opens the SOS screen.
+  5. **Feature 3 estimated ready time:** `estimatedReadyAt` = payment + 2 h on the
+     tracking timeline while the order is prepared.
+- Agreed deviations restated for Ch5: request-based doctor assignment (D-54/D-59);
+  Ch4's 12 model inputs (D-04); emergency booking stays with the patient's own doctor
+  (D-53); emergency events stored as triage/alert/audit records, not Health Records
+  files; Lalamove instead of Grab (D-68); family SMS simulated (D-71).
+- Tests: backend 665; Flutter 563.

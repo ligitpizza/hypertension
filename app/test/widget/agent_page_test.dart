@@ -187,19 +187,32 @@ void main() {
       expect(find.text('ROUTE /appointments'), findsOneWidget);
     });
 
-    tallTest('critical shows the emergency booking button; family actions wait for FR-14.2', (
-      t,
-    ) async {
+    tallTest('D-72 critical shows emergency booking, call contact and alert family', (t) async {
       repo.onProactive = () async => ProactiveUpdate.fromApi({
         'text': 'Call 999 if you feel unwell.',
         'riskLevel': 'critical',
         'actions': ['book_emergency_appointment', 'call_emergency_contact', 'alert_family'],
+        'emergencyContactPhone': '013-999 8888',
       });
       await t.pumpWidget(card());
       await t.pumpAndSettle();
       expect(find.text('Book emergency appointment'), findsOneWidget);
-      expect(find.byType(FilledButton), findsOneWidget);
+      expect(find.text('Call emergency contact'), findsOneWidget);
+      expect(find.text('Alert family'), findsOneWidget);
+      expect(find.byType(FilledButton), findsNWidgets(3));
       expect(find.text('Ask the assistant'), findsOneWidget);
+    });
+
+    tallTest('D-72 without an emergency contact the call button is hidden', (t) async {
+      repo.onProactive = () async => ProactiveUpdate.fromApi({
+        'text': 'Call 999 if you feel unwell.',
+        'riskLevel': 'critical',
+        'actions': ['call_emergency_contact', 'alert_family'],
+      });
+      await t.pumpWidget(card());
+      await t.pumpAndSettle();
+      expect(find.text('Call emergency contact'), findsNothing);
+      expect(find.text('Alert family'), findsOneWidget);
     });
 
     tallTest('failure leaves a calm note; the reading is still saved', (t) async {

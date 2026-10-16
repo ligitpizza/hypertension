@@ -75,6 +75,8 @@ class _AdminDeliveriesPageState extends ConsumerState<AdminDeliveriesPage> {
             ),
           ],
         ),
+        const _CourierCard(),
+        const SizedBox(height: 12),
         data.when(
           skipLoadingOnRefresh: true,
           loading: () => const LinearProgressIndicator(),
@@ -199,6 +201,63 @@ class _AdminDeliveriesPageState extends ConsumerState<AdminDeliveriesPage> {
           },
         ),
       ],
+    );
+  }
+}
+
+/// D-72 (M11 delivery partner settings): read-only; keys stay in Secret Manager and are
+/// changed with the deploy scripts, never from the browser.
+class _CourierCard extends ConsumerWidget {
+  const _CourierCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = ref.watch(courierSettingsProvider).value;
+    if (c == null) return const SizedBox.shrink();
+    final simulated = c['simulated'] == true;
+    Widget row(String label, Object? value) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 140, child: Text(label)),
+          Expanded(child: SelectableText('${value ?? '—'}')),
+        ],
+      ),
+    );
+    return Card(
+      key: const Key('courier-card'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.handshake_outlined),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Delivery partner: ${c['provider']}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Chip(label: Text(simulated ? 'Simulated' : 'Sandbox connected')),
+              ],
+            ),
+            row('Mode', c['name']),
+            row('Pickup address', c['pickupAddress']),
+            row('Pickup phone', c['pickupPhone']),
+            row('Webhook URL', c['webhookUrl']),
+            const SizedBox(height: 4),
+            Text(
+              'Keys are kept in Secret Manager on the server and changed with the deploy '
+              'scripts, not from the browser.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

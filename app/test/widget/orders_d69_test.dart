@@ -7,6 +7,7 @@ import 'package:hypertension/features/family/state/family_providers.dart';
 import 'package:hypertension/features/orders/data/order_models.dart';
 import 'package:hypertension/features/orders/presentation/address_page.dart';
 import 'package:hypertension/features/orders/presentation/order_confirm_page.dart';
+import 'package:hypertension/features/orders/presentation/order_track_page.dart';
 import 'package:hypertension/features/orders/presentation/orders_page.dart';
 import 'package:hypertension/features/orders/presentation/pharmacy_chat_pages.dart';
 import 'package:hypertension/features/orders/presentation/pharmacy_page.dart';
@@ -448,5 +449,41 @@ void main() {
     await t.tap(find.byKey(const Key('method-delivery')));
     await t.pumpAndSettle();
     expect(find.text('PREVIEW 5.4588,100.2886'), findsOneWidget);
+  });
+
+  tallTest('D-72 a paid order shows its estimated ready time', (t) async {
+    repo.orders = {
+      id: MedicationOrder.fromJson({
+        'id': id,
+        'ref': 'CF-ABC123',
+        'patientId': 'u-patient',
+        'prescriptionId': 'rx1',
+        'medicationDetails': 'Amlodipine 5mg',
+        'fulfilmentStatus': 'preparing',
+        'paymentStatus': 'paid',
+        'method': 'self_collection',
+        'amount': 9,
+        'total': 9,
+        'paidAt': '2026-10-16T02:00:00+00:00',
+        'estimatedReadyAt': '2026-10-16T04:00:00+00:00',
+      }),
+    };
+    final router = GoRouter(
+      initialLocation: '/t',
+      routes: [
+        GoRoute(
+          path: '/t',
+          builder: (_, _) => const OrderTrackPage(orderId: id),
+        ),
+      ],
+    );
+    await t.pumpWidget(
+      ProviderScope(
+        overrides: [ordersRepositoryProvider.overrideWithValue(repo)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await t.pumpAndSettle();
+    expect(find.textContaining('Estimated ready by 12:00 PM'), findsOneWidget);
   });
 }

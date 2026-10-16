@@ -47,7 +47,11 @@ class HospitalAnalytics {
     required this.consultations,
     required this.adherence,
     required this.adherenceDaily,
+    this.delivery,
   });
+
+  /// D-72: medication orders in the charted months (null for older servers).
+  final DeliveryStats? delivery;
 
   final int activePatients;
   final RiskCounts risk;
@@ -60,6 +64,9 @@ class HospitalAnalytics {
     final risk = Map<String, dynamic>.from(j['risk'] as Map? ?? const {});
     final adherence = Map<String, dynamic>.from(j['adherence'] as Map? ?? const {});
     return HospitalAnalytics(
+      delivery: j['delivery'] is Map
+          ? DeliveryStats.fromJson(Map<String, dynamic>.from(j['delivery'] as Map))
+          : null,
       activePatients: _int(j['activePatients']),
       risk: RiskCounts.fromJson(Map<String, dynamic>.from(risk['counts'] as Map? ?? const {})),
       riskTrend: [
@@ -136,5 +143,51 @@ class SystemAnalytics {
       for (final s in (j['bySpecialty'] as List? ?? const []).cast<Map<dynamic, dynamic>>())
         ('${s['specialty']}', _int(s['events'])),
     ],
+  );
+}
+
+/// D-72 hospital analytics: medication orders and delivery.
+class DeliveryStats {
+  const DeliveryStats({
+    required this.orders,
+    required this.homeDelivery,
+    required this.selfCollection,
+    required this.paid,
+    required this.delivered,
+    required this.collected,
+    required this.inProgress,
+    required this.failed,
+    required this.revenue,
+    this.averageCourierFee,
+  });
+
+  final int orders;
+  final int homeDelivery;
+  final int selfCollection;
+  final int paid;
+  final int delivered;
+  final int collected;
+  final int inProgress;
+  final int failed;
+  final double revenue;
+  final double? averageCourierFee;
+
+  /// Delivered out of home deliveries that finished (delivered or failed).
+  double? get successRate {
+    final done = delivered + failed;
+    return done == 0 ? null : delivered / done * 100;
+  }
+
+  factory DeliveryStats.fromJson(Map<String, dynamic> j) => DeliveryStats(
+    orders: _int(j['orders']),
+    homeDelivery: _int(j['homeDelivery']),
+    selfCollection: _int(j['selfCollection']),
+    paid: _int(j['paid']),
+    delivered: _int(j['delivered']),
+    collected: _int(j['collected']),
+    inProgress: _int(j['inProgress']),
+    failed: _int(j['failed']),
+    revenue: (j['revenue'] as num?)?.toDouble() ?? 0,
+    averageCourierFee: (j['averageCourierFee'] as num?)?.toDouble(),
   );
 }

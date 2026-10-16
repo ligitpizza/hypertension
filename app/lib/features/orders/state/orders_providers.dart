@@ -79,6 +79,12 @@ final ordersOverviewProvider = FutureProvider.autoDispose
       retry: _noRetry,
     );
 
+/// D-72: courier settings card (admin).
+final courierSettingsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
+  (ref) => ref.watch(ordersRepositoryProvider).courierSettings(),
+  retry: _noRetry,
+);
+
 /// Admin delivery oversight (Fig 4.3.14.4).
 final deliveriesProvider = FutureProvider.autoDispose<DeliveryOverview>(
   (ref) => ref.watch(ordersRepositoryProvider).deliveries(),

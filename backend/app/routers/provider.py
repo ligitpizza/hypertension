@@ -36,7 +36,12 @@ from app.services.medications import (
     MedicationRepository,
     get_medication_repository,
 )
-from app.services.orders import OrderService, get_order_service
+from app.services.orders import (
+    OrderRepository,
+    OrderService,
+    get_order_repository,
+    get_order_service,
+)
 from app.services.provider import (
     ProviderRepository,
     get_provider_repository,
@@ -253,6 +258,31 @@ def delete_prescription(
         target_type=Collection.PRESCRIPTIONS.value,
         target_id=rx_id,
     )
+
+
+@router.get("/{patient_id}/delivery")
+def delivery_preference(
+    patient_id: str,
+    doctor: CurrentUser = Depends(doctor_only),
+    repo: ProviderRepository = Depends(get_provider_repository),
+    orders: OrderRepository = Depends(get_order_repository),
+) -> dict[str, Any]:
+    """D-72 (M8): how the patient gets their medicines: the latest order's method and stage."""
+    _assigned_patient(patient_id, doctor, repo)
+
+    def when(o: dict[str, Any]) -> datetime:
+        v = o.get("cycleDate")
+        return v if isinstance(v, datetime) else datetime.min.replace(tzinfo=UTC)
+
+    mine = sorted((o for _, o in orders.orders_for_patient(patient_id)), key=when, reverse=True)
+    chosen = next((o for o in mine if o.get("method")), None)
+    latest = mine[0] if mine else None
+    return {
+        "method": chosen.get("method") if chosen else None,
+        "latestStatus": latest.get("fulfilmentStatus") if latest else None,
+        "latestMedication": latest.get("medicationDetails") if latest else None,
+        "orders": len(mine),
+    }
 
 
 @router.get("/{patient_id}/medication-effect")
