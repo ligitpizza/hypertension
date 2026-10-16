@@ -39,6 +39,9 @@ class AppUser {
     this.gender,
     this.notificationPrefs = const NotificationPrefs(),
     this.icNumber,
+    this.address,
+    this.addressLat,
+    this.addressLng,
   });
 
   final String uid;
@@ -65,6 +68,11 @@ class AppUser {
   /// Patients only (D-51), "YYMMDD-PB-####"; null for accounts made before it existed.
   final String? icNumber;
 
+  /// Patients only (D-69): delivery address and its map point.
+  final String? address;
+  final double? addressLat;
+  final double? addressLng;
+
   bool get needsOnboarding => role == UserRole.patient && onboardingComplete != true;
 
   factory AppUser.fromFirestore(String uid, Map<String, dynamic> data) => AppUser(
@@ -80,5 +88,8 @@ class AppUser {
     gender: data['gender'] is String ? Gender.fromValue(data['gender'] as String) : null,
     notificationPrefs: NotificationPrefs.fromMap(data['notificationPrefs']),
     icNumber: data['icNumber'] as String?,
+    address: data['address'] as String?,
+    addressLat: (data['addressLat'] as num?)?.toDouble(),
+    addressLng: (data['addressLng'] as num?)?.toDouble(),
   );
 }

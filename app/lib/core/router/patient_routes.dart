@@ -32,6 +32,8 @@ import '../../features/orders/presentation/order_confirm_page.dart';
 import '../../features/orders/presentation/order_pay_page.dart';
 import '../../features/orders/presentation/order_track_page.dart';
 import '../../features/orders/presentation/orders_page.dart';
+import '../../features/orders/presentation/address_page.dart';
+import '../../features/orders/presentation/pharmacy_chat_pages.dart';
 
 /// Patient app feature routes (docs/05). Tabs live inside the bottom-navigation
 /// shell; full-screen flows sit outside it. Placeholders are replaced module by module.
@@ -109,6 +111,9 @@ final List<RouteBase> patientFeatureRoutes = [
   ),
   // Module 13 (D-66; Figs 4.3.10.1-4.3.10.3).
   GoRoute(path: '/orders', builder: (_, _) => const OrdersPage()),
+  // D-69: the CareFlow Pharmacy conversation and the delivery address.
+  GoRoute(path: '/pharmacy-chat', builder: (_, _) => const PatientPharmacyChatPage()),
+  GoRoute(path: '/settings/address', builder: (_, _) => const AddressPage()),
   GoRoute(
     path: '/orders/:id/confirm',
     builder: (_, s) => OrderConfirmPage(orderId: s.pathParameters['id']!),

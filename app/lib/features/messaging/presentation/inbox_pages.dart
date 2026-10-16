@@ -38,6 +38,18 @@ class PatientInboxPage extends ConsumerWidget {
           else
             ConversationTile(me: user.uid, otherId: doctorId, route: '/chat/$doctorId'),
           const SizedBox(height: 8),
+          // D-69: order and refill updates from the pharmacy.
+          Card(
+            child: ListTile(
+              key: const Key('inbox-pharmacy'),
+              leading: const CircleAvatar(child: Icon(Icons.local_pharmacy_outlined)),
+              title: const Text('CareFlow Pharmacy'),
+              subtitle: const Text('Orders, refills and deliveries'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/pharmacy-chat'),
+            ),
+          ),
+          const SizedBox(height: 8),
           Card(
             child: ListTile(
               key: const Key('inbox-ai-agent'),

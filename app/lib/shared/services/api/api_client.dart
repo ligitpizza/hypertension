@@ -221,6 +221,19 @@ class ApiClient {
     'acknowledgeInteractions': acknowledgeInteractions,
   });
 
+  /// D-69: a consolidated prescription of catalogue items
+  /// ({catalogId, dose, frequency, quantity}).
+  Future<Map<String, dynamic>> issueConsolidatedPrescription(
+    String patientId, {
+    required List<Map<String, dynamic>> items,
+    bool isRecurring = false,
+    bool acknowledgeInteractions = false,
+  }) => _post('/provider/patients/$patientId/prescriptions', {
+    'items': items,
+    'isRecurring': isRecurring,
+    'acknowledgeInteractions': acknowledgeInteractions,
+  });
+
   // ---- FR-14.3 Symptom checker (D-36) ----
 
   /// UC14.1/UC14.3: symptom ids from symptom_catalog, severity, the heart rate and the id
@@ -556,8 +569,9 @@ class ApiClient {
   Future<Map<String, dynamic>> setMonthlyPrice(String prescriptionId, double price) =>
       _send('PUT', '/pharmacy/prescriptions/$prescriptionId/price', {'monthlyPrice': price});
 
-  Future<Map<String, dynamic>> markOrderReady(String id, String stockItemId, int units) =>
-      _post('/pharmacy/orders/$id/ready', {'stockItemId': stockItemId, 'units': units});
+  /// Catalogue orders take stock per item automatically (D-69): send no stock item.
+  Future<Map<String, dynamic>> markOrderReady(String id, {String? stockItemId, int? units}) =>
+      _post('/pharmacy/orders/$id/ready', {'stockItemId': ?stockItemId, 'units': ?units});
 
   Future<void> markOutOfStock(String id, {String? note}) =>
       _post('/pharmacy/orders/$id/out-of-stock', {'note': ?note});
@@ -577,6 +591,33 @@ class ApiClient {
 
   Future<Map<String, dynamic>> pharmacyPatients(String query) =>
       _getQuery('/pharmacy/patients', {'q': query});
+
+  // ---- D-69: catalogue, pharmacist patient view, pharmacy chat, address ----
+
+  Future<Map<String, dynamic>> catalog() => _get('/catalog');
+
+  Future<Map<String, dynamic>> addCatalogItem(Map<String, dynamic> body) => _post('/catalog', body);
+
+  Future<Map<String, dynamic>> editCatalogItem(String id, Map<String, dynamic> body) =>
+      _send('PATCH', '/catalog/$id', body);
+
+  Future<Map<String, dynamic>> pharmacyPatient(String uid) => _get('/pharmacy/patients/$uid');
+
+  Future<Map<String, dynamic>> myPharmacyChat() => _get('/pharmacy-chat/messages');
+
+  Future<Map<String, dynamic>> sendPharmacyChat(String text) =>
+      _post('/pharmacy-chat/messages', {'text': text});
+
+  Future<Map<String, dynamic>> pharmacyConversations() => _get('/pharmacy-chat/conversations');
+
+  Future<Map<String, dynamic>> pharmacyThread(String patientId) =>
+      _get('/pharmacy-chat/$patientId/messages');
+
+  Future<Map<String, dynamic>> sendPharmacyMessage(String patientId, String text) =>
+      _post('/pharmacy-chat/$patientId/messages', {'text': text});
+
+  Future<Map<String, dynamic>> updateAddress(String address, {double? lat, double? lng}) =>
+      _send('PUT', '/settings/address', {'address': address, 'lat': lat, 'lng': lng});
 
   /// FR-11.4 delivery oversight (Fig 4.3.14.4).
   Future<Map<String, dynamic>> adminDeliveries() => _get('/admin/deliveries');

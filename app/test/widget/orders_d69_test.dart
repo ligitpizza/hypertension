@@ -1,0 +1,331 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hypertension/features/family/data/location_source.dart';
+import 'package:hypertension/features/family/state/family_providers.dart';
+import 'package:hypertension/features/orders/data/order_models.dart';
+import 'package:hypertension/features/orders/presentation/address_page.dart';
+import 'package:hypertension/features/orders/presentation/order_confirm_page.dart';
+import 'package:hypertension/features/orders/presentation/orders_page.dart';
+import 'package:hypertension/features/orders/presentation/pharmacy_chat_pages.dart';
+import 'package:hypertension/features/orders/presentation/pharmacy_page.dart';
+import 'package:hypertension/features/orders/presentation/pharmacy_patient_page.dart';
+import 'package:hypertension/features/orders/state/orders_providers.dart';
+
+import '../helpers/fakes.dart';
+import '../helpers/order_fakes.dart';
+
+// D-69: consolidated orders, Orders tabs, address picker, pharmacy patient view, catalogue
+// and pharmacy chat.
+
+late FakeOrdersRepository repo;
+late FakeOrderLocation location;
+final geocoded = <(double, double)>[];
+
+const id = 'rx1_2026-10';
+
+final items = [
+  const OrderItem(
+    catalogId: 'amlodipine-5',
+    name: 'Amlodipine',
+    strength: '5mg',
+    dose: '1 tablet',
+    frequency: 'once_daily',
+    quantity: 30,
+    unitPrice: 0.30,
+  ),
+  const OrderItem(
+    catalogId: 'losartan-50',
+    name: 'Losartan',
+    strength: '50mg',
+    dose: '1 tablet',
+    frequency: 'twice_daily',
+    quantity: 60,
+    unitPrice: 0.90,
+  ),
+];
+
+MedicationOrder itemOrder({
+  String oid = id,
+  Fulfilment status = Fulfilment.awaitingConfirmation,
+  String paymentStatus = 'pending',
+  String? suggestedAddress,
+  double? lat,
+  double? lng,
+}) => MedicationOrder(
+  id: oid,
+  ref: 'CF-ABC123',
+  patientId: 'u-patient',
+  patientName: 'Siti',
+  prescriptionId: 'rx1',
+  medicationDetails: 'Amlodipine 5mg 1 tablet, once daily x30; Losartan 50mg ...',
+  status: status,
+  paymentStatus: paymentStatus,
+  amount: 63,
+  total: 63,
+  items: items,
+  cycleDate: DateTime.utc(2026, 10, 16, 2),
+  suggestedAddress: suggestedAddress,
+  suggestedLat: lat,
+  suggestedLng: lng,
+);
+
+Widget host(String initial) {
+  final router = GoRouter(
+    initialLocation: initial,
+    routes: [
+      GoRoute(path: '/orders', builder: (_, _) => const OrdersPage()),
+      GoRoute(
+        path: '/orders/:id/confirm',
+        builder: (_, s) => OrderConfirmPage(orderId: s.pathParameters['id']!),
+      ),
+      GoRoute(path: '/orders/:id/pay', builder: (_, _) => const Text('PAY')),
+      GoRoute(path: '/orders/:id/track', builder: (_, _) => const Text('TRACK')),
+      GoRoute(path: '/settings/address', builder: (_, _) => const AddressPage()),
+      GoRoute(path: '/pharmacy-chat', builder: (_, _) => const PatientPharmacyChatPage()),
+      GoRoute(
+        path: '/pharmacy',
+        builder: (_, _) => const Scaffold(body: PharmacyPage()),
+        routes: [
+          GoRoute(
+            path: 'patients/:uid',
+            builder: (_, s) =>
+                Scaffold(body: PharmacyPatientPage(patientId: s.pathParameters['uid']!)),
+          ),
+          GoRoute(
+            path: 'messages',
+            builder: (_, _) => const Scaffold(body: PharmacyMessagesPage()),
+            routes: [
+              GoRoute(
+                path: ':uid',
+                builder: (_, s) =>
+                    Scaffold(body: PharmacyThreadPage(patientId: s.pathParameters['uid']!)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+  return ProviderScope(
+    overrides: [
+      ordersRepositoryProvider.overrideWithValue(repo),
+      locationSourceProvider.overrideWithValue(location),
+      pickerMapBuilderProvider.overrideWithValue(
+        (lat, lng, onMoved) => GestureDetector(
+          key: const Key('fake-map'),
+          onTap: () => onMoved(5.4588, 100.2886),
+          child: Text('MAP $lat,$lng'),
+        ),
+      ),
+      reverseGeocoderProvider.overrideWithValue((lat, lng) async {
+        geocoded.add((lat, lng));
+        return 'Lorong Lembah Permai 3, 11200 Tanjung Bungah, Pulau Pinang';
+      }),
+    ],
+    child: MaterialApp.router(routerConfig: router),
+  );
+}
+
+void main() {
+  setUp(() {
+    repo = FakeOrdersRepository();
+    location = FakeOrderLocation();
+    geocoded.clear();
+  });
+
+  tallTest('Orders tabs split active and completed', (t) async {
+    repo.orders = {
+      id: itemOrder(),
+      'rx2_2026-09': itemOrder(
+        oid: 'rx2_2026-09',
+        status: Fulfilment.delivered,
+        paymentStatus: 'paid',
+      ),
+    };
+    await t.pumpWidget(host('/orders'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('order-$id')), findsOneWidget);
+    expect(find.byKey(const Key('order-rx2_2026-09')), findsNothing);
+    expect(find.textContaining('Amlodipine 5mg ×30, Losartan 50mg ×60'), findsOneWidget);
+    await t.tap(find.byKey(const Key('orders-tab-completed')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('order-rx2_2026-09')), findsOneWidget);
+    expect(find.textContaining('Paid'), findsOneWidget);
+  });
+
+  tallTest('consolidated order shows each medicine and prefills the saved address', (t) async {
+    repo.orders = {
+      id: itemOrder(suggestedAddress: '77 Lorong Lembah Permai 3', lat: 5.4588, lng: 100.2886),
+    };
+    await t.pumpWidget(host('/orders/$id/confirm'));
+    await t.pumpAndSettle();
+    expect(find.text('Amlodipine 5mg'), findsOneWidget);
+    expect(find.text('1 tablet, once daily · 30 × RM0.30'), findsOneWidget);
+    expect(find.text('RM54.00'), findsOneWidget);
+    await t.tap(find.byKey(const Key('method-delivery')));
+    await t.pumpAndSettle();
+    expect(find.text('77 Lorong Lembah Permai 3'), findsOneWidget);
+    expect(find.text('Location shared for the courier'), findsOneWidget);
+    expect(t.widget<Text>(find.byKey(const Key('order-total'))).data, 'RM68.00');
+  });
+
+  tallTest('pick the drop-off on the map at checkout', (t) async {
+    repo.orders = {id: itemOrder()};
+    await t.pumpWidget(host('/orders/$id/confirm'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('method-delivery')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('pick-on-map')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('fake-map')));
+    await t.pumpAndSettle();
+    expect(geocoded, [(5.4588, 100.2886)]);
+    await t.tap(find.byKey(const Key('address-save')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Tanjung Bungah'), findsOneWidget);
+    expect(find.text('Location shared for the courier'), findsOneWidget);
+    expect(repo.calls.where((c) => c.startsWith('address:')), isEmpty); // not saved to profile
+  });
+
+  tallTest('Settings address: current location fills the text and saves', (t) async {
+    await t.pumpWidget(host('/settings/address'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('address-current')));
+    await t.pumpAndSettle();
+    expect(geocoded.single, (3.1579, 101.7123));
+    await t.tap(find.byKey(const Key('address-save')));
+    await t.pumpAndSettle();
+    expect(
+      repo.calls,
+      contains(
+        'address:Lorong Lembah Permai 3, 11200 Tanjung Bungah, Pulau Pinang:3.1579,101.7123',
+      ),
+    );
+  });
+
+  tallTest('address without a pin is refused; refused location opens settings', (t) async {
+    location
+      ..here = null
+      ..access = LocationAccess.deniedForever;
+    await t.pumpWidget(host('/settings/address'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('address-save')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Set the pin on the map'), findsOneWidget);
+    await t.tap(find.byKey(const Key('address-current')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('address-current')));
+    await t.pumpAndSettle();
+    expect(location.settings, [LocationAccess.deniedForever]);
+  });
+
+  tallTest('pharmacy marks a consolidated order ready without choosing stock', (t) async {
+    repo.queueData = PharmacyQueue(
+      orders: [itemOrder(status: Fulfilment.preparing, paymentStatus: 'paid')],
+      needsPrice: const [],
+    );
+    await t.pumpWidget(host('/pharmacy'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Amlodipine 5mg ×30, Losartan 50mg ×60'), findsOneWidget);
+    await t.tap(find.byKey(const Key('ready-$id')));
+    await t.pumpAndSettle();
+    expect(find.text('• Losartan 50mg × 60'), findsOneWidget);
+    await t.tap(find.byKey(const Key('ready-confirm')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('ready:$id'));
+  });
+
+  tallTest('catalogue prices can be changed', (t) async {
+    await t.pumpWidget(host('/pharmacy'));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('catalog-list')));
+    await t.tap(find.byKey(const Key('catalog-list')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('catalog-price-amlodipine-5')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('catalog-price-input')), '0.35');
+    await t.pump();
+    await t.tap(find.byKey(const Key('catalog-price-save')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('catalogPrice:amlodipine-5:0.35'));
+  });
+
+  tallTest('pharmacist patient view: allergies, medicines, prescriptions, orders', (t) async {
+    repo.patientDetail = PharmacyPatientDetail(
+      id: 'u-patient',
+      name: 'Siti Aminah',
+      age: 58,
+      gender: 'female',
+      phone: '012-345 6789',
+      allergies: 'Penicillin',
+      conditions: const ['diabetes'],
+      medications: const [
+        PatientMedicine(
+          name: 'Amlodipine 5mg',
+          dosage: '1 tablet',
+          schedule: '08:00',
+          quantityOnHand: 30,
+          fromDoctor: true,
+          prescribedBy: 'Dr Tan',
+        ),
+      ],
+      prescriptions: [PatientPrescription(id: 'rx1', medicationDetails: 'x', items: items)],
+      orders: [itemOrder(status: Fulfilment.preparing, paymentStatus: 'paid')],
+    );
+    await t.pumpWidget(host('/pharmacy/patients/u-patient'));
+    await t.pumpAndSettle();
+    expect(find.text('Allergies: Penicillin'), findsOneWidget);
+    expect(find.textContaining('58 years'), findsOneWidget);
+    expect(find.textContaining('from Dr Tan'), findsOneWidget);
+    expect(find.textContaining('Losartan 50mg 1 tablet, twice daily ×60'), findsOneWidget);
+    expect(find.textContaining('payment paid'), findsOneWidget);
+    await t.tap(find.byKey(const Key('message-patient')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('pharmacy-chat-input')), findsOneWidget);
+  });
+
+  tallTest('patient writes to the pharmacy', (t) async {
+    repo.chat = [
+      PharmacyMessage(
+        id: 'm1',
+        patientId: 'u-patient',
+        senderRole: 'pharmacist',
+        senderName: 'CareFlow Pharmacy (Ahmad)',
+        text: 'Your refill is ready.',
+        sentAt: DateTime.utc(2026, 10, 16, 2),
+      ),
+    ];
+    await t.pumpWidget(host('/pharmacy-chat'));
+    await t.pumpAndSettle();
+    expect(find.text('Your refill is ready.'), findsOneWidget);
+    expect(find.textContaining('call 999'), findsOneWidget);
+    await t.enterText(find.byKey(const Key('pharmacy-chat-input')), 'Thank you!');
+    await t.tap(find.byKey(const Key('pharmacy-chat-send')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('toPharmacy:Thank you!'));
+  });
+
+  tallTest('pharmacist inbox opens a conversation and replies', (t) async {
+    final last = PharmacyMessage(
+      id: 'm2',
+      patientId: 'u-patient',
+      senderRole: 'patient',
+      senderName: 'Siti',
+      text: 'When is my order ready?',
+      sentAt: DateTime.utc(2026, 10, 16, 2),
+    );
+    repo
+      ..conversations = [PharmacyConversation(last: last, patientName: 'Siti')]
+      ..chat = [last];
+    await t.pumpWidget(host('/pharmacy/messages'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('conversation-u-patient')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('pharmacy-chat-input')), 'Tomorrow at 10 AM.');
+    await t.tap(find.byKey(const Key('pharmacy-chat-send')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('toPatient:u-patient:Tomorrow at 10 AM.'));
+  });
+}

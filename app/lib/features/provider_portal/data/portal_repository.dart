@@ -43,6 +43,14 @@ abstract interface class PortalRepository {
     bool acknowledgeInteractions = false,
   });
 
+  /// D-69: several catalogue medicines in one prescription; returns the summary and total.
+  Future<({String details, double? total})> issueConsolidated(
+    String patientId, {
+    required List<Map<String, dynamic>> items,
+    bool isRecurring = false,
+    bool acknowledgeInteractions = false,
+  });
+
   /// D-44 risk before vs after starting medication.
   Future<MedicationEffect> medicationEffect(String patientId);
 
@@ -153,6 +161,25 @@ class FirestorePortalRepository implements PortalRepository {
       acknowledgeInteractions: acknowledgeInteractions,
     );
     return res['medicationDetails'] as String? ?? medicationName;
+  }
+
+  @override
+  Future<({String details, double? total})> issueConsolidated(
+    String patientId, {
+    required List<Map<String, dynamic>> items,
+    bool isRecurring = false,
+    bool acknowledgeInteractions = false,
+  }) async {
+    final res = await _api.issueConsolidatedPrescription(
+      patientId,
+      items: items,
+      isRecurring: isRecurring,
+      acknowledgeInteractions: acknowledgeInteractions,
+    );
+    return (
+      details: res['medicationDetails'] as String? ?? '',
+      total: (res['total'] as num?)?.toDouble(),
+    );
   }
 
   @override

@@ -36,6 +36,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 
 > Pharmacist and Admin accounts use only the common fields above; no role-specific fields apply.
 
+| address, addressLat, addressLng | String, Number, Number | Patient delivery address and map point (D-69) | Optional |
 
 ### `health_profiles`  (Table 4.2.3.2)
 
@@ -94,6 +95,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | dosage | String | Dosage amount | Required |
 | schedule | String | Dose times / frequency | Required |
 | adherenceRate | Number | 0–100 computed % | Derived from dose_logs; recomputed on each dose confirmation (FR-5.3) |
+| source, prescriptionId, catalogId, prescribedBy | String | D-69: `doctor` when added from a prescription | Doctor-set medicines: the patient may only change `schedule` |
 
 ### `dose_logs`  (Table 4.2.3.7)
 
@@ -151,7 +153,8 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | medicationDetails | String | Prescribed medication details | Required |
 | isRecurring | Boolean | Flags a long-term chronic prescription | Default: false (UC13.1) |
 | issuedAt | Timestamp | Issue time | Required |
-| monthlyPrice | Number | Price of one month's supply in RM, set by the pharmacist (D-66) | Optional; ≥ 2.00; a recurring order can't be paid until set |
+| monthlyPrice | Number | Price of one month's supply in RM, set by the pharmacist (D-66) | Optional; ≥ 2.00; only for older single-text prescriptions (D-69) |
+| items | Array | Consolidated prescription (D-69): {catalogId, name, strength, form, dose, frequency, quantity, unitPrice} | Optional; 1-10 items; prices copied from medication_catalog at issue time |
 
 ### `care_plans`  (Table 4.2.3.12)
 
@@ -187,6 +190,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | deliveryStatus | String | dispatched / in_transit / delivered / failed | Optional; only applies when method = home_delivery |
 | cycleDate | Date | Monthly recurrence date | Required |
 | medicationDetails | String | Snapshot of the prescription details (D-66) | Required |
+| items | Array | Snapshot of the prescription's items (D-69) | Empty for older orders; amount = sum(quantity x unitPrice) |
 | patientName | String | Copied for the pharmacy queue (D-66) | Optional |
 | amount | Number | Medicine price in RM, from `prescriptions.monthlyPrice` (D-66) | Null until priced |
 | deliveryFee | Number | RM5.00 for home delivery, else 0 (D-66) | Required |
@@ -286,12 +290,36 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 > Captures the status-over-time history that FR-13.4's "real-time tracking" requires medication_orders.deliveryStatus only reflects the current state, not the trail of updates from the Grab API.
 
 
+### `medication_catalog`  (D-69, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | Primary key | Stable seed ids, e.g. `amlodipine-5` |
+| name, strength, form, unitLabel | String | Medicine, e.g. Amlodipine / 5mg / tablet | Required |
+| drugClass | String | e.g. Calcium channel blocker | Optional |
+| unitPrice | Number | RM per unit (indicative demo prices) | Required; edited by pharmacist/admin |
+| active | Boolean | Offered to doctors | Default true |
+| updatedAt | Timestamp | Last change | Required |
+
+### `pharmacy_messages`  (D-69, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | Primary key | Auto-generated |
+| patientId | Reference (users) | The conversation (one per patient) | Required |
+| senderId | Reference (users) | Patient or pharmacist | Required |
+| senderRole | String | patient / pharmacist | Required |
+| senderName | String | Shown in the chat | Required |
+| text | String | Message | Required; ≤ 2000; not end-to-end encrypted (D-69) |
+| sentAt | Timestamp | Send time | Required |
+
 ### `medication_stock`  (D-66, not in Ch4)
 
 | Field | Type | Description | Constraints / Notes |
 |---|---|---|---|
 | _id | String | Primary key | Auto-generated |
 | name | String | Medicine and strength, e.g. "Amlodipine 5mg" | Required |
+| catalogId | Reference (medication_catalog) | Linked catalogue medicine (D-69) | Optional; catalogue orders take stock through it |
 | units | Number | Units on hand | Required; ≥ 0; marking an order ready deducts from it |
 | expiryDate | Timestamp | Earliest expiry among units on hand | Required |
 | lowStockAt | Number | Low-stock warning level | Default 50 |

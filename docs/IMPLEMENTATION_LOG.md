@@ -1201,3 +1201,48 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   courier. `set-lalamove-secrets` and deploy-backend pass the keys. Tests: backend 12
   (`test_lalamove.py`; 634 total), Flutter 1 (540 total). Live sandbox check of the
   client: booked, status read, cancelled.
+
+- **Fix after Ping's Lalamove test:** Lalamove's webhooks reached CareFlow (200) but never
+  matched the order, and the pharmacy queue didn't ask Lalamove for updates, so an order
+  completed in the Lalamove sandbox still showed "Ready for delivery". The webhook now
+  finds the order id anywhere in the payload and logs the event type and whether it
+  matched; the pharmacy queue and admin deliveries ask a real courier at most every 20 s
+  per order, and finished orders leave the queue.
+
+### 2026-10-17 — Increment 3 — Module 13 enhancements (D-69)
+
+- Ping's requests after the first live test, agreed as D-69.
+- **Catalogue:** `medication_catalog` (28 antihypertensive and related medicines at
+  indicative demo prices, `firebase/seed/medication_catalog.json`) plus demo stock linked
+  by `catalogId`; seeded create-only by `seed` (emulators) and `seed-catalog-live`.
+  `GET/POST/PATCH /catalog`; the pharmacy page has a catalogue card to change prices and
+  add medicines.
+- **Consolidated prescriptions:** the doctor searches the catalogue and adds several
+  medicines with dose, frequency and quantity (quantity follows the frequency, 30 days);
+  the page shows each line and the total. Interactions are checked across all items and
+  current medicines. Each catalogue prescription creates an order immediately (recurring
+  ones repeat monthly); the patient sees each medicine as quantity x unit price.
+- **Meds tab:** prescribed medicines are added to the patient's list as "From Dr X",
+  locked (name, dose and quantity read-only; no delete); only reminder times can change.
+  Stopping the prescription removes them; a delivered or collected order adds its
+  quantities to the doses on hand.
+- **Stock:** marking a catalogue order ready takes each item from its linked stock, all
+  or nothing, naming any medicine that is short.
+- **Pharmacist patient view** `/pharmacy/patients/:uid` (from the queue or lookup):
+  profile, allergies, conditions, medicines, prescriptions, orders and payments; audited
+  as VIEW_PATIENT_DISPENSING. No readings, risk, notes or files.
+- **Pharmacy chat:** `pharmacy_messages`; patient Messages has "CareFlow Pharmacy";
+  pharmacists have a Messages page (shared inbox) and "Message patient" on the patient
+  view. Pushes both ways; texts are never audited. Not end-to-end encrypted (deviation).
+- **Address:** Settings → Delivery address and checkout "Pick on map": embedded map with
+  a movable pin and "Use my current location"; Android's geocoder (`geocoding` package)
+  fills the editable text. Checkout pre-fills the saved address and point.
+- **Orders:** Home quick action "Orders"; the Orders screen has Active and Completed tabs
+  showing items, total and payment status.
+- Also fixed: the D-67 phone pre-fill read `personalInfo` as a map, but it is stored as a
+  JSON string (D-25), so it never found the phone.
+- Rules: catalogue readable by doctor/pharmacist/admin; pharmacy chat readable by the
+  patient and pharmacists; no client writes. Tests: backend 15 new (653 total); rules 4
+  new (205 total); Flutter 12 new (553 total). Patient APK and staff web build.
+- Deviations vs Chapter 4: D-69 (new collections and fields; order for every
+  prescription; pharmacy chat not end-to-end encrypted).

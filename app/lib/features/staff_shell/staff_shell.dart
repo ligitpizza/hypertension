@@ -24,6 +24,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
   ],
   UserRole.pharmacist => const [
     StaffDestination('/pharmacy', 'Orders', Icons.local_pharmacy_outlined),
+    StaffDestination('/pharmacy/messages', 'Messages', Icons.chat_bubble_outline), // D-69
   ],
   UserRole.admin => const [
     StaffDestination('/admin/users', 'Users', Icons.manage_accounts_outlined),

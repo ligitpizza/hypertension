@@ -41,6 +41,36 @@ final pharmacyLookupProvider = FutureProvider.autoDispose.family<List<PharmacyPa
   retry: _noRetry,
 );
 
+/// D-69: the medication catalogue (doctor picker, pharmacy prices).
+final catalogProvider = FutureProvider.autoDispose<List<CatalogItem>>(
+  (ref) => ref.watch(ordersRepositoryProvider).catalog(),
+  retry: _noRetry,
+);
+
+/// D-69: a pharmacy patient's dispensing details.
+final pharmacyPatientProvider = FutureProvider.autoDispose.family<PharmacyPatientDetail, String>(
+  (ref, uid) => ref.watch(ordersRepositoryProvider).pharmacyPatient(uid),
+  retry: _noRetry,
+);
+
+/// D-69: the patient's pharmacy conversation.
+final myPharmacyChatProvider = FutureProvider.autoDispose<List<PharmacyMessage>>(
+  (ref) => ref.watch(ordersRepositoryProvider).myPharmacyChat(),
+  retry: _noRetry,
+);
+
+/// D-69: the pharmacist's inbox.
+final pharmacyConversationsProvider = FutureProvider.autoDispose<List<PharmacyConversation>>(
+  (ref) => ref.watch(ordersRepositoryProvider).pharmacyConversations(),
+  retry: _noRetry,
+);
+
+final pharmacyThreadProvider = FutureProvider.autoDispose
+    .family<({String patientName, List<PharmacyMessage> messages}), String>(
+      (ref, uid) => ref.watch(ordersRepositoryProvider).pharmacyThread(uid),
+      retry: _noRetry,
+    );
+
 /// Admin delivery oversight (Fig 4.3.14.4).
 final deliveriesProvider = FutureProvider.autoDispose<DeliveryOverview>(
   (ref) => ref.watch(ordersRepositoryProvider).deliveries(),

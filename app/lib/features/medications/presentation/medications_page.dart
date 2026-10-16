@@ -618,6 +618,12 @@ class _DoseTile extends StatelessWidget {
               '${med.dosage} • ${dose.time.label}'
               '${dose.state == DoseState.missed ? ' • Missed' : ''}',
             ),
+            if (med.fromDoctor) // D-69: set by the doctor (locked)
+              Text(
+                'From ${med.prescribedBy ?? 'your doctor'}',
+                key: Key('from-doctor-${med.id}'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             if (taken)
               Padding(
                 padding: const EdgeInsets.only(top: 2),

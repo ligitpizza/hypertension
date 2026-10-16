@@ -669,5 +669,49 @@ void main() {
       await t.pumpAndSettle();
       expect(repo.deleted, ['m1']);
     });
+
+    testWidgets('D-69 a doctor-set medicine only lets the patient change reminder times', (
+      t,
+    ) async {
+      final repo = FakeMedicationsRepository();
+      const fromDoctor = Medication(
+        id: 'm9',
+        patientId: 'p1',
+        name: 'Amlodipine 5mg',
+        dosage: '1 tablet',
+        schedule: '08:00',
+        quantityOnHand: 30,
+        source: 'doctor',
+        prescribedBy: 'Dr Tan',
+      );
+      await t.pumpWidget(app(repo, const [], initial: '/medications/edit', extra: fromDoctor));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('med-locked')), findsOneWidget);
+      expect(find.text('Prescribed by Dr Tan'), findsOneWidget);
+      expect(find.byKey(const Key('delete-medication')), findsNothing);
+      for (final k in ['med-name', 'med-dosage', 'med-quantity']) {
+        final field = t.widget<TextField>(
+          find.descendant(of: find.byKey(Key(k)), matching: find.byType(TextField)),
+        );
+        expect(field.readOnly, isTrue, reason: k);
+      }
+    });
+
+    testWidgets('D-69 the Meds tab says who prescribed a medicine', (t) async {
+      final repo = FakeMedicationsRepository();
+      const fromDoctor = Medication(
+        id: 'm9',
+        patientId: 'p1',
+        name: 'Amlodipine 5mg',
+        dosage: '1 tablet',
+        schedule: '08:00',
+        source: 'doctor',
+        prescribedBy: 'Dr Tan',
+      );
+      await t.pumpWidget(app(repo, const [fromDoctor]));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('from-doctor-m9')), findsWidgets);
+      expect(find.text('From Dr Tan'), findsWidgets);
+    });
   });
 }

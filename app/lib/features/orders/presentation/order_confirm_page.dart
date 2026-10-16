@@ -9,6 +9,7 @@ import '../../family/state/family_providers.dart';
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import 'order_widgets.dart';
+import 'address_page.dart';
 
 /// Fig 4.3.10.1 Order confirmation (UC13.2, UC13.3; FR-13.2). Insurance coverage is out of
 /// scope (D-66), so the total is the medicine plus any delivery fee.
@@ -45,15 +46,41 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
     if (_seeded) return;
     _seeded = true;
     _method = o.method;
-    // Prefill the last address the patient used.
+    // Prefill: this order's address, else the saved delivery address (D-69), else the
+    // last address the patient used.
     _address.text =
         o.deliveryAddress ??
+        o.suggestedAddress ??
         all.map((x) => x.deliveryAddress).whereType<String>().firstOrNull ??
         '';
     _phone.text = o.deliveryPhone ?? o.suggestedPhone ?? '';
     if (o.deliveryLat != null && o.deliveryLng != null) {
       _location = {'lat': o.deliveryLat!, 'lng': o.deliveryLng!};
+    } else if (o.suggestedLat != null && o.suggestedLng != null) {
+      _location = {'lat': o.suggestedLat!, 'lng': o.suggestedLng!};
     }
+  }
+
+  /// D-69: pick the drop-off on the map (address text filled from the pin).
+  Future<void> _pickOnMap() async {
+    final loc = _location;
+    final picked = await Navigator.of(context).push<PickedAddress>(
+      MaterialPageRoute(
+        builder: (_) => AddressPage(
+          saveToProfile: false,
+          initial: loc == null
+              ? null
+              : (address: _address.text, lat: loc['lat']!, lng: loc['lng']!),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _address.text = picked.address;
+      _location = {'lat': picked.lat, 'lng': picked.lng};
+      _locationNote = null;
+      _locationFix = null;
+    });
   }
 
   Future<void> _locate() async {
@@ -209,25 +236,50 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
                   subtitle: Text('${cycleLabel(o.cycleDate)} · review and confirm your refill.'),
                 ),
                 const Divider(),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
+                if (o.items.isNotEmpty)
+                  // D-69: each prescribed medicine with quantity x unit price.
+                  for (final i in o.items)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(o.medicationDetails, style: theme.textTheme.titleSmall),
-                          const Text('30-day supply'),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(i.label, style: theme.textTheme.titleSmall),
+                                Text(
+                                  '${i.dose}, ${frequencyLabel(i.frequency).toLowerCase()} · '
+                                  '${i.quantity} × ${rm(i.unitPrice)}',
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(rm(i.lineTotal), style: theme.textTheme.titleMedium),
                         ],
                       ),
-                    ),
-                    Text(
-                      amount == null ? '—' : rm(amount),
-                      key: const Key('item-price'),
-                      style: theme.textTheme.titleMedium,
-                    ),
-                  ],
-                ),
+                    )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(o.medicationDetails, style: theme.textTheme.titleSmall),
+                            const Text('30-day supply'),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        amount == null ? '—' : rm(amount),
+                        key: const Key('item-price'),
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 12),
                 if (amount == null)
                   Container(
@@ -339,6 +391,15 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
                             : 'Update',
                       ),
                     ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const Key('pick-on-map'),
+              onPressed: _pickOnMap,
+              icon: const Icon(Icons.map_outlined),
+              label: const Text('Pick on map instead'),
             ),
           ),
           const SizedBox(height: 8),

@@ -67,6 +67,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   subtitle: 'Phone number, emergency contact',
                   path: '/settings/contact',
                 ),
+                // D-69: used to pre-fill medication deliveries.
+                _NavTile(
+                  key: const Key('settings-address'),
+                  icon: Icons.home_outlined,
+                  title: 'Delivery address',
+                  subtitle: 'Pick on the map for medicine deliveries',
+                  path: '/settings/address',
+                ),
                 _NavTile(
                   key: const Key('settings-health'),
                   icon: Icons.medical_information_outlined,

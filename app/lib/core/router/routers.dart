@@ -39,6 +39,8 @@ import '../constants/enums.dart';
 import 'patient_routes.dart';
 import '../../features/orders/presentation/admin_deliveries_page.dart';
 import '../../features/orders/presentation/pharmacy_page.dart';
+import '../../features/orders/presentation/pharmacy_chat_pages.dart';
+import '../../features/orders/presentation/pharmacy_patient_page.dart';
 
 // One router per entrypoint; each registers only its own roles' routes
 // (docs/05 "Routes per entrypoint", NFR-3.2). Feature routes are added per module.
@@ -226,7 +228,27 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           // Module 13 pharmacist view (Fig 4.3.13.1; D-66).
-          GoRoute(path: '/pharmacy', builder: (_, _) => const PharmacyPage()),
+          GoRoute(
+            path: '/pharmacy',
+            builder: (_, _) => const PharmacyPage(),
+            routes: [
+              // D-69: dispensing details and the shared pharmacy chat.
+              GoRoute(
+                path: 'patients/:uid',
+                builder: (_, s) => PharmacyPatientPage(patientId: s.pathParameters['uid']!),
+              ),
+              GoRoute(
+                path: 'messages',
+                builder: (_, _) => const PharmacyMessagesPage(),
+                routes: [
+                  GoRoute(
+                    path: ':uid',
+                    builder: (_, s) => PharmacyThreadPage(patientId: s.pathParameters['uid']!),
+                  ),
+                ],
+              ),
+            ],
+          ),
           GoRoute(
             path: '/admin/users',
             builder: (_, _) => const AdminUsersPage(),

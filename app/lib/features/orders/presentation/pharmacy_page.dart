@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../shared/services/api/api_client.dart';
 import '../../appointments/domain/appointment_text.dart' show dateLabel;
@@ -25,6 +26,8 @@ class PharmacyPage extends ConsumerWidget {
           _PriceCard(),
           SizedBox(height: 16),
           _StockCard(),
+          SizedBox(height: 16),
+          _CatalogCard(),
         ];
         const side = [_LookupCard(), SizedBox(height: 16), _QuickActions()];
         return ListView(
@@ -124,6 +127,45 @@ class _QueueCard extends ConsumerWidget {
   const _QueueCard();
 
   Future<void> _ready(BuildContext context, WidgetRef ref, MedicationOrder o) async {
+    if (o.items.isNotEmpty) {
+      // D-69: each medicine is taken from its catalogue-linked stock.
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text(o.isDelivery ? 'Ready for delivery' : 'Ready for collection'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('These quantities are taken from stock:'),
+              const SizedBox(height: 8),
+              for (final i in o.items) Text('• ${i.label} × ${i.quantity}'),
+              if (o.isDelivery)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('A courier is booked as soon as you confirm.'),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+            FilledButton(
+              key: const Key('ready-confirm'),
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !context.mounted) return;
+      await _run(
+        context,
+        ref,
+        () => ref.read(ordersRepositoryProvider).markReady(o.id),
+        o.isDelivery ? 'Ready for delivery. Courier booked.' : 'Ready for collection.',
+      );
+      return;
+    }
     final stock = await ref.read(stockProvider.future).catchError((_) => <StockItem>[]);
     if (!context.mounted) return;
     if (stock.isEmpty) {
@@ -144,7 +186,9 @@ class _QueueCard extends ConsumerWidget {
     await _run(
       context,
       ref,
-      () => ref.read(ordersRepositoryProvider).markReady(o.id, picked.$1, picked.$2),
+      () => ref
+          .read(ordersRepositoryProvider)
+          .markReady(o.id, stockItemId: picked.$1, units: picked.$2),
       o.isDelivery ? 'Ready for delivery. Courier booked.' : 'Ready for collection.',
     );
   }
@@ -197,6 +241,8 @@ class _QueueCard extends ConsumerWidget {
                     ListTile(
                       key: Key('queue-${o.id}'),
                       contentPadding: EdgeInsets.zero,
+                      // D-69: the patient's dispensing details.
+                      onTap: () => context.go('/pharmacy/patients/${o.patientId}'),
                       leading: CircleAvatar(
                         child: Text(
                           (o.patientName ?? '?')
@@ -207,7 +253,12 @@ class _QueueCard extends ConsumerWidget {
                               .join(),
                         ),
                       ),
-                      title: Text('${o.patientName ?? 'Patient'} · ${o.medicationDetails}'),
+                      title: Text(
+                        o.items.isEmpty
+                            ? '${o.patientName ?? 'Patient'} · ${o.medicationDetails}'
+                            : '${o.patientName ?? 'Patient'} · '
+                                  '${o.items.map((i) => '${i.label} ×${i.quantity}').join(', ')}',
+                      ),
                       subtitle: Wrap(
                         spacing: 8,
                         runSpacing: 4,
@@ -507,26 +558,39 @@ class _StockCard extends ConsumerWidget {
 
 /// "New Stock" quick action (Fig 4.3.13.1).
 Future<void> addStockItem(BuildContext context, WidgetRef ref) async {
+  final catalog = await ref.read(catalogProvider.future).catchError((_) => <CatalogItem>[]);
+  if (!context.mounted) return;
   final result = await showDialog<(String, int, String)>(
     context: context,
-    builder: (_) => const _StockDialog(title: 'New stock item', askName: true),
+    builder: (_) => _StockDialog(title: 'New stock item', askName: true, catalog: catalog),
   );
   if (result == null || !context.mounted) return;
   final (name, units, expiry) = result;
+  // D-69: a stock item named like a catalogue medicine is linked to it.
+  final linked = catalog.where((c) => c.label.toLowerCase() == name.toLowerCase()).firstOrNull;
   await _run(
     context,
     ref,
     () => ref
         .read(ordersRepositoryProvider)
-        .addStock(name: name, units: units, expiryDate: expiry, lowStockAt: 50),
+        .addStock(
+          name: name,
+          units: units,
+          expiryDate: expiry,
+          lowStockAt: 50,
+          catalogId: linked?.id,
+        ),
     '$name added to stock.',
   );
 }
 
 class _StockDialog extends StatefulWidget {
-  const _StockDialog({required this.title, required this.askName});
+  const _StockDialog({required this.title, required this.askName, this.catalog = const []});
   final String title;
   final bool askName;
+
+  /// D-69: picking a catalogue medicine fills the name and links the stock to it.
+  final List<CatalogItem> catalog;
 
   @override
   State<_StockDialog> createState() => _StockDialogState();
@@ -555,6 +619,17 @@ class _StockDialogState extends State<_StockDialog> {
     content: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (widget.askName && widget.catalog.isNotEmpty)
+          DropdownButtonFormField<String>(
+            key: const Key('stock-catalog'),
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Catalogue medicine (optional)'),
+            items: [
+              for (final c in widget.catalog)
+                DropdownMenuItem(value: c.label, child: Text(c.label)),
+            ],
+            onChanged: (v) => setState(() => _name.text = v ?? _name.text),
+          ),
         if (widget.askName)
           TextField(
             key: const Key('stock-name'),
@@ -650,30 +725,34 @@ class _LookupCardState extends ConsumerState<_LookupCard> {
                         for (final p in list)
                           Card(
                             key: Key('lookup-${p.id}'),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(p.name, style: Theme.of(context).textTheme.titleMedium),
-                                  Text(
-                                    ['ID: ${p.id}', ?p.email, ?p.phone].join(' · '),
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Text('Current regimen'),
-                                  for (final r in p.regimen)
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: () => context.go('/pharmacy/patients/${p.id}'),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(p.name, style: Theme.of(context).textTheme.titleMedium),
                                     Text(
-                                      '• ${r.medicationDetails}'
-                                      '${r.monthlyPrice == null ? ' (no price yet)' : ' · ${rm(r.monthlyPrice!)}/month'}',
+                                      ['ID: ${p.id}', ?p.email, ?p.phone].join(' · '),
+                                      style: Theme.of(context).textTheme.bodySmall,
                                     ),
-                                  if (p.recentOrders.isNotEmpty) ...[
                                     const SizedBox(height: 8),
-                                    const Text('Recent orders'),
-                                    for (final o in p.recentOrders)
-                                      Text('• ${cycleLabel(o.cycleDate)}: ${o.status.label}'),
+                                    const Text('Current regimen'),
+                                    for (final r in p.regimen)
+                                      Text(
+                                        '• ${r.medicationDetails}'
+                                        '${r.monthlyPrice == null ? ' (no price yet)' : ' · ${rm(r.monthlyPrice!)}/month'}',
+                                      ),
+                                    if (p.recentOrders.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      const Text('Recent orders'),
+                                      for (final o in p.recentOrders)
+                                        Text('• ${cycleLabel(o.cycleDate)}: ${o.status.label}'),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ),
                           ),
@@ -795,4 +874,170 @@ class _PromptDialogState extends State<_PromptDialog> {
       ],
     );
   }
+}
+
+// ---------------- D-69: medication catalogue ----------------
+
+/// The medicines doctors prescribe and their unit prices. A price change applies to new
+/// prescriptions only; issued ones keep the price they were written with.
+class _CatalogCard extends ConsumerWidget {
+  const _CatalogCard();
+
+  Future<void> _price(BuildContext context, WidgetRef ref, CatalogItem c) async {
+    final text = await showDialog<String>(
+      context: context,
+      builder: (_) => _PromptDialog(
+        title: 'Price of ${c.label}',
+        message: 'Per ${c.form}. Applies to new prescriptions.',
+        initial: c.unitPrice.toStringAsFixed(2),
+        fieldKey: const Key('catalog-price-input'),
+        label: 'Unit price',
+        prefixText: 'RM ',
+        confirmKey: const Key('catalog-price-save'),
+        confirmText: 'Save',
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        allowed: RegExp(r'[0-9.]'),
+        isValid: (v) => (double.tryParse(v) ?? 0) >= 0.01,
+      ),
+    );
+    final price = double.tryParse(text ?? '');
+    if (price == null || !context.mounted) return;
+    await _run(
+      context,
+      ref,
+      () => ref.read(ordersRepositoryProvider).setCatalogPrice(c.id, price),
+      '${c.label} now ${rm(price)} per ${c.form}.',
+    );
+    ref.invalidate(catalogProvider);
+  }
+
+  Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final result = await showDialog<(String, String, double)>(
+      context: context,
+      builder: (_) => const _CatalogDialog(),
+    );
+    if (result == null || !context.mounted) return;
+    final (name, strength, price) = result;
+    await _run(
+      context,
+      ref,
+      () => ref
+          .read(ordersRepositoryProvider)
+          .addCatalogItem(name: name, strength: strength, form: 'tablet', unitPrice: price),
+      '$name $strength added to the catalogue.',
+    );
+    ref.invalidate(catalogProvider);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final catalog = ref.watch(catalogProvider);
+    return _Section(
+      icon: Icons.menu_book_outlined,
+      title: 'Medication catalogue',
+      action: TextButton.icon(
+        key: const Key('catalog-add'),
+        onPressed: () => _add(context, ref),
+        icon: const Icon(Icons.add),
+        label: const Text('Add medicine'),
+      ),
+      child: catalog.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (_, _) => TextButton(
+          onPressed: () => ref.invalidate(catalogProvider),
+          child: const Text('Could not load the catalogue. Retry'),
+        ),
+        data: (items) => ExpansionTile(
+          key: const Key('catalog-list'),
+          tilePadding: EdgeInsets.zero,
+          title: Text('${items.length} medicines · prices used for prescriptions'),
+          children: [
+            for (final c in items)
+              ListTile(
+                key: Key('catalog-${c.id}'),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(c.label),
+                subtitle: Text(c.drugClass),
+                trailing: TextButton(
+                  key: Key('catalog-price-${c.id}'),
+                  onPressed: () => _price(context, ref, c),
+                  child: Text('${rm(c.unitPrice)} / ${c.form}'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CatalogDialog extends StatefulWidget {
+  const _CatalogDialog();
+
+  @override
+  State<_CatalogDialog> createState() => _CatalogDialogState();
+}
+
+class _CatalogDialogState extends State<_CatalogDialog> {
+  final _name = TextEditingController();
+  final _strength = TextEditingController();
+  final _price = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _strength.dispose();
+    _price.dispose();
+    super.dispose();
+  }
+
+  bool get _valid =>
+      _name.text.trim().length >= 2 &&
+      _strength.text.trim().isNotEmpty &&
+      (double.tryParse(_price.text) ?? 0) >= 0.01;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Add a medicine'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          key: const Key('catalog-name'),
+          controller: _name,
+          decoration: const InputDecoration(labelText: 'Name, e.g. Olmesartan'),
+          onChanged: (_) => setState(() {}),
+        ),
+        TextField(
+          key: const Key('catalog-strength'),
+          controller: _strength,
+          decoration: const InputDecoration(labelText: 'Strength, e.g. 20mg'),
+          onChanged: (_) => setState(() {}),
+        ),
+        TextField(
+          key: const Key('catalog-price'),
+          controller: _price,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+          decoration: const InputDecoration(labelText: 'Price per tablet', prefixText: 'RM '),
+          onChanged: (_) => setState(() {}),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      FilledButton(
+        key: const Key('catalog-save'),
+        onPressed: _valid
+            ? () => Navigator.pop(context, (
+                _name.text.trim(),
+                _strength.text.trim(),
+                double.parse(_price.text),
+              ))
+            : null,
+        child: const Text('Add'),
+      ),
+    ],
+  );
 }

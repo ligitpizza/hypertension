@@ -247,10 +247,11 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
         Card(
           child: ListTile(
             leading: const Icon(Icons.medication_outlined),
-            title: const Text('Monthly prescription refill'),
+            title: const Text('Prescription order'),
             subtitle: Text(
-              '${o.medicationDetails}\nOrder ${o.ref}'
-              '${o.total == null ? '' : ' · ${rm(o.total!)} paid'}',
+              '${o.items.isEmpty ? o.medicationDetails : o.items.map((i) => '${i.label} ×${i.quantity}').join('\n')}'
+              '\nOrder ${o.ref}'
+              '${o.total == null ? '' : ' · ${rm(o.total!)}${o.isPaid ? ' paid' : ''}'}',
             ),
             isThreeLine: true,
           ),

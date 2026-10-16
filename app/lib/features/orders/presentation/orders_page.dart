@@ -35,57 +35,92 @@ class OrdersPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final orders = ref.watch(myOrdersProvider);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Monthly orders'),
-        actions: [
-          PopupMenuButton<String>(
-            key: const Key('orders-menu'),
-            onSelected: (_) => _nextCycle(context, ref),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'next', child: Text("Start next month's order (testing)")),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Orders'),
+          // D-69: Active (needs action, preparing, on the way) and Completed.
+          bottom: const TabBar(
+            tabs: [
+              Tab(key: Key('orders-tab-active'), text: 'Active'),
+              Tab(key: Key('orders-tab-completed'), text: 'Completed'),
             ],
           ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () => ref.refresh(myOrdersProvider.future),
-        child: orders.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, _) => ListView(
-            children: [
-              const SizedBox(height: 120),
-              const Icon(Icons.cloud_off, size: 48),
-              const Text('Could not load your orders.', textAlign: TextAlign.center),
-              TextButton(
-                onPressed: () => ref.invalidate(myOrdersProvider),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-          data: (list) => list.isEmpty
-              ? ListView(
-                  key: const Key('orders-empty'),
-                  padding: const EdgeInsets.all(32),
-                  children: const [
-                    SizedBox(height: 80),
-                    Icon(Icons.local_pharmacy_outlined, size: 48),
-                    SizedBox(height: 12),
-                    Text(
-                      'No monthly orders yet. When your doctor makes a prescription recurring, '
-                      "you'll confirm each month's refill here.",
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [for (final o in list) _OrderCard(order: o)],
+          actions: [
+            PopupMenuButton<String>(
+              key: const Key('orders-menu'),
+              onSelected: (_) => _nextCycle(context, ref),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'next', child: Text("Start next month's order (testing)")),
+              ],
+            ),
+          ],
+        ),
+        body: RefreshIndicator(
+          onRefresh: () => ref.refresh(myOrdersProvider.future),
+          child: orders.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (_, _) => ListView(
+              children: [
+                const SizedBox(height: 120),
+                const Icon(Icons.cloud_off, size: 48),
+                const Text('Could not load your orders.', textAlign: TextAlign.center),
+                TextButton(
+                  onPressed: () => ref.invalidate(myOrdersProvider),
+                  child: const Text('Retry'),
                 ),
+              ],
+            ),
+            data: (list) => TabBarView(
+              children: [
+                _OrderList(
+                  key: const Key('orders-active'),
+                  orders: [
+                    for (final o in list)
+                      if (o.isActive) o,
+                  ],
+                  empty:
+                      'No orders in progress. When your doctor prescribes medicine, the order '
+                      'appears here for you to confirm and pay.',
+                ),
+                _OrderList(
+                  key: const Key('orders-completed'),
+                  orders: [
+                    for (final o in list)
+                      if (!o.isActive) o,
+                  ],
+                  empty: 'Delivered, collected and skipped orders appear here.',
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+class _OrderList extends StatelessWidget {
+  const _OrderList({super.key, required this.orders, required this.empty});
+  final List<MedicationOrder> orders;
+  final String empty;
+
+  @override
+  Widget build(BuildContext context) => orders.isEmpty
+      ? ListView(
+          padding: const EdgeInsets.all(32),
+          children: [
+            const SizedBox(height: 80),
+            const Icon(Icons.local_pharmacy_outlined, size: 48),
+            const SizedBox(height: 12),
+            Text(empty, key: const Key('orders-empty'), textAlign: TextAlign.center),
+          ],
+        )
+      : ListView(
+          padding: const EdgeInsets.all(16),
+          children: [for (final o in orders) _OrderCard(order: o)],
+        );
 }
 
 class _OrderCard extends StatelessWidget {
@@ -115,7 +150,12 @@ class _OrderCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              Text(order.medicationDetails, style: theme.textTheme.titleMedium),
+              Text(
+                order.items.isEmpty
+                    ? order.medicationDetails
+                    : order.items.map((i) => '${i.label} ×${i.quantity}').join(', '),
+                style: theme.textTheme.titleMedium,
+              ),
               const SizedBox(height: 4),
               Text(
                 [
@@ -123,6 +163,7 @@ class _OrderCard extends StatelessWidget {
                   if (total != null) rm(total) else 'Awaiting price from the pharmacy',
                   if (order.method == homeDelivery) 'Home delivery',
                   if (order.method == selfCollection) 'Self-collection',
+                  if (order.isPaid) 'Paid' else if (order.paymentFailed) 'Payment failed',
                 ].join(' · '),
                 style: theme.textTheme.bodySmall,
               ),

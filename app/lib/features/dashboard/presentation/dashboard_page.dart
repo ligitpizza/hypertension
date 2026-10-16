@@ -411,6 +411,7 @@ class _QuickActions extends StatelessWidget {
     ('Messages', Icons.chat_bubble_outline, '/chat', Key('qa-messages')),
     ('AI Agent', Icons.smart_toy_outlined, '/ai-agent', Key('qa-agent')),
     ('Appointments', Icons.event_outlined, '/appointments', Key('qa-appointments')),
+    ('Orders', Icons.local_pharmacy_outlined, '/orders', Key('qa-orders')), // D-69
   ];
 
   @override

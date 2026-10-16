@@ -103,12 +103,20 @@ class Medication {
     this.quantityOnHand,
     this.refillThresholdDays = 7,
     this.createdAt,
+    this.source = 'patient',
+    this.prescribedBy,
   });
 
   final String id;
   final String patientId;
   final String name;
   final String dosage;
+
+  /// D-69: 'doctor' when added from a prescription (locked except reminder times).
+  final String source;
+  final String? prescribedBy;
+
+  bool get fromDoctor => source == 'doctor';
 
   /// D-43: "08:00,20:00" (Malaysia time) or "as_needed".
   final String schedule;
@@ -129,6 +137,8 @@ class Medication {
     quantityOnHand: (d['quantityOnHand'] as num?)?.toDouble(),
     refillThresholdDays: (d['refillThresholdDays'] as num?)?.toInt() ?? 7,
     createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+    source: d['source'] as String? ?? 'patient',
+    prescribedBy: d['prescribedBy'] as String?,
   );
 }
 

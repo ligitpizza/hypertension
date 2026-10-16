@@ -27,6 +27,9 @@ import 'package:hypertension/shared/services/api/api_client.dart';
 import '../helpers/fakes.dart';
 import 'symptom_checker_test.dart' show FakeSymptomRepository;
 import 'trends_page_test.dart' show FakeTrendsRepository;
+import 'package:hypertension/features/orders/state/orders_providers.dart';
+
+import '../helpers/order_fakes.dart';
 
 // Module 8 doctor portal (FR-8.1-8.4; UC8.1-UC8.6; Figs 4.3.12.1-4.3.12.7).
 final now = DateTime(2026, 10, 13, 12);
@@ -123,6 +126,28 @@ class FakeDoseLogs implements MedicationsRepository {
 final doseLogs = FakeDoseLogs();
 
 class FakePortalRepository implements PortalRepository {
+  final consolidated = <List<Map<String, dynamic>>>[];
+
+  /// D-69: same interaction behaviour as [issuePrescription] (records rxCalls too).
+  @override
+  Future<({String details, double? total})> issueConsolidated(
+    String patientId, {
+    required List<Map<String, dynamic>> items,
+    bool isRecurring = false,
+    bool acknowledgeInteractions = false,
+  }) async {
+    final details = await issuePrescription(
+      patientId,
+      medicationName: '${items.first['catalogId']}',
+      dosage: '${items.first['dose']}',
+      frequency: '${items.first['frequency']}',
+      isRecurring: isRecurring,
+      acknowledgeInteractions: acknowledgeInteractions,
+    );
+    consolidated.add(items);
+    return (details: details, total: 63.0);
+  }
+
   final recurringCalls = <(String, bool)>[];
 
   @override
@@ -250,6 +275,7 @@ Widget portal(FakePortalRepository repo, FakePatientData data, String location) 
   return ProviderScope(
     overrides: [
       portalRepositoryProvider.overrideWithValue(repo),
+      ordersRepositoryProvider.overrideWithValue(FakeOrdersRepository()), // D-69 catalogue
       medicationsRepositoryProvider.overrideWithValue(doseLogs),
       symptomRepositoryProvider.overrideWithValue(symptoms),
       dashboardRepositoryProvider.overrideWithValue(data),
@@ -623,12 +649,11 @@ void main() {
   });
 
   group('Fig 4.3.12.7 Prescription', () {
+    /// D-69: medicines are picked from the catalogue.
     Future<void> fillForm(WidgetTester t) async {
-      await t.enterText(find.byKey(const Key('rx-name')), 'Aliskiren');
-      await t.enterText(find.byKey(const Key('rx-dosage')), '150mg');
-      await t.tap(find.byKey(const Key('rx-frequency')));
-      await t.pumpAndSettle();
-      await t.tap(find.text('Once daily').last);
+      await t.enterText(find.byKey(const Key('rx-search')), 'aml');
+      await t.pump();
+      await t.tap(find.byKey(const Key('rx-option-amlodipine-5')));
       await t.pumpAndSettle();
     }
 
@@ -640,6 +665,46 @@ void main() {
       await t.pumpAndSettle();
       expect(repo.rxCalls, [false]);
       expect(find.byKey(const Key('rx-saved')), findsOneWidget);
+    });
+
+    tallTest('D-69 consolidated prescription: several medicines, quantity and total', (t) async {
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1/prescriptions'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('rx-submit')));
+      await t.pump();
+      expect(find.text('Add at least one medicine.'), findsOneWidget);
+      await fillForm(t);
+      await t.enterText(find.byKey(const Key('rx-search')), 'losartan');
+      await t.pump();
+      await t.tap(find.byKey(const Key('rx-option-losartan-50')));
+      await t.pumpAndSettle();
+      // 30 x RM0.30 + 30 x RM0.90 = RM36.00
+      expect(find.text('Total RM36.00'), findsOneWidget);
+      await t.tap(find.byKey(const Key('rx-frequency')).last);
+      await t.pumpAndSettle();
+      await t.tap(find.text('Twice daily').last);
+      await t.pumpAndSettle();
+      expect(find.text('Total RM63.00'), findsOneWidget); // quantity follows frequency (60)
+      await t.tap(find.byKey(const Key('rx-recurring')));
+      await t.tap(find.byKey(const Key('rx-submit')));
+      await t.pumpAndSettle();
+      expect(repo.consolidated.single, [
+        {
+          'catalogId': 'amlodipine-5',
+          'dose': '1 tablet',
+          'frequency': 'once_daily',
+          'quantity': 30,
+        },
+        {
+          'catalogId': 'losartan-50',
+          'dose': '1 tablet',
+          'frequency': 'twice_daily',
+          'quantity': 60,
+        },
+      ]);
+      expect(repo.rxCalls, [false]); // no interaction warning to acknowledge
+      expect(find.textContaining('sent to the pharmacy'), findsOneWidget);
+      expect(find.byKey(const Key('rx-empty')), findsOneWidget);
     });
 
     tallTest('UC8.4 E1 critical interaction needs review before prescribing', (t) async {

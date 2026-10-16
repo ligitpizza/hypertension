@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/services/api/api_client.dart';
 import '../../medications/domain/med_schedule.dart';
-import '../../prescriptions/domain/prescription_text.dart';
+import '../../orders/data/order_models.dart';
+import '../../orders/state/orders_providers.dart';
 import '../domain/portal_models.dart';
 import '../state/portal_providers.dart';
 import 'portal_prescription_tile.dart';
 import 'portal_widgets.dart';
 
 /// Fig 4.3.12.7 Prescription Management (FR-8.3; UC8.4 and E1 interaction warning).
+/// D-69: one prescription lists several catalogue medicines with dose, frequency and
+/// quantity; it goes to the pharmacy as one order.
 class PrescriptionPage extends ConsumerStatefulWidget {
   const PrescriptionPage({super.key, required this.patientId});
 
@@ -21,51 +25,60 @@ class PrescriptionPage extends ConsumerStatefulWidget {
 }
 
 class _PrescriptionPageState extends ConsumerState<PrescriptionPage> {
-  final _form = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _dosage = TextEditingController();
-  final _duration = TextEditingController();
-  String? _frequency;
+  /// D-69: the medicines of this consolidated prescription.
+  final _lines = <_RxLine>[];
   bool _recurring = false;
   bool _saving = false;
   String? _error;
 
   @override
   void dispose() {
-    for (final c in [_name, _dosage, _duration]) {
-      c.dispose();
+    for (final l in _lines) {
+      l.dispose();
     }
     super.dispose();
   }
 
+  void _add(CatalogItem item) => setState(() => _lines.add(_RxLine(item)));
+
   Future<void> _submit({bool acknowledge = false}) async {
-    if (!_form.currentState!.validate()) return;
+    if (_lines.isEmpty) {
+      setState(() => _error = 'Add at least one medicine.');
+      return;
+    }
+    if (_lines.any((l) => l.quantity == null || l.dose.text.trim().isEmpty)) {
+      setState(() => _error = 'Each medicine needs a dose and a quantity of at least 1.');
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      final details = await ref
+      final result = await ref
           .read(portalRepositoryProvider)
-          .issuePrescription(
+          .issueConsolidated(
             widget.patientId,
-            medicationName: _name.text.trim(),
-            dosage: _dosage.text.trim(),
-            frequency: _frequency!,
-            duration: _duration.text,
+            items: [for (final l in _lines) l.toJson()],
             isRecurring: _recurring,
             acknowledgeInteractions: acknowledge,
           );
       if (!mounted) return;
+      final total = result.total;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(key: const Key('rx-saved'), content: Text('Prescription issued: $details')),
+        SnackBar(
+          key: const Key('rx-saved'),
+          content: Text(
+            'Prescription issued${total == null ? '' : ' (${rm(total)})'}. '
+            'The order was sent to the pharmacy.',
+          ),
+        ),
       );
-      _form.currentState!.reset();
-      for (final c in [_name, _dosage, _duration]) {
-        c.clear();
-      }
       setState(() {
-        _frequency = null;
+        for (final l in _lines) {
+          l.dispose();
+        }
+        _lines.clear();
         _recurring = false;
       });
     } on ApiException catch (e) {
@@ -134,8 +147,6 @@ class _PrescriptionPageState extends ConsumerState<PrescriptionPage> {
     );
   }
 
-  String? _required(String? v) => (v == null || v.trim().isEmpty) ? 'Required' : null;
-
   @override
   Widget build(BuildContext context) {
     final id = widget.patientId;
@@ -190,77 +201,71 @@ class _PrescriptionPageState extends ConsumerState<PrescriptionPage> {
       ),
     );
 
+    final catalog = ref.watch(catalogProvider);
+    final total = _lines.fold<double>(0, (sum, l) => sum + l.lineTotal);
     final form = SectionCard(
       title: 'New prescription',
-      child: Form(
-        key: _form,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextFormField(
-              key: const Key('rx-name'),
-              controller: _name,
-              decoration: const InputDecoration(
-                labelText: 'Medication name',
-                hintText: 'e.g. Losartan',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // D-69: pick medicines from the catalogue; prices come from the pharmacy.
+          catalog.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (_, _) => TextButton(
+              onPressed: () => ref.invalidate(catalogProvider),
+              child: const Text('Could not load the medication catalogue. Retry'),
+            ),
+            data: (items) => _CatalogPicker(items: items, onPicked: _add),
+          ),
+          const SizedBox(height: 12),
+          if (_lines.isEmpty)
+            const Text('No medicines added yet.', key: Key('rx-empty'))
+          else
+            for (final (n, l) in _lines.indexed)
+              _RxLineCard(
+                key: Key('rx-line-$n'),
+                line: l,
+                onChanged: () => setState(() {}),
+                onRemove: () => setState(() => _lines.removeAt(n).dispose()),
               ),
-              validator: _required,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              key: const Key('rx-dosage'),
-              controller: _dosage,
-              decoration: const InputDecoration(labelText: 'Dosage', hintText: 'e.g. 50mg'),
-              validator: _required,
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: const Key('rx-frequency'),
-              initialValue: _frequency,
-              decoration: const InputDecoration(labelText: 'Frequency'),
-              items: [for (final f in frequencies) DropdownMenuItem(value: f, child: Text(f))],
-              onChanged: (v) => setState(() => _frequency = v),
-              validator: (v) => v == null ? 'Required' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              key: const Key('rx-duration'),
-              controller: _duration,
-              decoration: const InputDecoration(
-                labelText: 'Duration (optional)',
-                hintText: 'e.g. 30 days',
+          if (_lines.isNotEmpty)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'Total ${rm(total)}',
+                key: const Key('rx-total'),
+                style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              key: const Key('rx-recurring'),
-              contentPadding: EdgeInsets.zero,
-              value: _recurring,
-              onChanged: (v) => setState(() => _recurring = v),
-              title: const Text('Recurring for chronic condition'),
-              subtitle: const Text('Monthly renewal orders start with the pharmacy module.'),
-            ),
-            if (_error != null)
-              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => context.go('/doctor/patient/$id'),
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  key: const Key('rx-submit'),
-                  onPressed: _saving ? null : _submit,
-                  icon: const Icon(Icons.send),
-                  label: Text(_saving ? 'Saving...' : 'Authorize'),
-                ),
-              ],
-            ),
-          ],
-        ),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            key: const Key('rx-recurring'),
+            contentPadding: EdgeInsets.zero,
+            value: _recurring,
+            onChanged: (v) => setState(() => _recurring = v),
+            title: const Text('Recurring for chronic condition'),
+            subtitle: const Text('The order goes to the pharmacy now and repeats every month.'),
+          ),
+          if (_error != null)
+            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => context.go('/doctor/patient/$id'),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                key: const Key('rx-submit'),
+                onPressed: _saving ? null : _submit,
+                icon: const Icon(Icons.send),
+                label: Text(_saving ? 'Saving...' : 'Authorize'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
 
@@ -290,6 +295,194 @@ class _PrescriptionPageState extends ConsumerState<PrescriptionPage> {
           regimen,
         ],
       ],
+    );
+  }
+}
+
+/// Search the catalogue and add a medicine (D-69).
+class _CatalogPicker extends StatefulWidget {
+  const _CatalogPicker({required this.items, required this.onPicked});
+  final List<CatalogItem> items;
+  final ValueChanged<CatalogItem> onPicked;
+
+  @override
+  State<_CatalogPicker> createState() => _CatalogPickerState();
+}
+
+class _CatalogPickerState extends State<_CatalogPicker> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _search.text.trim().toLowerCase();
+    final matches = q.isEmpty
+        ? const <CatalogItem>[]
+        : widget.items
+              .where(
+                (c) =>
+                    c.active &&
+                    (c.label.toLowerCase().contains(q) || c.drugClass.toLowerCase().contains(q)),
+              )
+              .take(8)
+              .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          key: const Key('rx-search'),
+          controller: _search,
+          decoration: const InputDecoration(
+            labelText: 'Add a medicine',
+            hintText: 'Search name or class, e.g. amlodipine',
+            prefixIcon: Icon(Icons.search),
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        for (final c in matches)
+          ListTile(
+            key: Key('rx-option-${c.id}'),
+            dense: true,
+            leading: const Icon(Icons.add_circle_outline),
+            title: Text(c.label),
+            subtitle: Text('${c.drugClass} · ${rm(c.unitPrice)} per ${c.form}'),
+            onTap: () {
+              widget.onPicked(c);
+              setState(_search.clear);
+            },
+          ),
+        if (q.isNotEmpty && matches.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(8),
+            child: Text('No catalogue medicine matches. Ask the pharmacy to add it.'),
+          ),
+      ],
+    );
+  }
+}
+
+/// One medicine of the prescription being built (D-69).
+class _RxLine {
+  _RxLine(this.item);
+
+  final CatalogItem item;
+  final dose = TextEditingController(text: '1 tablet');
+  final qty = TextEditingController(text: '30');
+  String frequency = 'once_daily';
+
+  int? get quantity {
+    final n = int.tryParse(qty.text.trim());
+    return n != null && n >= 1 && n <= 1000 ? n : null;
+  }
+
+  double get lineTotal => (quantity ?? 0) * item.unitPrice;
+
+  /// A month's supply for the chosen frequency (one unit per dose).
+  void suggestQuantity() {
+    final perDay = prescriptionFrequencies[frequency]?.$2 ?? 1;
+    qty.text = '${perDay == 0 ? 10 : perDay * 30}';
+  }
+
+  Map<String, dynamic> toJson() => {
+    'catalogId': item.id,
+    'dose': dose.text.trim(),
+    'frequency': frequency,
+    'quantity': quantity,
+  };
+
+  void dispose() {
+    dose.dispose();
+    qty.dispose();
+  }
+}
+
+class _RxLineCard extends StatelessWidget {
+  const _RxLineCard({
+    super.key,
+    required this.line,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final _RxLine line;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = line.item;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(item.label, style: Theme.of(context).textTheme.titleSmall)),
+                Text('${rm(item.unitPrice)} / ${item.form}'),
+                IconButton(
+                  key: const Key('rx-remove'),
+                  tooltip: 'Remove',
+                  icon: const Icon(Icons.close),
+                  onPressed: onRemove,
+                ),
+              ],
+            ),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.end,
+              children: [
+                SizedBox(
+                  width: 130,
+                  child: TextField(
+                    key: const Key('rx-dose'),
+                    controller: line.dose,
+                    decoration: const InputDecoration(labelText: 'Dose'),
+                    onChanged: (_) => onChanged(),
+                  ),
+                ),
+                SizedBox(
+                  width: 190,
+                  child: DropdownButtonFormField<String>(
+                    key: const Key('rx-frequency'),
+                    isExpanded: true,
+                    initialValue: line.frequency,
+                    decoration: const InputDecoration(labelText: 'Frequency'),
+                    items: [
+                      for (final f in prescriptionFrequencies.entries)
+                        DropdownMenuItem(value: f.key, child: Text(f.value.$1)),
+                    ],
+                    onChanged: (v) {
+                      line.frequency = v ?? line.frequency;
+                      line.suggestQuantity();
+                      onChanged();
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 100,
+                  child: TextField(
+                    key: const Key('rx-quantity'),
+                    controller: line.qty,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(labelText: 'Quantity'),
+                    onChanged: (_) => onChanged(),
+                  ),
+                ),
+                Text(rm(line.lineTotal), style: Theme.of(context).textTheme.bodyLarge),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

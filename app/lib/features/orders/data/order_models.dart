@@ -34,6 +34,84 @@ const deliveryFeeRm = 5.0;
 
 String rm(num v) => 'RM${v.toStringAsFixed(2)}';
 
+/// Prescription frequencies (D-69), as the backend's catalogue FREQUENCIES.
+const prescriptionFrequencies = {
+  'once_daily': ('Once daily', 1),
+  'twice_daily': ('Twice daily', 2),
+  'three_times_daily': ('Three times daily', 3),
+  'at_night': ('At night', 1),
+  'as_needed': ('As needed', 0),
+};
+
+String frequencyLabel(String key) => prescriptionFrequencies[key]?.$1 ?? key;
+
+/// One medicine in a consolidated prescription / order (D-69).
+class OrderItem {
+  const OrderItem({
+    required this.name,
+    required this.strength,
+    required this.dose,
+    required this.frequency,
+    required this.quantity,
+    required this.unitPrice,
+    this.catalogId,
+  });
+
+  final String? catalogId;
+  final String name;
+  final String strength;
+  final String dose;
+  final String frequency;
+  final int quantity;
+  final double unitPrice;
+
+  String get label => '$name $strength'.trim();
+  double get lineTotal => double.parse((unitPrice * quantity).toStringAsFixed(2));
+
+  factory OrderItem.fromJson(Map<String, dynamic> d) => OrderItem(
+    catalogId: d['catalogId'] as String?,
+    name: '${d['name'] ?? ''}',
+    strength: '${d['strength'] ?? ''}',
+    dose: '${d['dose'] ?? ''}',
+    frequency: '${d['frequency'] ?? ''}',
+    quantity: (d['quantity'] as num?)?.toInt() ?? 0,
+    unitPrice: _num(d['unitPrice']) ?? 0,
+  );
+}
+
+/// A `medication_catalog` entry (D-69).
+class CatalogItem {
+  const CatalogItem({
+    required this.id,
+    required this.name,
+    required this.strength,
+    required this.form,
+    required this.unitPrice,
+    this.drugClass = '',
+    this.active = true,
+  });
+
+  final String id;
+  final String name;
+  final String strength;
+  final String form;
+  final String drugClass;
+  final double unitPrice;
+  final bool active;
+
+  String get label => '$name $strength';
+
+  factory CatalogItem.fromJson(Map<String, dynamic> d) => CatalogItem(
+    id: '${d['id']}',
+    name: '${d['name'] ?? ''}',
+    strength: '${d['strength'] ?? ''}',
+    form: '${d['form'] ?? 'tablet'}',
+    drugClass: '${d['drugClass'] ?? ''}',
+    unitPrice: _num(d['unitPrice']) ?? 0,
+    active: d['active'] != false,
+  );
+}
+
 class TrackingEvent {
   const TrackingEvent({required this.status, this.location, this.timestamp});
 
@@ -79,7 +157,19 @@ class MedicationOrder {
     this.dispatchedAt,
     this.etaAt,
     this.events = const [],
+    this.items = const [],
+    this.suggestedAddress,
+    this.suggestedLat,
+    this.suggestedLng,
   });
+
+  /// D-69: the consolidated prescription's medicines (empty for older orders).
+  final List<OrderItem> items;
+
+  /// The patient's saved address, to prefill checkout (patient view only).
+  final String? suggestedAddress;
+  final double? suggestedLat;
+  final double? suggestedLng;
 
   final String id;
 
@@ -174,7 +264,20 @@ class MedicationOrder {
       for (final e in (d['events'] as List? ?? const []))
         TrackingEvent.fromJson(Map<String, dynamic>.from(e as Map)),
     ],
+    items: [
+      for (final i in (d['items'] as List? ?? const []))
+        OrderItem.fromJson(Map<String, dynamic>.from(i as Map)),
+    ],
+    suggestedAddress: d['suggestedAddress'] as String?,
+    suggestedLat: _num(d['suggestedLat']),
+    suggestedLng: _num(d['suggestedLng']),
   );
+
+  /// Active = still needs the patient, the pharmacy or the courier (Orders tabs, D-69).
+  bool get isActive => switch (status) {
+    Fulfilment.collected || Fulfilment.delivered || Fulfilment.skipped => false,
+    _ => true,
+  };
 }
 
 /// A payment the app has to complete (UC13.3).
@@ -311,4 +414,152 @@ class DeliveryOverview {
   final List<MedicationOrder> orders;
   final String courier;
   final bool simulated;
+}
+
+/// Pharmacist patient view (D-69): dispensing details only.
+class PharmacyPatientDetail {
+  const PharmacyPatientDetail({
+    required this.id,
+    required this.name,
+    this.email,
+    this.phone,
+    this.gender,
+    this.age,
+    this.address,
+    this.allergies = '',
+    this.conditions = const [],
+    this.medications = const [],
+    this.prescriptions = const [],
+    this.orders = const [],
+  });
+
+  final String id;
+  final String name;
+  final String? email;
+  final String? phone;
+  final String? gender;
+  final int? age;
+  final String? address;
+  final String allergies;
+  final List<String> conditions;
+  final List<PatientMedicine> medications;
+  final List<PatientPrescription> prescriptions;
+  final List<MedicationOrder> orders;
+
+  factory PharmacyPatientDetail.fromJson(Map<String, dynamic> d) => PharmacyPatientDetail(
+    id: '${d['id']}',
+    name: '${d['name'] ?? 'Patient'}',
+    email: d['email'] as String?,
+    phone: d['phone'] as String?,
+    gender: d['gender'] as String?,
+    age: (d['age'] as num?)?.toInt(),
+    address: d['address'] as String?,
+    allergies: '${d['allergies'] ?? ''}',
+    conditions: [for (final c in (d['conditions'] as List? ?? const [])) '$c'],
+    medications: [
+      for (final m in (d['medications'] as List? ?? const []))
+        PatientMedicine.fromJson(Map<String, dynamic>.from(m as Map)),
+    ],
+    prescriptions: [
+      for (final p in (d['prescriptions'] as List? ?? const []))
+        PatientPrescription.fromJson(Map<String, dynamic>.from(p as Map)),
+    ],
+    orders: [
+      for (final o in (d['orders'] as List? ?? const []))
+        MedicationOrder.fromJson(Map<String, dynamic>.from(o as Map)),
+    ],
+  );
+}
+
+class PatientMedicine {
+  const PatientMedicine({
+    required this.name,
+    required this.dosage,
+    required this.schedule,
+    this.quantityOnHand,
+    this.fromDoctor = false,
+    this.prescribedBy,
+  });
+
+  final String name;
+  final String dosage;
+  final String schedule;
+  final double? quantityOnHand;
+  final bool fromDoctor;
+  final String? prescribedBy;
+
+  factory PatientMedicine.fromJson(Map<String, dynamic> d) => PatientMedicine(
+    name: '${d['name'] ?? ''}',
+    dosage: '${d['dosage'] ?? ''}',
+    schedule: '${d['schedule'] ?? ''}',
+    quantityOnHand: _num(d['quantityOnHand']),
+    fromDoctor: d['source'] == 'doctor',
+    prescribedBy: d['prescribedBy'] as String?,
+  );
+}
+
+class PatientPrescription {
+  const PatientPrescription({
+    required this.id,
+    required this.medicationDetails,
+    this.items = const [],
+    this.isRecurring = false,
+    this.issuedAt,
+  });
+
+  final String id;
+  final String medicationDetails;
+  final List<OrderItem> items;
+  final bool isRecurring;
+  final DateTime? issuedAt;
+
+  factory PatientPrescription.fromJson(Map<String, dynamic> d) => PatientPrescription(
+    id: '${d['id']}',
+    medicationDetails: '${d['medicationDetails'] ?? ''}',
+    items: [
+      for (final i in (d['items'] as List? ?? const []))
+        OrderItem.fromJson(Map<String, dynamic>.from(i as Map)),
+    ],
+    isRecurring: d['isRecurring'] == true,
+    issuedAt: _time(d['issuedAt']),
+  );
+}
+
+/// One pharmacy chat message (D-69).
+class PharmacyMessage {
+  const PharmacyMessage({
+    required this.id,
+    required this.patientId,
+    required this.senderRole,
+    required this.senderName,
+    required this.text,
+    this.sentAt,
+  });
+
+  final String id;
+  final String patientId;
+
+  /// patient | pharmacist
+  final String senderRole;
+  final String senderName;
+  final String text;
+  final DateTime? sentAt;
+
+  bool get fromPharmacy => senderRole == 'pharmacist';
+
+  factory PharmacyMessage.fromJson(Map<String, dynamic> d) => PharmacyMessage(
+    id: '${d['id']}',
+    patientId: '${d['patientId'] ?? ''}',
+    senderRole: '${d['senderRole'] ?? ''}',
+    senderName: '${d['senderName'] ?? ''}',
+    text: '${d['text'] ?? ''}',
+    sentAt: _time(d['sentAt']),
+  );
+}
+
+/// The latest message of each patient's pharmacy conversation (pharmacist inbox).
+class PharmacyConversation {
+  const PharmacyConversation({required this.last, this.patientName});
+  final PharmacyMessage last;
+  final String? patientName;
 }

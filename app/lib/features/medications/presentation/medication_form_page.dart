@@ -45,6 +45,9 @@ class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
 
   bool get _editing => widget.existing != null;
 
+  /// D-69: set by the doctor; only the reminder times can change.
+  bool get _locked => widget.existing?.fromDoctor ?? false;
+
   @override
   void dispose() {
     for (final c in [_name, _dosage, _quantity, _threshold]) {
@@ -137,7 +140,7 @@ class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
       appBar: AppBar(
         title: Text(_editing ? 'Edit medication' : 'Add medication'),
         actions: [
-          if (_editing)
+          if (_editing && !_locked)
             IconButton(
               key: const Key('delete-medication'),
               tooltip: 'Delete',
@@ -151,9 +154,23 @@ class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (_locked)
+              Card(
+                key: const Key('med-locked'),
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                child: ListTile(
+                  leading: const Icon(Icons.lock_outline),
+                  title: Text('Prescribed by ${widget.existing!.prescribedBy ?? 'your doctor'}'),
+                  subtitle: const Text(
+                    'You can change the reminder times. Ask your doctor to change the '
+                    'medicine, dose or quantity.',
+                  ),
+                ),
+              ),
             TextFormField(
               key: const Key('med-name'),
               controller: _name,
+              readOnly: _locked,
               decoration: const InputDecoration(labelText: 'Medicine name'),
               textCapitalization: TextCapitalization.words,
               validator: (v) => (v ?? '').trim().length < 2 ? 'Enter the medicine name.' : null,
@@ -162,6 +179,7 @@ class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
             TextFormField(
               key: const Key('med-dosage'),
               controller: _dosage,
+              readOnly: _locked,
               decoration: const InputDecoration(
                 labelText: 'Dosage',
                 hintText: 'e.g. 5mg, 1 tablet',
@@ -210,6 +228,7 @@ class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
             TextFormField(
               key: const Key('med-quantity'),
               controller: _quantity,
+              readOnly: _locked,
               keyboardType: TextInputType.number,
               inputFormatters: digits,
               decoration: const InputDecoration(

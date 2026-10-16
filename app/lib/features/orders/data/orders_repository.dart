@@ -24,7 +24,9 @@ abstract interface class OrdersRepository {
 
   Future<PharmacyQueue> queue();
   Future<void> setPrice(String prescriptionId, double price);
-  Future<void> markReady(String id, String stockItemId, int units);
+
+  /// Catalogue orders (D-69) take stock per item: leave [stockItemId] and [units] null.
+  Future<void> markReady(String id, {String? stockItemId, int? units});
   Future<void> outOfStock(String id, {String? note});
   Future<void> collected(String id);
   Future<List<StockItem>> stock();
@@ -33,10 +35,29 @@ abstract interface class OrdersRepository {
     required int units,
     required String expiryDate,
     required int lowStockAt,
+    String? catalogId,
   });
   Future<void> receiveStock(String id, int units, String expiryDate);
   Future<void> setLowStockAt(String id, int lowStockAt);
   Future<List<PharmacyPatient>> lookup(String query);
+
+  // D-69
+  Future<List<CatalogItem>> catalog();
+  Future<void> addCatalogItem({
+    required String name,
+    required String strength,
+    required String form,
+    required double unitPrice,
+    String drugClass = '',
+  });
+  Future<void> setCatalogPrice(String id, double unitPrice);
+  Future<PharmacyPatientDetail> pharmacyPatient(String uid);
+  Future<List<PharmacyMessage>> myPharmacyChat();
+  Future<void> sendToPharmacy(String text);
+  Future<List<PharmacyConversation>> pharmacyConversations();
+  Future<({String patientName, List<PharmacyMessage> messages})> pharmacyThread(String uid);
+  Future<void> sendToPatient(String uid, String text);
+  Future<void> saveAddress(String address, {double? lat, double? lng});
 
   Future<DeliveryOverview> deliveries();
   Future<void> dispatch(String id);
@@ -114,8 +135,8 @@ class ApiOrdersRepository implements OrdersRepository {
       _api.setMonthlyPrice(prescriptionId, price);
 
   @override
-  Future<void> markReady(String id, String stockItemId, int units) =>
-      _api.markOrderReady(id, stockItemId, units);
+  Future<void> markReady(String id, {String? stockItemId, int? units}) =>
+      _api.markOrderReady(id, stockItemId: stockItemId, units: units);
 
   @override
   Future<void> outOfStock(String id, {String? note}) => _api.markOutOfStock(id, note: note);
@@ -135,8 +156,10 @@ class ApiOrdersRepository implements OrdersRepository {
     required int units,
     required String expiryDate,
     required int lowStockAt,
+    String? catalogId,
   }) => _api.addStockItem({
     'name': name,
+    'catalogId': ?catalogId,
     'units': units,
     'expiryDate': expiryDate,
     'lowStockAt': lowStockAt,
@@ -155,6 +178,69 @@ class ApiOrdersRepository implements OrdersRepository {
     for (final p in ((await _api.pharmacyPatients(query))['patients'] as List? ?? const []))
       PharmacyPatient.fromJson(Map<String, dynamic>.from(p as Map)),
   ];
+
+  static List<PharmacyMessage> _messages(Object? list) => [
+    for (final m in (list as List? ?? const []))
+      PharmacyMessage.fromJson(Map<String, dynamic>.from(m as Map)),
+  ];
+
+  @override
+  Future<List<CatalogItem>> catalog() async => [
+    for (final c in ((await _api.catalog())['items'] as List? ?? const []))
+      CatalogItem.fromJson(Map<String, dynamic>.from(c as Map)),
+  ];
+
+  @override
+  Future<void> addCatalogItem({
+    required String name,
+    required String strength,
+    required String form,
+    required double unitPrice,
+    String drugClass = '',
+  }) => _api.addCatalogItem({
+    'name': name,
+    'strength': strength,
+    'form': form,
+    'unitPrice': unitPrice,
+    'drugClass': drugClass,
+  });
+
+  @override
+  Future<void> setCatalogPrice(String id, double unitPrice) =>
+      _api.editCatalogItem(id, {'unitPrice': unitPrice});
+
+  @override
+  Future<PharmacyPatientDetail> pharmacyPatient(String uid) async =>
+      PharmacyPatientDetail.fromJson(await _api.pharmacyPatient(uid));
+
+  @override
+  Future<List<PharmacyMessage>> myPharmacyChat() async =>
+      _messages((await _api.myPharmacyChat())['messages']);
+
+  @override
+  Future<void> sendToPharmacy(String text) => _api.sendPharmacyChat(text);
+
+  @override
+  Future<List<PharmacyConversation>> pharmacyConversations() async => [
+    for (final c in ((await _api.pharmacyConversations())['conversations'] as List? ?? const []))
+      PharmacyConversation(
+        last: PharmacyMessage.fromJson(Map<String, dynamic>.from(c as Map)),
+        patientName: c['patientName'] as String?,
+      ),
+  ];
+
+  @override
+  Future<({String patientName, List<PharmacyMessage> messages})> pharmacyThread(String uid) async {
+    final d = await _api.pharmacyThread(uid);
+    return (patientName: '${d['patientName'] ?? 'Patient'}', messages: _messages(d['messages']));
+  }
+
+  @override
+  Future<void> sendToPatient(String uid, String text) => _api.sendPharmacyMessage(uid, text);
+
+  @override
+  Future<void> saveAddress(String address, {double? lat, double? lng}) =>
+      _api.updateAddress(address, lat: lat, lng: lng);
 
   @override
   Future<DeliveryOverview> deliveries() async {

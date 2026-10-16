@@ -100,8 +100,8 @@ class FakeOrdersRepository implements OrdersRepository {
       calls.add('price:$prescriptionId:$price');
 
   @override
-  Future<void> markReady(String id, String stockItemId, int units) async {
-    calls.add('ready:$id:$stockItemId:$units');
+  Future<void> markReady(String id, {String? stockItemId, int? units}) async {
+    calls.add(stockItemId == null ? 'ready:$id' : 'ready:$id:$stockItemId:$units');
     _maybeFail();
   }
 
@@ -120,7 +120,9 @@ class FakeOrdersRepository implements OrdersRepository {
     required int units,
     required String expiryDate,
     required int lowStockAt,
-  }) async => calls.add('addStock:$name:$units:$expiryDate');
+    String? catalogId,
+  }) async =>
+      calls.add('addStock:$name:$units:$expiryDate${catalogId == null ? '' : ':$catalogId'}');
 
   @override
   Future<void> receiveStock(String id, int units, String expiryDate) async =>
@@ -134,6 +136,71 @@ class FakeOrdersRepository implements OrdersRepository {
     calls.add('lookup:$query');
     return patients;
   }
+
+  // ---- D-69 ----
+  List<CatalogItem> catalogItems = const [
+    CatalogItem(
+      id: 'amlodipine-5',
+      name: 'Amlodipine',
+      strength: '5mg',
+      form: 'tablet',
+      unitPrice: 0.30,
+      drugClass: 'Calcium channel blocker',
+    ),
+    CatalogItem(
+      id: 'losartan-50',
+      name: 'Losartan',
+      strength: '50mg',
+      form: 'tablet',
+      unitPrice: 0.90,
+      drugClass: 'Angiotensin receptor blocker',
+    ),
+  ];
+  PharmacyPatientDetail? patientDetail;
+  List<PharmacyMessage> chat = [];
+  List<PharmacyConversation> conversations = [];
+
+  @override
+  Future<List<CatalogItem>> catalog() async => catalogItems;
+
+  @override
+  Future<void> addCatalogItem({
+    required String name,
+    required String strength,
+    required String form,
+    required double unitPrice,
+    String drugClass = '',
+  }) async => calls.add('addCatalog:$name:$strength:$unitPrice');
+
+  @override
+  Future<void> setCatalogPrice(String id, double unitPrice) async =>
+      calls.add('catalogPrice:$id:$unitPrice');
+
+  @override
+  Future<PharmacyPatientDetail> pharmacyPatient(String uid) async {
+    calls.add('patient:$uid');
+    return patientDetail!;
+  }
+
+  @override
+  Future<List<PharmacyMessage>> myPharmacyChat() async => chat;
+
+  @override
+  Future<void> sendToPharmacy(String text) async => calls.add('toPharmacy:$text');
+
+  @override
+  Future<List<PharmacyConversation>> pharmacyConversations() async => conversations;
+
+  @override
+  Future<({String patientName, List<PharmacyMessage> messages})> pharmacyThread(String uid) async =>
+      (patientName: 'Siti', messages: chat);
+
+  @override
+  Future<void> sendToPatient(String uid, String text) async => calls.add('toPatient:$uid:$text');
+
+  @override
+  Future<void> saveAddress(String address, {double? lat, double? lng}) async =>
+      calls.add('address:$address:$lat,$lng');
 
   @override
   Future<DeliveryOverview> deliveries() async => overview;
