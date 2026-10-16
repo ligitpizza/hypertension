@@ -223,12 +223,23 @@ class PharmacyMessagesPage extends ConsumerWidget {
               onPressed: () => ref.invalidate(pharmacyConversationsProvider),
               icon: const Icon(Icons.refresh),
             ),
+            const SizedBox(width: 8),
+            // D-70: start a conversation with any patient.
+            FilledButton.icon(
+              key: const Key('new-message'),
+              onPressed: () async {
+                final uid = await showDialog<String>(
+                  context: context,
+                  builder: (_) => const _PickPatientDialog(),
+                );
+                if (uid != null && context.mounted) context.go('/pharmacy/messages/$uid');
+              },
+              icon: const Icon(Icons.edit_square),
+              label: const Text('New message'),
+            ),
           ],
         ),
-        const Text(
-          'Shared by all pharmacists. To start a conversation, open a patient from the queue '
-          'or the patient lookup.',
-        ),
+        const Text('Shared by all pharmacists. Patients see it as "CareFlow Pharmacy".'),
         const SizedBox(height: 12),
         list.when(
           loading: () => const LinearProgressIndicator(),
@@ -301,6 +312,65 @@ class PharmacyThreadPage extends ConsumerWidget {
         ),
         Expanded(child: PharmacyChatView(patientId: patientId)),
       ],
+    );
+  }
+}
+
+/// D-70: choose any patient to message.
+class _PickPatientDialog extends ConsumerStatefulWidget {
+  const _PickPatientDialog();
+
+  @override
+  ConsumerState<_PickPatientDialog> createState() => _PickPatientDialogState();
+}
+
+class _PickPatientDialogState extends ConsumerState<_PickPatientDialog> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final list = ref.watch(pharmacyLookupProvider(_query));
+    return AlertDialog(
+      title: const Text('Message a patient'),
+      content: SizedBox(
+        width: 420,
+        height: 420,
+        child: Column(
+          children: [
+            TextField(
+              key: const Key('pick-patient-search'),
+              autofocus: true,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Name, email or IC',
+              ),
+              onSubmitted: (v) => setState(() => _query = v.trim()),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: list.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (_, _) => const Center(child: Text('Could not load patients.')),
+                data: (patients) => patients.isEmpty
+                    ? const Center(child: Text('No patient matches.'))
+                    : ListView(
+                        children: [
+                          for (final p in patients)
+                            ListTile(
+                              key: Key('pick-${p.id}'),
+                              leading: const Icon(Icons.person_outline),
+                              title: Text(p.name),
+                              subtitle: Text(p.email ?? p.id),
+                              onTap: () => Navigator.pop(context, p.id),
+                            ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel'))],
     );
   }
 }

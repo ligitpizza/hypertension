@@ -49,7 +49,10 @@ IconData themeModeIcon(ThemeMode m) => switch (m) {
 
 /// System / Light / Dark segmented selector (patient More tab).
 class ThemeModeSelector extends ConsumerWidget {
-  const ThemeModeSelector({super.key});
+  const ThemeModeSelector({super.key, this.expanded = false});
+
+  /// Fill the available width (Settings), so the labels stay on one line.
+  final bool expanded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -57,9 +60,14 @@ class ThemeModeSelector extends ConsumerWidget {
     return SegmentedButton<ThemeMode>(
       key: const Key('theme-selector'),
       showSelectedIcon: false,
+      expandedInsets: expanded ? EdgeInsets.zero : null,
       segments: [
         for (final m in ThemeMode.values)
-          ButtonSegment(value: m, icon: Icon(themeModeIcon(m)), label: Text(themeModeLabel(m))),
+          ButtonSegment(
+            value: m,
+            icon: Icon(themeModeIcon(m)),
+            label: Text(themeModeLabel(m), maxLines: 1, softWrap: false),
+          ),
       ],
       selected: {mode},
       onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),

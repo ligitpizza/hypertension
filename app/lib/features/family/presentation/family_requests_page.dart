@@ -6,6 +6,8 @@ import '../../../shared/services/api/api_client.dart';
 import '../../auth/state/auth_providers.dart';
 import '../data/location_source.dart';
 import '../state/family_providers.dart';
+import '../../orders/presentation/address_page.dart';
+import '../../orders/state/orders_providers.dart';
 
 /// Patient: family link requests and linked members (`/family-requests`; UC15.1, D-06, D-62).
 class FamilyRequestsPage extends ConsumerWidget {
@@ -173,6 +175,30 @@ class _LocationSetting extends ConsumerStatefulWidget {
 class _LocationSettingState extends ConsumerState<_LocationSetting> with WidgetsBindingObserver {
   bool? _granted;
   LocationAccess? _problem;
+  bool _saving = false;
+
+  /// D-70: the current GPS point becomes the saved place (address text from the
+  /// device geocoder).
+  Future<void> _saveCurrent() async {
+    setState(() => _saving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final pos = await ref.read(locationSourceProvider).current(ask: true);
+      if (pos == null) {
+        messenger.showSnackBar(const SnackBar(content: Text("Couldn't get a GPS fix.")));
+        return;
+      }
+      final text =
+          await ref.read(reverseGeocoderProvider)(pos['lat']!, pos['lng']!) ??
+          '${pos['lat']!.toStringAsFixed(5)}, ${pos['lng']!.toStringAsFixed(5)}';
+      await ref.read(ordersRepositoryProvider).saveAddress(text, lat: pos['lat'], lng: pos['lng']);
+      messenger.showSnackBar(const SnackBar(content: Text('Saved place updated.')));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('Could not save the place.')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   void initState() {
@@ -222,27 +248,36 @@ class _LocationSettingState extends ConsumerState<_LocationSetting> with Widgets
   Widget build(BuildContext context) {
     final problem = _problem;
     final (advice, action) = problem == null ? ('', null) : locationAdvice(problem);
-    return Card(
+    // D-70: the saved place (map-picked) is sent when the phone has no GPS fix.
+    final me = ref.watch(currentUserProvider).value;
+    final status = _granted == true
+        ? 'On. Your live location is sent only with an emergency alert to your family.'
+        : problem != null
+        ? advice
+        : 'Off. Turn on so family can find you if an emergency is detected.';
+    final saved = me?.address == null
+        ? 'No saved place yet: pick one so family still gets a location without GPS.'
+        : 'Saved place (used when GPS is off): ${me!.address}';
+    return Column(
       key: const Key('family-location'),
-      child: ListTile(
-        leading: Icon(_granted == true ? Icons.location_on : Icons.location_off),
-        title: const Text('Share my location in emergencies'),
-        subtitle: Text(
-          _granted == true
-              ? 'On. Your location is sent only with an emergency alert to your family.'
-              : problem != null
-              ? advice
-              : 'Off. Turn on so family can find you if an emergency is detected.',
-          key: const Key('family-location-status'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LocationMapCard(
+          title: 'Share my location in emergencies',
+          subtitle: '$status\n$saved',
+          lat: me?.addressLat,
+          lng: me?.addressLng,
+          busy: _saving,
+          useCurrentKey: const Key('family-location-allow'),
+          useCurrentLabel: action ?? (_granted == true ? 'Save current location' : 'Allow'),
+          onUseCurrent: _granted == true && action == null ? _saveCurrent : _allow,
+          onPickOnMap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => const AddressPage())),
         ),
-        trailing: _granted == true
-            ? null
-            : TextButton(
-                key: const Key('family-location-allow'),
-                onPressed: _allow,
-                child: Text(action ?? 'Allow'),
-              ),
-      ),
+        // Keeps the status text findable on its own (tests, screen readers).
+        Offstage(child: Text(status, key: const Key('family-location-status'))),
+      ],
     );
   }
 }

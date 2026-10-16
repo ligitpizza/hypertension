@@ -353,54 +353,30 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
               border: OutlineInputBorder(),
             ),
           ),
-          // D-67: the courier needs the exact drop-off point and a number to call.
-          Card(
+          // D-67/D-70: the courier needs the exact drop-off point; shown on a map.
+          LocationMapCard(
             key: const Key('delivery-location'),
-            child: ListTile(
-              leading: Icon(
-                _location == null ? Icons.location_off_outlined : Icons.location_on,
-                color: _location == null ? null : theme.colorScheme.primary,
-              ),
-              title: Text(
-                _location == null
-                    ? 'Share your location for the courier'
-                    : 'Location shared for the courier',
-              ),
-              subtitle: Text(
+            title: _location == null
+                ? 'Share your location for the courier'
+                : 'Location shared for the courier',
+            subtitle:
                 _locationNote ??
-                    (_location == null
-                        ? "Tap when you're at the delivery address."
-                        : '${_location!['lat']!.toStringAsFixed(5)}, '
-                              '${_location!['lng']!.toStringAsFixed(5)}'),
-              ),
-              trailing: _locating
-                  ? const SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : TextButton(
-                      key: const Key('use-location'),
-                      onPressed: _locationFix != null
-                          ? () => ref.read(locationSourceProvider).openSettings(_locationFix!)
-                          : _locate,
-                      child: Text(
-                        _locationFix != null
-                            ? locationAdvice(_locationFix!).$2!
-                            : _location == null
-                            ? 'Use my current location'
-                            : 'Update',
-                      ),
-                    ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              key: const Key('pick-on-map'),
-              onPressed: _pickOnMap,
-              icon: const Icon(Icons.map_outlined),
-              label: const Text('Pick on map instead'),
-            ),
+                (_location == null
+                    ? "Use your current location when you're at the address, or pick it on "
+                          'the map.'
+                    : 'Drag the pin with "Pick on map" if it is not quite right.'),
+            lat: _location?['lat'],
+            lng: _location?['lng'],
+            busy: _locating,
+            useCurrentLabel: _locationFix != null
+                ? locationAdvice(_locationFix!).$2!
+                : _location == null
+                ? 'Use my current location'
+                : 'Update',
+            onUseCurrent: _locationFix != null
+                ? () => ref.read(locationSourceProvider).openSettings(_locationFix!)
+                : _locate,
+            onPickOnMap: _pickOnMap,
           ),
           const SizedBox(height: 8),
           TextField(

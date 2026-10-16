@@ -380,7 +380,19 @@ class PharmacyPatient {
     required this.recentOrders,
     this.email,
     this.phone,
+    this.gender,
+    this.age,
+    this.isActive = true,
+    this.orderCount = 0,
+    this.activeOrders = 0,
   });
+
+  /// D-70 Patients tab.
+  final String? gender;
+  final int? age;
+  final bool isActive;
+  final int orderCount;
+  final int activeOrders;
 
   final String id;
   final String name;
@@ -394,6 +406,11 @@ class PharmacyPatient {
     name: '${d['name'] ?? 'Patient'}',
     email: d['email'] as String?,
     phone: d['phone'] as String?,
+    gender: d['gender'] as String?,
+    age: (d['age'] as num?)?.toInt(),
+    isActive: d['isActive'] != false,
+    orderCount: (d['orderCount'] as num?)?.toInt() ?? 0,
+    activeOrders: (d['activeOrders'] as num?)?.toInt() ?? 0,
     regimen: [
       for (final r in (d['regimen'] as List? ?? const []))
         RegimenItem(
@@ -562,4 +579,22 @@ class PharmacyConversation {
   const PharmacyConversation({required this.last, this.patientName});
   final PharmacyMessage last;
   final String? patientName;
+}
+
+/// D-70 order tracking: status groups as the backend's ORDER_GROUPS.
+const orderGroups = {
+  'all': 'All',
+  'awaiting_patient': 'Awaiting patient',
+  'in_pharmacy': 'In pharmacy',
+  'out_for_delivery': 'Out for delivery',
+  'completed': 'Completed',
+  'failed': 'Failed',
+};
+
+class OrdersOverview {
+  const OrdersOverview({required this.orders, required this.counts});
+  final List<MedicationOrder> orders;
+  final Map<String, int> counts;
+
+  int get total => counts.values.fold(0, (a, b) => a + b);
 }

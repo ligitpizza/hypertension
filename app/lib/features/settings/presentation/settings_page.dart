@@ -128,10 +128,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     'Urgent alerts (very high blood pressure, emergencies) are always sent.',
                   ),
                 ),
-                const ListTile(
-                  leading: Icon(Icons.palette_outlined),
-                  title: Text('Theme'),
-                  subtitle: Padding(padding: EdgeInsets.only(top: 8), child: ThemeModeSelector()),
+                // Full width under its title, so the three labels never wrap.
+                const ListTile(leading: Icon(Icons.palette_outlined), title: Text('Theme')),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: ThemeModeSelector(expanded: true),
                 ),
                 if (user?.linkCode != null)
                   ListTile(

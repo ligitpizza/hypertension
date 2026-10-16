@@ -603,6 +603,13 @@ class ApiClient {
 
   Future<Map<String, dynamic>> pharmacyPatient(String uid) => _get('/pharmacy/patients/$uid');
 
+  /// D-70: every order by status group (pharmacist, admin).
+  Future<Map<String, dynamic>> ordersOverview({String group = 'all', String query = ''}) =>
+      _getQuery('/orders-overview', {'group': group, if (query.isNotEmpty) 'q': query});
+
+  /// D-70: admin only.
+  Future<void> deleteStockItem(String id) => _send('DELETE', '/pharmacy/stock/$id', null);
+
   Future<Map<String, dynamic>> myPharmacyChat() => _get('/pharmacy-chat/messages');
 
   Future<Map<String, dynamic>> sendPharmacyChat(String text) =>

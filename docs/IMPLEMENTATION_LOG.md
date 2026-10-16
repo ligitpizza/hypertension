@@ -1246,3 +1246,23 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   new (205 total); Flutter 12 new (553 total). Patient APK and staff web build.
 - Deviations vs Chapter 4: D-69 (new collections and fields; order for every
   prescription; pharmacy chat not end-to-end encrypted).
+
+### 2026-10-17 — Increment 3 — Portal tabs, inventory CRUD, saved location, layout fixes (D-70)
+
+- From Ping's second M13 test, agreed as D-70.
+- **Fixes:** the checkout drop-off box (text squeezed into a narrow column) is now an
+  embedded Google Map card with "Use my current location" and "Pick on map"; the Settings
+  theme toggle sits full width under its title so "System / Light / Dark" never wrap.
+- **Saved location:** the Family "Share my location in emergencies" card shows the saved
+  place on an embedded map, with "Save current location" (GPS + device geocoder) and
+  "Pick on map". Emergency alerts still send live GPS; with no fix they carry the saved
+  point and `locationSource: saved` (`gps` otherwise).
+- **Pharmacy portal tabs:** Orders (paid queue, pricing, quick links), Tracking (every
+  order by stage with counts, search, row opens the patient), Inventory (Stock and
+  Catalogue tables: receive, warning level, edit medicine and price, offer/hide),
+  Patients (every patient, like the admin user list, opening the dispensing view),
+  Messages (+ "New message" to any patient). The old stock/catalogue/lookup cards left the
+  Orders page.
+- **Admin:** new Orders (tracking, rows open the user detail) and Inventory tabs; admins
+  can also delete stock items. `GET /orders-overview`, `DELETE /pharmacy/stock/{id}`.
+- Tests: backend 657; Flutter 558. Staff web and patient APK build.

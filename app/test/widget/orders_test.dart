@@ -18,6 +18,8 @@ import 'package:hypertension/shared/services/api/api_client.dart';
 
 import '../helpers/fakes.dart';
 import '../helpers/order_fakes.dart';
+import 'package:hypertension/features/orders/presentation/inventory_page.dart';
+import 'package:hypertension/features/orders/presentation/pharmacy_patients_page.dart';
 
 // Module 13: recurring orders, payment and delivery (FR-13.1-13.5; UC13.1-UC13.6; D-66).
 
@@ -52,6 +54,15 @@ Widget host(String initial) {
         path: '/pharmacy',
         builder: (_, _) => const Scaffold(body: PharmacyPage()),
       ),
+      // D-70: inventory and patients have their own tabs.
+      GoRoute(
+        path: '/pharmacy/inventory',
+        builder: (_, _) => const Scaffold(body: InventoryPage()),
+      ),
+      GoRoute(
+        path: '/pharmacy/patients',
+        builder: (_, _) => const Scaffold(body: PharmacyPatientsPage()),
+      ),
       GoRoute(
         path: '/admin/deliveries',
         builder: (_, _) => const Scaffold(body: AdminDeliveriesPage()),
@@ -62,6 +73,7 @@ Widget host(String initial) {
     overrides: [
       ordersRepositoryProvider.overrideWithValue(repo),
       paymentSheetProvider.overrideWithValue(sheet),
+      mapBuilderProvider.overrideWithValue((lat, lng, label) => Text('MAP $lat,$lng')),
       locationSourceProvider.overrideWithValue(location),
     ],
     child: MaterialApp.router(routerConfig: router),
@@ -484,10 +496,12 @@ void main() {
           ],
           needsPrice: const [],
         );
+      await t.pumpWidget(host('/pharmacy/inventory'));
+      await t.pumpAndSettle();
+      expect(find.text('Low (< 50)'), findsOneWidget);
+      expect(find.text('2027-01-31'), findsOneWidget);
       await t.pumpWidget(host('/pharmacy'));
       await t.pumpAndSettle();
-      expect(find.textContaining('LOW (below 50)'), findsOneWidget);
-      expect(find.textContaining('earliest expiry 2027-01-31'), findsOneWidget);
       await t.tap(find.byKey(const Key('collected-$id')));
       await t.pumpAndSettle();
       expect(repo.calls, contains('collected:$id'));
@@ -521,13 +535,15 @@ void main() {
           recentOrders: [],
         ),
       ];
-      await t.pumpWidget(host('/pharmacy'));
+      // D-70: the Patients tab lists every patient and searches.
+      await t.pumpWidget(host('/pharmacy/patients'));
       await t.pumpAndSettle();
-      await t.enterText(find.byKey(const Key('lookup-input')), 'siti');
+      expect(repo.calls, contains('lookup:'));
+      expect(find.text('Siti'), findsOneWidget);
+      await t.enterText(find.byKey(const Key('patients-search')), 'siti');
       await t.testTextInput.receiveAction(TextInputAction.done);
       await t.pumpAndSettle();
       expect(repo.calls, contains('lookup:siti'));
-      expect(find.textContaining('Amlodipine 5mg · RM15.00/month'), findsOneWidget);
     });
   });
 

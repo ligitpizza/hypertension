@@ -51,6 +51,19 @@ abstract interface class OrdersRepository {
     String drugClass = '',
   });
   Future<void> setCatalogPrice(String id, double unitPrice);
+
+  /// D-70: correct a catalogue medicine or (de)activate it.
+  Future<void> editCatalogItem(
+    String id, {
+    String? name,
+    String? strength,
+    String? drugClass,
+    String? form,
+    double? unitPrice,
+    bool? active,
+  });
+  Future<void> deleteStock(String id);
+  Future<OrdersOverview> ordersOverview({String group = 'all', String query = ''});
   Future<PharmacyPatientDetail> pharmacyPatient(String uid);
   Future<List<PharmacyMessage>> myPharmacyChat();
   Future<void> sendToPharmacy(String text);
@@ -208,6 +221,39 @@ class ApiOrdersRepository implements OrdersRepository {
   @override
   Future<void> setCatalogPrice(String id, double unitPrice) =>
       _api.editCatalogItem(id, {'unitPrice': unitPrice});
+
+  @override
+  Future<void> editCatalogItem(
+    String id, {
+    String? name,
+    String? strength,
+    String? drugClass,
+    String? form,
+    double? unitPrice,
+    bool? active,
+  }) => _api.editCatalogItem(id, {
+    'name': ?name,
+    'strength': ?strength,
+    'drugClass': ?drugClass,
+    'form': ?form,
+    'unitPrice': ?unitPrice,
+    'active': ?active,
+  });
+
+  @override
+  Future<void> deleteStock(String id) => _api.deleteStockItem(id);
+
+  @override
+  Future<OrdersOverview> ordersOverview({String group = 'all', String query = ''}) async {
+    final d = await _api.ordersOverview(group: group, query: query);
+    return OrdersOverview(
+      orders: _orders(d['orders']),
+      counts: {
+        for (final e in ((d['counts'] as Map?) ?? const {}).entries)
+          '${e.key}': (e.value as num).toInt(),
+      },
+    );
+  }
 
   @override
   Future<PharmacyPatientDetail> pharmacyPatient(String uid) async =>

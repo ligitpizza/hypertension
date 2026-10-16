@@ -385,8 +385,8 @@ void main() {
       await t.pumpAndSettle();
       expect(repo.calls, ['decide:r1:true', 'remove:f2']);
       expect(
-        find.textContaining('Your location is sent only with an emergency alert'),
-        findsOneWidget,
+        find.textContaining('Your live location is sent only with an emergency alert'),
+        findsWidgets, // D-70: in the map card and its status line
       );
     });
 

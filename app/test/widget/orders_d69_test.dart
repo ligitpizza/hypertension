@@ -15,6 +15,9 @@ import 'package:hypertension/features/orders/state/orders_providers.dart';
 
 import '../helpers/fakes.dart';
 import '../helpers/order_fakes.dart';
+import 'package:hypertension/features/orders/presentation/inventory_page.dart';
+import 'package:hypertension/features/orders/presentation/pharmacy_patients_page.dart';
+import 'package:hypertension/features/orders/presentation/tracking_page.dart';
 
 // D-69: consolidated orders, Orders tabs, address picker, pharmacy patient view, catalogue
 // and pharmacy chat.
@@ -89,6 +92,22 @@ Widget host(String initial) {
         builder: (_, _) => const Scaffold(body: PharmacyPage()),
         routes: [
           GoRoute(
+            path: 'inventory',
+            builder: (_, _) => const Scaffold(body: InventoryPage()),
+          ),
+          GoRoute(
+            path: 'tracking',
+            builder: (_, _) => const Scaffold(body: OrderTrackingPage()),
+          ),
+          GoRoute(
+            path: 'admin-inventory',
+            builder: (_, _) => const Scaffold(body: InventoryPage(admin: true)),
+          ),
+          GoRoute(
+            path: 'patients',
+            builder: (_, _) => const Scaffold(body: PharmacyPatientsPage()),
+          ),
+          GoRoute(
             path: 'patients/:uid',
             builder: (_, s) =>
                 Scaffold(body: PharmacyPatientPage(patientId: s.pathParameters['uid']!)),
@@ -112,6 +131,7 @@ Widget host(String initial) {
     overrides: [
       ordersRepositoryProvider.overrideWithValue(repo),
       locationSourceProvider.overrideWithValue(location),
+      mapBuilderProvider.overrideWithValue((lat, lng, label) => Text('PREVIEW $lat,$lng')),
       pickerMapBuilderProvider.overrideWithValue(
         (lat, lng, onMoved) => GestureDetector(
           key: const Key('fake-map'),
@@ -237,19 +257,24 @@ void main() {
     expect(repo.calls, contains('ready:$id'));
   });
 
-  tallTest('catalogue prices can be changed', (t) async {
-    await t.pumpWidget(host('/pharmacy'));
+  tallTest('D-70 catalogue tab: edit a medicine and stop offering it', (t) async {
+    await t.pumpWidget(host('/pharmacy/inventory'));
     await t.pumpAndSettle();
-    await t.ensureVisible(find.byKey(const Key('catalog-list')));
-    await t.tap(find.byKey(const Key('catalog-list')));
+    await t.tap(find.byKey(const Key('inventory-tab-catalogue')));
     await t.pumpAndSettle();
-    await t.tap(find.byKey(const Key('catalog-price-amlodipine-5')));
+    expect(find.text('RM0.30'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('catalog-edit-amlodipine-5')));
+    await t.tap(find.byKey(const Key('catalog-edit-amlodipine-5')));
     await t.pumpAndSettle();
-    await t.enterText(find.byKey(const Key('catalog-price-input')), '0.35');
+    await t.enterText(find.byKey(const Key('catalog-edit-price')), '0.35');
     await t.pump();
-    await t.tap(find.byKey(const Key('catalog-price-save')));
+    await t.tap(find.byKey(const Key('catalog-edit-save')));
     await t.pumpAndSettle();
-    expect(repo.calls, contains('catalogPrice:amlodipine-5:0.35'));
+    expect(repo.calls, contains('editCatalog:amlodipine-5:Amlodipine:5mg:0.35:'));
+    await t.ensureVisible(find.byKey(const Key('catalog-active-losartan-50')));
+    await t.tap(find.byKey(const Key('catalog-active-losartan-50')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('editCatalog:losartan-50::::false'));
   });
 
   tallTest('pharmacist patient view: allergies, medicines, prescriptions, orders', (t) async {
@@ -327,5 +352,97 @@ void main() {
     await t.tap(find.byKey(const Key('pharmacy-chat-send')));
     await t.pumpAndSettle();
     expect(repo.calls, contains('toPatient:u-patient:Tomorrow at 10 AM.'));
+  });
+
+  // ---------------- D-70 ----------------
+
+  tallTest('D-70 tracking filters orders by stage and opens the patient', (t) async {
+    repo.overviewData = OrdersOverview(
+      orders: [itemOrder(status: Fulfilment.preparing, paymentStatus: 'paid')],
+      counts: const {'in_pharmacy': 1, 'completed': 2},
+    );
+    await t.pumpWidget(host('/pharmacy/tracking'));
+    await t.pumpAndSettle();
+    expect(find.text('All (3)'), findsOneWidget);
+    expect(find.text('In pharmacy (1)'), findsOneWidget);
+    expect(find.text('CF-ABC123'), findsOneWidget);
+    await t.tap(find.byKey(const Key('group-completed')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('overview:completed:'));
+    await t.enterText(find.byKey(const Key('tracking-search')), 'siti');
+    await t.testTextInput.receiveAction(TextInputAction.done);
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('overview:completed:siti'));
+    repo.patientDetail = const PharmacyPatientDetail(id: 'u-patient', name: 'Siti Aminah');
+    await t.tap(find.text('CF-ABC123'));
+    await t.pumpAndSettle();
+    expect(find.text('Siti Aminah'), findsOneWidget);
+  });
+
+  tallTest('D-70 patients tab lists every patient and opens one', (t) async {
+    repo
+      ..patients = const [
+        PharmacyPatient(
+          id: 'u-patient',
+          name: 'Siti Aminah',
+          email: 'siti@x.my',
+          age: 58,
+          gender: 'female',
+          orderCount: 2,
+          activeOrders: 1,
+          regimen: [],
+          recentOrders: [],
+        ),
+      ]
+      ..patientDetail = const PharmacyPatientDetail(id: 'u-patient', name: 'Siti Aminah');
+    await t.pumpWidget(host('/pharmacy/patients'));
+    await t.pumpAndSettle();
+    expect(find.text('58 · female'), findsOneWidget);
+    await t.tap(find.text('siti@x.my'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('back-to-patients')), findsOneWidget);
+    expect(repo.calls, contains('patient:u-patient'));
+  });
+
+  tallTest('D-70 pharmacist starts a message with any patient', (t) async {
+    repo.patients = const [
+      PharmacyPatient(id: 'u-new', name: 'Ali', regimen: [], recentOrders: []),
+    ];
+    await t.pumpWidget(host('/pharmacy/messages'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('new-message')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('pick-u-new')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('pharmacy-chat-input')), 'Hello Ali');
+    await t.tap(find.byKey(const Key('pharmacy-chat-send')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('toPatient:u-new:Hello Ali'));
+  });
+
+  tallTest('D-70 only the admin inventory can delete stock', (t) async {
+    repo.stockItems = const [
+      StockItem(id: 's1', name: 'Amlodipine 5mg', units: 600, lowStockAt: 50, low: false),
+    ];
+    await t.pumpWidget(host('/pharmacy/inventory'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('stock-delete-s1')), findsNothing);
+    await t.pumpWidget(host('/pharmacy/admin-inventory'));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('stock-delete-s1')));
+    await t.tap(find.byKey(const Key('stock-delete-s1')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('stock-delete-confirm')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('deleteStock:s1'));
+  });
+
+  tallTest('D-70 checkout shows the drop-off on an embedded map', (t) async {
+    repo.orders = {id: itemOrder(suggestedAddress: '77 Lorong', lat: 5.4588, lng: 100.2886)};
+    await t.pumpWidget(host('/orders/$id/confirm'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('method-delivery')));
+    await t.pumpAndSettle();
+    expect(find.text('PREVIEW 5.4588,100.2886'), findsOneWidget);
   });
 }

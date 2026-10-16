@@ -351,10 +351,19 @@ void main() {
         '/admin/appointments', // D-55
         '/admin/assignments', // D-54
         '/admin/audit-logs', // UC11.3
+        '/admin/orders', // D-70 order tracking
         '/admin/deliveries', // UC11.4 (Module 13)
+        '/admin/inventory', // D-70 drug inventory
         '/admin/analytics/hospital', // FR-11.4
         '/admin/analytics/system', // FR-11.3
         '/admin/system-health', // FR-11.3
+      ]);
+      expect(staffDestinations(UserRole.pharmacist).map((d) => d.path), [
+        '/pharmacy',
+        '/pharmacy/tracking', // D-70
+        '/pharmacy/inventory', // D-70
+        '/pharmacy/patients', // D-70
+        '/pharmacy/messages', // D-69
       ]);
       expect(staffDestinations(UserRole.patient), isEmpty);
     });

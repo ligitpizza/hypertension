@@ -227,3 +227,107 @@ class _AddressPageState extends ConsumerState<AddressPage> {
     );
   }
 }
+
+/// D-70: an embedded map of a chosen point with "Use my current location" and
+/// "Pick on map" (checkout drop-off, emergency fallback location).
+class LocationMapCard extends ConsumerWidget {
+  const LocationMapCard({
+    super.key,
+    required this.title,
+    required this.lat,
+    required this.lng,
+    required this.onUseCurrent,
+    required this.onPickOnMap,
+    this.subtitle,
+    this.busy = false,
+    this.useCurrentKey = const Key('use-location'),
+    this.useCurrentLabel = 'Use my current location',
+  });
+
+  final String title;
+  final String? subtitle;
+  final double? lat;
+  final double? lng;
+  final VoidCallback? onUseCurrent;
+  final VoidCallback? onPickOnMap;
+  final bool busy;
+  final Key useCurrentKey;
+  final String useCurrentLabel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final map = ref.watch(mapBuilderProvider);
+    final has = lat != null && lng != null;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 170,
+            child: has
+                ? map(lat!, lng!, title)
+                : ColoredBox(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.location_off_outlined, color: theme.colorScheme.outline),
+                        const SizedBox(height: 4),
+                        const Text('No location set yet'),
+                      ],
+                    ),
+                  ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Icon(
+                  has ? Icons.location_on : Icons.location_off_outlined,
+                  color: has ? theme.colorScheme.primary : null,
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(title, style: theme.textTheme.titleSmall)),
+              ],
+            ),
+          ),
+          if (subtitle != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(subtitle!, style: theme.textTheme.bodySmall),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+            child: Wrap(
+              spacing: 4,
+              children: [
+                busy
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : TextButton.icon(
+                        key: useCurrentKey,
+                        onPressed: onUseCurrent,
+                        icon: const Icon(Icons.my_location),
+                        label: Text(useCurrentLabel),
+                      ),
+                TextButton.icon(
+                  key: const Key('pick-on-map'),
+                  onPressed: onPickOnMap,
+                  icon: const Icon(Icons.map_outlined),
+                  label: const Text('Pick on map'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

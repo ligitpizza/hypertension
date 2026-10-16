@@ -24,6 +24,10 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
   ],
   UserRole.pharmacist => const [
     StaffDestination('/pharmacy', 'Orders', Icons.local_pharmacy_outlined),
+    // D-70: tracking, inventory and patients apart from the order queue.
+    StaffDestination('/pharmacy/tracking', 'Tracking', Icons.local_shipping_outlined),
+    StaffDestination('/pharmacy/inventory', 'Inventory', Icons.inventory_2_outlined),
+    StaffDestination('/pharmacy/patients', 'Patients', Icons.people_outline),
     StaffDestination('/pharmacy/messages', 'Messages', Icons.chat_bubble_outline), // D-69
   ],
   UserRole.admin => const [
@@ -32,7 +36,9 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     StaffDestination('/admin/appointments', 'Appointments', Icons.event_note_outlined),
     StaffDestination('/admin/assignments', 'Assignments', Icons.assignment_ind_outlined),
     StaffDestination('/admin/audit-logs', 'Audit logs', Icons.policy_outlined),
+    StaffDestination('/admin/orders', 'Orders', Icons.receipt_long_outlined), // D-70
     StaffDestination('/admin/deliveries', 'Deliveries', Icons.local_shipping_outlined),
+    StaffDestination('/admin/inventory', 'Inventory', Icons.inventory_2_outlined), // D-70
     StaffDestination('/admin/analytics/hospital', 'Hospital analytics', Icons.insights_outlined),
     StaffDestination('/admin/analytics/system', 'Usage analytics', Icons.query_stats),
     StaffDestination('/admin/system-health', 'System health', Icons.health_and_safety_outlined),

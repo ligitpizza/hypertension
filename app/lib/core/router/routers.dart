@@ -41,6 +41,9 @@ import '../../features/orders/presentation/admin_deliveries_page.dart';
 import '../../features/orders/presentation/pharmacy_page.dart';
 import '../../features/orders/presentation/pharmacy_chat_pages.dart';
 import '../../features/orders/presentation/pharmacy_patient_page.dart';
+import '../../features/orders/presentation/inventory_page.dart';
+import '../../features/orders/presentation/pharmacy_patients_page.dart';
+import '../../features/orders/presentation/tracking_page.dart';
 
 // One router per entrypoint; each registers only its own roles' routes
 // (docs/05 "Routes per entrypoint", NFR-3.2). Feature routes are added per module.
@@ -232,11 +235,19 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             path: '/pharmacy',
             builder: (_, _) => const PharmacyPage(),
             routes: [
-              // D-69: dispensing details and the shared pharmacy chat.
+              // D-69/D-70: patients, dispensing details, tracking, inventory, chat.
               GoRoute(
-                path: 'patients/:uid',
-                builder: (_, s) => PharmacyPatientPage(patientId: s.pathParameters['uid']!),
+                path: 'patients',
+                builder: (_, _) => const PharmacyPatientsPage(),
+                routes: [
+                  GoRoute(
+                    path: ':uid',
+                    builder: (_, s) => PharmacyPatientPage(patientId: s.pathParameters['uid']!),
+                  ),
+                ],
               ),
+              GoRoute(path: 'tracking', builder: (_, _) => const OrderTrackingPage()),
+              GoRoute(path: 'inventory', builder: (_, _) => const InventoryPage()),
               GoRoute(
                 path: 'messages',
                 builder: (_, _) => const PharmacyMessagesPage(),
@@ -290,6 +301,9 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: '/admin/analytics/system', builder: (_, _) => const SystemAnalyticsPage()),
           GoRoute(path: '/admin/deliveries', builder: (_, _) => const AdminDeliveriesPage()),
+          // D-70: order tracking and drug inventory for admins.
+          GoRoute(path: '/admin/orders', builder: (_, _) => const OrderTrackingPage(admin: true)),
+          GoRoute(path: '/admin/inventory', builder: (_, _) => const InventoryPage(admin: true)),
           GoRoute(path: '/admin/assignments', builder: (_, _) => const AdminAssignmentsPage()),
         ],
       ),

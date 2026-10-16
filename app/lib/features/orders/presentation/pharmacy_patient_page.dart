@@ -24,9 +24,10 @@ class PharmacyPatientPage extends ConsumerWidget {
         Row(
           children: [
             TextButton.icon(
-              onPressed: () => context.go('/pharmacy'),
+              key: const Key('back-to-patients'),
+              onPressed: () => context.go('/pharmacy/patients'),
               icon: const Icon(Icons.arrow_back),
-              label: const Text('Pharmacy'),
+              label: const Text('Patients'),
             ),
             const Spacer(),
             FilledButton.tonalIcon(
@@ -40,9 +41,7 @@ class PharmacyPatientPage extends ConsumerWidget {
         const SizedBox(height: 8),
         detail.when(
           loading: () => const LinearProgressIndicator(),
-          error: (_, _) => const Text(
-            'This patient is not a pharmacy patient (no order yet), or could not be loaded.',
-          ),
+          error: (_, _) => const Text('This patient could not be loaded.'),
           data: (p) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

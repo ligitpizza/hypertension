@@ -71,6 +71,14 @@ final pharmacyThreadProvider = FutureProvider.autoDispose
       retry: _noRetry,
     );
 
+/// D-70 order tracking (pharmacist Tracking tab, admin Orders tab).
+final ordersOverviewProvider = FutureProvider.autoDispose
+    .family<OrdersOverview, ({String group, String query})>(
+      (ref, f) =>
+          ref.watch(ordersRepositoryProvider).ordersOverview(group: f.group, query: f.query),
+      retry: _noRetry,
+    );
+
 /// Admin delivery oversight (Fig 4.3.14.4).
 final deliveriesProvider = FutureProvider.autoDispose<DeliveryOverview>(
   (ref) => ref.watch(ordersRepositoryProvider).deliveries(),

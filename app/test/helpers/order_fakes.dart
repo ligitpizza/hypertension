@@ -177,6 +177,30 @@ class FakeOrdersRepository implements OrdersRepository {
       calls.add('catalogPrice:$id:$unitPrice');
 
   @override
+  Future<void> editCatalogItem(
+    String id, {
+    String? name,
+    String? strength,
+    String? drugClass,
+    String? form,
+    double? unitPrice,
+    bool? active,
+  }) async => calls.add(
+    'editCatalog:$id:${name ?? ''}:${strength ?? ''}:${unitPrice ?? ''}:${active ?? ''}',
+  );
+
+  @override
+  Future<void> deleteStock(String id) async => calls.add('deleteStock:$id');
+
+  OrdersOverview overviewData = const OrdersOverview(orders: [], counts: {});
+
+  @override
+  Future<OrdersOverview> ordersOverview({String group = 'all', String query = ''}) async {
+    calls.add('overview:$group:$query');
+    return overviewData;
+  }
+
+  @override
   Future<PharmacyPatientDetail> pharmacyPatient(String uid) async {
     calls.add('patient:$uid');
     return patientDetail!;
