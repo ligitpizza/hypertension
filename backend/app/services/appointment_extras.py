@@ -20,8 +20,8 @@ from app.services.appointments import (
     AppointmentDoc,
     AppointmentRepository,
     SlotTakenError,
+    emergency_slots,
     get_appointment_repository,
-    next_free,
     reason_text,
 )
 from app.services.medications import MYT
@@ -132,7 +132,7 @@ def auto_book_emergency(
     ):
         return None
     taken = repo.taken(doctor_id, now, now + MAX_AHEAD)
-    for slot in next_free(taken, now, limit=3):
+    for slot in emergency_slots(taken, now, limit=3):  # D-74: any day, 08:00-22:00
         try:
             appt_id = repo.book(
                 {

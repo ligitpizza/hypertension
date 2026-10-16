@@ -49,6 +49,12 @@ class ReadyRequest(_Body):
     units: int | None = Field(default=None, ge=1, le=1000)
 
 
+class CancelOrderRequest(_Body):
+    """D-74: why the order is cancelled (shown to the patient)."""
+
+    reason: str = Field(min_length=3, max_length=300)
+
+
 class OutOfStockRequest(_Body):
     note: str | None = Field(default=None, max_length=300)
 

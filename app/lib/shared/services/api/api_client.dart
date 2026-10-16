@@ -584,6 +584,10 @@ class ApiClient {
   Future<void> markOutOfStock(String id, {String? note}) =>
       _post('/pharmacy/orders/$id/out-of-stock', {'note': ?note});
 
+  /// D-74: cancel an unpaid order with a reason (pharmacist, admin).
+  Future<void> cancelOrder(String id, String reason) =>
+      _post('/pharmacy/orders/$id/cancel', {'reason': reason});
+
   Future<void> markCollected(String id) => _send('POST', '/pharmacy/orders/$id/collected', null);
 
   Future<Map<String, dynamic>> pharmacyStock() => _get('/pharmacy/stock');

@@ -521,3 +521,49 @@ def test_d72_agent_offers_the_emergency_contact_number(
 
     assert _emergency_phone(Profiles(), P) == "013-999 8888"  # type: ignore[arg-type]
     assert _emergency_phone(Profiles(), "nobody") is None  # type: ignore[arg-type]
+
+
+# ---------------- D-74: cancelling orders ----------------
+
+
+def test_d74_pharmacy_cancels_an_unpaid_order_with_a_reason(
+    client: TestClient, order_repo: InMemoryOrderRepository, push: LogPushClient
+) -> None:
+    oid = issue(client)["orderId"]
+    url = f"/api/v1/pharmacy/orders/{oid}/cancel"
+    assert client.post(url, json={"reason": "x"}, headers=PHARM).status_code == 422
+    res = client.post(url, json={"reason": "Duplicate prescription"}, headers=PHARM)
+    assert res.status_code == 204
+    o = order_repo.orders[oid]
+    assert o["fulfilmentStatus"] == "cancelled" and o["cancelledBy"] == "pharmacist"
+    assert o["cancelReason"] == "Duplicate prescription"
+    assert "Order cancelled" in titles(push, P)
+    # It can no longer be confirmed or paid.
+    res = client.post(
+        f"/api/v1/orders/{oid}/confirm", json={"method": "self_collection"}, headers=PATIENT
+    )
+    assert res.status_code == 409
+    cancelled = client.get("/api/v1/orders-overview?group=cancelled", headers=ADMIN).json()
+    assert [x["id"] for x in cancelled["orders"]] == [oid]
+    assert client.post(url, json={"reason": "again"}, headers=PATIENT).status_code == 403
+
+
+def test_d74_paid_orders_cannot_be_cancelled(
+    client: TestClient, order_repo: InMemoryOrderRepository
+) -> None:
+    oid = issue(client)["orderId"]
+    pay(client, oid)
+    res = client.post(
+        f"/api/v1/pharmacy/orders/{oid}/cancel", json={"reason": "Changed mind"}, headers=ADMIN
+    )
+    assert res.json()["error"]["code"] == "ORDER_NOT_CANCELLABLE"
+
+
+def test_d74_deleting_the_prescription_cancels_its_unpaid_order(
+    client: TestClient, order_repo: InMemoryOrderRepository
+) -> None:
+    body = issue(client)
+    client.delete(f"{RX_URL}/{body['id']}", headers=DOCTOR)
+    o = order_repo.orders[body["orderId"]]
+    assert o["fulfilmentStatus"] == "cancelled" and o["cancelledBy"] == "doctor"
+    assert o["cancelReason"] == "Prescription stopped by your doctor."

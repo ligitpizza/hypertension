@@ -117,6 +117,36 @@ def next_free(taken: set[datetime], now: datetime, limit: int = 3) -> list[datet
     return out
 
 
+# D-74: an emergency visit is booked the soonest possible, any day of the week.
+EMERGENCY_HOURS = (time(8, 0), time(22, 0))
+EMERGENCY_LEAD = timedelta(minutes=15)
+
+
+def emergency_slots(taken: set[datetime], now: datetime, limit: int = 3) -> list[datetime]:
+    """Free 30-minute starts from about 15 minutes from now, 08:00-22:00 Malaysia time,
+    any day (not limited to clinic days), up to MAX_AHEAD."""
+    start = (now + EMERGENCY_LEAD).astimezone(MYT)
+    # Round up to the next :00 or :30.
+    minutes = 30 - start.minute % 30 if start.minute % 30 or start.second else 0
+    t = start.replace(second=0, microsecond=0) + timedelta(minutes=minutes)
+    out: list[datetime] = []
+    last = now + MAX_AHEAD
+    while t.astimezone(UTC) <= last and len(out) < limit:
+        opens = datetime.combine(t.date(), EMERGENCY_HOURS[0], tzinfo=MYT)
+        closes = datetime.combine(t.date(), EMERGENCY_HOURS[1], tzinfo=MYT)
+        if t < opens:
+            t = opens
+            continue
+        if t + SLOT > closes:
+            t = opens + timedelta(days=1)
+            continue
+        moment = t.astimezone(UTC)
+        if not any(clashes(moment, x) for x in taken):
+            out.append(moment)
+        t += SLOT
+    return out
+
+
 def period(moment: datetime) -> str:
     """Morning / Afternoon / Evening tab (Fig 4.3.6.1)."""
     h = moment.astimezone(MYT).hour

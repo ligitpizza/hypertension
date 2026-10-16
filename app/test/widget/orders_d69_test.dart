@@ -566,4 +566,43 @@ void main() {
     expect(find.text('Courier: dispatched'), findsOneWidget);
     expect(find.byKey(const Key('staff-courier-tracking')), findsOneWidget);
   });
+
+  tallTest('D-74 the pharmacy queue lists waiting prescriptions and can cancel them', (t) async {
+    repo.overviewData = OrdersOverview(
+      orders: [itemOrder()],
+      counts: const {'awaiting_patient': 1},
+    );
+    await t.pumpWidget(host('/pharmacy'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('waiting-for-patient')), findsOneWidget);
+    await t.tap(find.byKey(const Key('cancel-$id')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('cancel-reason')), 'Doctor changed the regimen');
+    await t.pump();
+    await t.tap(find.byKey(const Key('cancel-confirm')));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('cancel:$id:Doctor changed the regimen'));
+  });
+
+  tallTest('D-74 a cancelled order moves to Completed with its reason', (t) async {
+    repo.orders = {
+      id: MedicationOrder.fromJson({
+        'id': id,
+        'ref': 'CF-ABC123',
+        'patientId': 'u-patient',
+        'prescriptionId': 'rx1',
+        'medicationDetails': 'Amlodipine 5mg',
+        'fulfilmentStatus': 'cancelled',
+        'paymentStatus': 'pending',
+        'cancelReason': 'Prescription stopped by your doctor.',
+        'cancelledBy': 'doctor',
+      }),
+    };
+    await t.pumpWidget(host('/orders'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('order-$id')), findsNothing); // not under Active
+    await t.tap(find.byKey(const Key('orders-tab-completed')));
+    await t.pumpAndSettle();
+    expect(find.text('Cancelled: Prescription stopped by your doctor.'), findsOneWidget);
+  });
 }

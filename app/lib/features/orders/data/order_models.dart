@@ -16,7 +16,8 @@ enum Fulfilment {
   readyForDelivery('ready_for_delivery', 'Ready for delivery'),
   collected('collected', 'Collected'),
   delivered('delivered', 'Delivered'),
-  failed('failed', 'Delivery failed');
+  failed('failed', 'Delivery failed'),
+  cancelled('cancelled', 'Cancelled'); // D-74
 
   const Fulfilment(this.value, this.label);
   final String value;
@@ -151,6 +152,8 @@ class MedicationOrder {
     this.courierBrand = 'Lalamove',
     this.trackingUrl,
     this.failureReason,
+    this.cancelReason,
+    this.cancelledBy,
     this.cycleDate,
     this.paidAt,
     this.readyAt,
@@ -208,6 +211,17 @@ class MedicationOrder {
   /// The courier's live tracking page, when it gives one (Lalamove share link).
   final String? trackingUrl;
   final String? failureReason;
+
+  /// D-74: why the order was cancelled, and by whom (doctor / pharmacist / admin).
+  final String? cancelReason;
+  final String? cancelledBy;
+
+  /// D-74: only orders the patient hasn't paid yet can be cancelled.
+  bool get cancellable =>
+      !isPaid &&
+      (status == Fulfilment.awaitingConfirmation ||
+          status == Fulfilment.skipped ||
+          status == Fulfilment.awaitingPayment);
   final DateTime? cycleDate;
   final DateTime? paidAt;
   final DateTime? readyAt;
@@ -259,6 +273,8 @@ class MedicationOrder {
     courierBrand: d['courierBrand'] as String? ?? 'Lalamove',
     trackingUrl: d['trackingUrl'] as String?,
     failureReason: d['failureReason'] as String?,
+    cancelReason: d['cancelReason'] as String?,
+    cancelledBy: d['cancelledBy'] as String?,
     cycleDate: _time(d['cycleDate']),
     paidAt: _time(d['paidAt']),
     readyAt: _time(d['readyAt']),
@@ -280,7 +296,10 @@ class MedicationOrder {
 
   /// Active = still needs the patient, the pharmacy or the courier (Orders tabs, D-69).
   bool get isActive => switch (status) {
-    Fulfilment.collected || Fulfilment.delivered || Fulfilment.skipped => false,
+    Fulfilment.collected ||
+    Fulfilment.delivered ||
+    Fulfilment.skipped ||
+    Fulfilment.cancelled => false,
     _ => true,
   };
 }
@@ -594,6 +613,7 @@ const orderGroups = {
   'out_for_delivery': 'Out for delivery',
   'completed': 'Completed',
   'failed': 'Failed',
+  'cancelled': 'Cancelled',
 };
 
 class OrdersOverview {

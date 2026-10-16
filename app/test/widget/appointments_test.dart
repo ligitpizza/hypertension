@@ -397,6 +397,23 @@ void main() {
   });
 
   group('UC7.2 next appointment', () {
+    tallTest('D-74 every active appointment shows: emergency, admin, then own', (t) async {
+      repo.upcoming = [
+        appt('own', myt(13, 10), bookedBy: 'patient'), // its time passed; not closed yet
+        appt('adm', myt(14, 15, 30), bookedBy: 'admin'),
+        appt('em', myt(19, 9), type: AppointmentType.emergency, bookedBy: 'system'),
+      ];
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.text('Your appointments'), findsOneWidget);
+      final ys = [
+        for (final k in ['active-em', 'active-adm', 'active-own'])
+          t.getTopLeft(find.byKey(Key(k))).dy,
+      ];
+      expect(ys, orderedEquals([...ys]..sort()));
+      expect(find.text('Admin assigned'), findsWidgets);
+    });
+
     tallTest('shows the doctor, time and summary link; cancel within 24 h warns', (t) async {
       repo.upcoming = [appt('a1', myt(14, 18))];
       await t.pumpWidget(app(repo));

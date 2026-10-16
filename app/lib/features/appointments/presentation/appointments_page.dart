@@ -182,7 +182,7 @@ class _AppointmentsPageState extends ConsumerState<AppointmentsPage> {
               ),
             )
           else ...[
-            Text('Next appointment', style: theme.textTheme.titleLarge),
+            Text('Your appointments', style: theme.textTheme.titleLarge),
             const SizedBox(height: 8),
             const _NextAppointment(),
             const SizedBox(height: 24),
@@ -373,7 +373,22 @@ class _NextAppointment extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(nowProvider)();
     final list = ref.watch(myUpcomingAppointmentsProvider).value ?? const <Appointment>[];
-    final next = list.where((a) => a.isActive && a.dateTime.isAfter(now)).firstOrNull;
+    // D-74: every active appointment, emergency first, then admin-assigned, then the
+    // patient's own (an own visit stays until the doctor closes it, even if its time passed).
+    int rank(Appointment a) => a.type == AppointmentType.emergency
+        ? 0
+        : a.isAdminAssigned
+        ? 1
+        : 2;
+    final active =
+        [
+          for (final a in list)
+            if (a.isActive && (a.dateTime.isAfter(now) || a.isOwnBooking)) a,
+        ]..sort((a, b) {
+          final r = rank(a).compareTo(rank(b));
+          return r != 0 ? r : a.dateTime.compareTo(b.dateTime);
+        });
+    final next = active.firstOrNull;
     if (next == null) {
       return const Card(
         key: Key('no-next-appointment'),
@@ -384,7 +399,15 @@ class _NextAppointment extends ConsumerWidget {
         ),
       );
     }
-    return AppointmentCard(appointment: next, now: now);
+    return Column(
+      children: [
+        for (final a in active)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: AppointmentCard(key: Key('active-${a.id}'), appointment: a, now: now),
+          ),
+      ],
+    );
   }
 }
 

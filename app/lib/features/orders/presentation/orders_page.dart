@@ -167,6 +167,12 @@ class _OrderCard extends StatelessWidget {
                 ].join(' · '),
                 style: theme.textTheme.bodySmall,
               ),
+              if (order.status == Fulfilment.cancelled && order.cancelReason != null)
+                Text(
+                  'Cancelled: ${order.cancelReason}',
+                  key: Key('cancel-reason-${order.id}'),
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                ),
             ],
           ),
         ),

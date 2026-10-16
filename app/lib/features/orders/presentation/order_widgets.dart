@@ -39,7 +39,8 @@ class OrderStatusChip extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final (bg, fg) = switch (status) {
       Fulfilment.outOfStock ||
-      Fulfilment.failed => (scheme.errorContainer, scheme.onErrorContainer),
+      Fulfilment.failed ||
+      Fulfilment.cancelled => (scheme.errorContainer, scheme.onErrorContainer),
       Fulfilment.readyForCollection ||
       Fulfilment.readyForDelivery ||
       Fulfilment.delivered ||

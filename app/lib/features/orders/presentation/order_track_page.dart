@@ -115,6 +115,11 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
       ),
       Fulfilment.delivered => (Icons.home_outlined, 'Delivered', 'Your medication has arrived.'),
       Fulfilment.collected => (Icons.check_circle_outline, 'Collected', 'Enjoy your month.'),
+      Fulfilment.cancelled => (
+        Icons.cancel_outlined,
+        'Order cancelled',
+        o.cancelReason ?? 'This order was cancelled.',
+      ),
       Fulfilment.failed => (
         Icons.report_problem_outlined,
         'Delivery problem',

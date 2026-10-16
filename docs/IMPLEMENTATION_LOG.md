@@ -1301,3 +1301,21 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   confirm and pay (they were invisible until paid); admin Orders and Deliveries rows open
   an order detail page (medicines and prices, payment, delivery/collection, courier and
   tracking link, status history). Tests: Flutter 565.
+
+### 2026-10-17 — Appointments, emergency slot, order cancellation (D-74)
+
+- **Appointments:** the patient screen ("Your appointments") lists every active visit,
+  emergency first, then admin-assigned, then the patient's own (kept until the doctor
+  closes it). Before, only the earliest upcoming one showed, hiding the emergency visit
+  behind an admin-assigned one.
+- **Emergency auto-booking:** the next free slot ~15 min from now, 08:00–22:00 any day
+  (`emergency_slots`); it had taken Monday 9 AM because Saturday is outside clinic days.
+- **Cancelling orders:** new `cancelled` stage with `cancelReason`, `cancelledBy`,
+  `cancelledAt`; pharmacists/admins cancel unpaid orders with a reason
+  (`POST /pharmacy/orders/{id}/cancel`), deleting a prescription cancels its unpaid
+  orders, the patient is pushed and sees it under Completed with the reason; tracking has
+  a Cancelled group; the admin order page has Cancel and shows the reason. Paid orders
+  cannot be cancelled.
+- **Pharmacy queue:** waiting-for-patient prescriptions now appear inside the Active
+  prescription queue (with Cancel), not in a separate card below it.
+- Tests: backend 669; Flutter 569.

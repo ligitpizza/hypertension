@@ -37,6 +37,9 @@ abstract interface class OrdersRepository {
   Future<void> markReady(String id, {String? stockItemId, int? units});
   Future<void> outOfStock(String id, {String? note});
   Future<void> collected(String id);
+
+  /// D-74: cancel an unpaid order with a reason.
+  Future<void> cancelOrder(String id, String reason);
   Future<List<StockItem>> stock();
   Future<void> addStock({
     required String name,
@@ -177,6 +180,9 @@ class ApiOrdersRepository implements OrdersRepository {
 
   @override
   Future<void> collected(String id) => _api.markCollected(id);
+
+  @override
+  Future<void> cancelOrder(String id, String reason) => _api.cancelOrder(id, reason);
 
   @override
   Future<List<StockItem>> stock() async => [

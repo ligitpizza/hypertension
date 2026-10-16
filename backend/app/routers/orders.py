@@ -40,6 +40,7 @@ from app.integrations.payments import (
     intent_from_stripe,
 )
 from app.schemas.orders import (
+    CancelOrderRequest,
     CatalogEditRequest,
     CatalogItemRequest,
     ConfirmOrderRequest,
@@ -60,6 +61,7 @@ from app.services.medications import MYT
 from app.services.orders import (
     AWAITING_CONFIRMATION,
     AWAITING_PAYMENT,
+    CANCELLED,
     COLLECTED,
     DELIVERED,
     FAILED,
@@ -494,6 +496,21 @@ def mark_out_of_stock(
 ) -> None:
     try:
         svc.out_of_stock(order_id, user.uid, body.note)
+    except OrderError as e:
+        raise _api(e) from e
+
+
+@router.post("/pharmacy/orders/{order_id}/cancel", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_order(
+    order_id: str,
+    body: CancelOrderRequest,
+    user: CurrentUser = Depends(pharmacy_staff),
+    svc: OrderService = Depends(get_order_service),
+) -> None:
+    """D-74: pharmacists and admins cancel an unpaid order with a reason."""
+    role = user.role.value if user.role else "staff"
+    try:
+        svc.cancel(order_id, user.uid, role, body.reason)
     except OrderError as e:
         raise _api(e) from e
 
@@ -987,6 +1004,7 @@ ORDER_GROUPS: dict[str, tuple[str, ...]] = {
     "out_for_delivery": (READY_FOR_DELIVERY,),
     "completed": (DELIVERED, COLLECTED),
     "failed": (FAILED,),
+    "cancelled": (CANCELLED,),  # D-74
 }
 
 

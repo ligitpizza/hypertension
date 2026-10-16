@@ -285,16 +285,30 @@ def test_d56_past_appointments_are_not_auto_completed(
 def test_emergency_auto_booking_once(
     appointment_repo: InMemoryAppointmentRepository, tokens: InMemoryTokenRepository
 ) -> None:
-    now = myt(2026, 10, 15, 19, 10)  # first slot at least 1 h ahead: 20:30
+    now = myt(2026, 10, 15, 19, 10)  # D-74: the soonest slot about 15 min ahead: 19:30
     push = LogPushClient()
     notifier = Notifier(tokens, push)
     first = auto_book_emergency(appointment_repo, notifier, P, D, now)
     assert first is not None
     appt = appointment_repo.appointments[first]
-    assert appt["type"] == "emergency" and appt["dateTime"] == myt(2026, 10, 15, 20, 30)
+    assert appt["type"] == "emergency" and appt["dateTime"] == myt(2026, 10, 15, 19, 30)
     assert "999" in push.sent[0][1].body and push.sent[0][1].urgent
     assert auto_book_emergency(appointment_repo, notifier, P, D, now) is None  # not twice
     assert auto_book_emergency(appointment_repo, notifier, "x", None, now) is None  # no doctor
+
+
+def test_d74_emergency_slots_ignore_clinic_days() -> None:
+    from app.services.appointments import emergency_slots
+
+    saturday = myt(2026, 10, 17, 10, 0)
+    assert emergency_slots(set(), saturday, limit=2) == [
+        myt(2026, 10, 17, 10, 30),
+        myt(2026, 10, 17, 11, 0),
+    ]
+    late = myt(2026, 10, 17, 21, 50)  # after the last 21:30 start: next morning 08:00
+    assert emergency_slots(set(), late, limit=1) == [myt(2026, 10, 18, 8, 0)]
+    taken = {myt(2026, 10, 17, 10, 30)}  # a clash moves it on
+    assert emergency_slots(taken, saturday, limit=1) == [myt(2026, 10, 17, 11, 0)]
 
 
 def test_emergency_auto_booking_is_audited(

@@ -348,3 +348,30 @@ class CatalogDialogState extends State<CatalogDialog> {
     ],
   );
 }
+
+/// D-74: cancel an unpaid order after asking for the reason shown to the patient.
+Future<bool> cancelOrderWithReason(BuildContext context, WidgetRef ref, MedicationOrder o) async {
+  final reason = await showDialog<String>(
+    context: context,
+    builder: (_) => PromptDialog(
+      title: 'Cancel order ${o.ref}?',
+      message: 'The patient is told the order was cancelled and why.',
+      fieldKey: const Key('cancel-reason'),
+      label: 'Reason',
+      confirmKey: const Key('cancel-confirm'),
+      confirmText: 'Cancel order',
+      maxLength: 300,
+      isValid: (v) => v.trim().length >= 3,
+    ),
+  );
+  if (reason == null || !context.mounted) return false;
+  await runPharmacyAction(
+    context,
+    ref,
+    () => ref.read(ordersRepositoryProvider).cancelOrder(o.id, reason),
+    'Order ${o.ref} cancelled.',
+  );
+  ref.invalidate(ordersOverviewProvider);
+  ref.invalidate(orderProvider(o.id));
+  return true;
+}

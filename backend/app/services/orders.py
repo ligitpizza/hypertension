@@ -69,6 +69,8 @@ READY_FOR_DELIVERY = "ready_for_delivery"
 COLLECTED = "collected"
 DELIVERED = "delivered"
 FAILED = "failed"
+CANCELLED = "cancelled"  # D-74
+CANCELLABLE = ("awaiting_confirmation", "skipped", "awaiting_payment")
 
 # The pharmacist's working queue (Fig 4.3.13.1).
 PHARMACY_QUEUE = (PREPARING, OUT_OF_STOCK, READY_FOR_COLLECTION, READY_FOR_DELIVERY, FAILED)
@@ -155,6 +157,9 @@ def order_view(
         "courierRef": o.get("courierRef"),
         "trackingUrl": o.get("trackingUrl"),
         "failureReason": o.get("failureReason"),
+        "cancelReason": o.get("cancelReason"),
+        "cancelledBy": o.get("cancelledBy"),
+        "cancelledAt": _iso(o.get("cancelledAt")),
         "stockItemId": o.get("stockItemId"),
         "cycleDate": _iso(o.get("cycleDate")),
         "createdAt": _iso(o.get("createdAt")),
@@ -1035,6 +1040,48 @@ class OrderService:
             raise OrderError("ORDER_NOT_FAILED", "Only a failed delivery can be rescheduled.")
         o = {**o, "fulfilmentStatus": READY_FOR_DELIVERY}
         return self.dispatch(order_id, o, uid)
+
+    def cancel(self, order_id: str, uid: str, role: str, reason: str) -> None:
+        """D-74: an unpaid order is cancelled with a reason; paid orders are fulfilled or
+        marked out of stock instead (no refunds)."""
+        o = self._order(order_id)
+        if o.get("paymentStatus") == "paid" or o.get("fulfilmentStatus") not in CANCELLABLE:
+            raise OrderError(
+                "ORDER_NOT_CANCELLABLE",
+                "Only orders not yet paid can be cancelled. Fulfil a paid order or mark it "
+                "out of stock.",
+            )
+        self.repo.update_order(
+            order_id,
+            {
+                "fulfilmentStatus": CANCELLED,
+                "cancelReason": reason,
+                "cancelledBy": role,
+                "cancelledAt": datetime.now(UTC),
+            },
+        )
+        self.audit.log(
+            user_id=uid,
+            action="ORDER_CANCELLED",
+            details=f"Order cancelled by {role}: {reason}",
+            target_type=Collection.MEDICATION_ORDERS.value,
+            target_id=order_id,
+        )
+        self._push(
+            str(o["patientId"]),
+            "Order cancelled",
+            f"Your order for {o.get('medicationDetails')} was cancelled: {reason}",
+            order_id,
+        )
+
+    def cancel_for_prescription(self, rx_id: str, uid: str) -> int:
+        """D-74: the doctor stopped the prescription; its unpaid orders are cancelled."""
+        n = 0
+        for order_id, o in self.repo.orders_for_prescription(rx_id):
+            if o.get("paymentStatus") != "paid" and o.get("fulfilmentStatus") in CANCELLABLE:
+                self.cancel(order_id, uid, "doctor", "Prescription stopped by your doctor.")
+                n += 1
+        return n
 
     def switch_to_collection(self, order_id: str, uid: str) -> None:
         o = self._order(order_id)

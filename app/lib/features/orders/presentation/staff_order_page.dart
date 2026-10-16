@@ -7,6 +7,7 @@ import '../../family/state/family_providers.dart';
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import 'order_widgets.dart';
+import 'pharmacy_shared.dart';
 
 /// D-73: one order in the staff portal (admin Orders / Deliveries rows): medicines and
 /// prices, payment, collection or delivery details, courier and the status history.
@@ -81,6 +82,26 @@ class StaffOrderPage extends ConsumerWidget {
                   ],
                 ),
                 Text('${o.patientName ?? 'Patient'} · ${cycleLabel(o.cycleDate)}'),
+                if (o.status == Fulfilment.cancelled)
+                  Card(
+                    key: const Key('staff-cancel-reason'),
+                    color: theme.colorScheme.errorContainer,
+                    child: ListTile(
+                      leading: const Icon(Icons.cancel_outlined),
+                      title: Text('Cancelled by ${o.cancelledBy ?? 'staff'}'),
+                      subtitle: Text(o.cancelReason ?? ''),
+                    ),
+                  ),
+                if (o.cancellable)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      key: const Key('staff-cancel-order'),
+                      onPressed: () => cancelOrderWithReason(context, ref, o),
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Cancel order'),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 section('Medicines', [
                   if (o.items.isEmpty)

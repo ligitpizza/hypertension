@@ -238,9 +238,10 @@ def delete_prescription(
     repo: ProviderRepository = Depends(get_provider_repository),
     audit: AuditLogger = Depends(get_audit_logger),
     meds: MedicationRepository = Depends(get_medication_repository),
+    orders: OrderService = Depends(get_order_service),
 ) -> None:
     """D-50: the doctor who issued a prescription may delete it (development use). D-69: its
-    medicines leave the patient's Meds tab."""
+    medicines leave the patient's Meds tab. D-74: its unpaid orders are cancelled."""
     _assigned_patient(patient_id, doctor, repo)
     rx = repo.prescription(rx_id)
     if rx is None or rx.get("patientId") != patient_id or rx.get("doctorId") != doctor.uid:
@@ -248,6 +249,7 @@ def delete_prescription(
             "PRESCRIPTION_NOT_FOUND", "Prescription not found.", status.HTTP_404_NOT_FOUND
         )
     repo.delete_prescription(rx_id)
+    orders.cancel_for_prescription(rx_id, doctor.uid)
     for m in meds.list_for(patient_id):
         if m.data.get("prescriptionId") == rx_id:
             meds.delete(m.id)
