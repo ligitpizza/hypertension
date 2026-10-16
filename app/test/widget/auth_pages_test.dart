@@ -32,7 +32,7 @@ void main() {
       expect(find.text('Patient'), findsOneWidget);
       expect(find.text('Family'), findsOneWidget);
       expect(find.text('Create an account'), findsOneWidget);
-      expect(find.text('Forgot?'), findsOneWidget);
+      expect(find.text('Forgot Password?'), findsOneWidget);
     });
 
     tallTest('blocks submit with empty fields', (t) async {
