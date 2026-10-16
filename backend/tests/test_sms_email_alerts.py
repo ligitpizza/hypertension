@@ -107,3 +107,4 @@ def test_d64_family_members_also_get_an_emergency_email(
     assert "pressed the SOS button" in mail.text
     assert "maps.google.com/?q=3.139000,101.686900" in mail.text
     assert "999" in mail.text
+    assert "maps.google.com" in mail.html and "<a " not in mail.html

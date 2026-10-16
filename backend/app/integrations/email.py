@@ -26,6 +26,21 @@ class EmailMessage:
     html: str
 
 
+def plain_link_html(url: str, label: str) -> str:
+    """D-65: a link shown as plain text, not an <a> tag. Brevo rewrites every <a> link
+    through its click-tracking redirect (which can't be turned off on the free plan and was
+    failing); mail apps such as Gmail make plain addresses clickable themselves, so the
+    click goes straight to the real page."""
+    import html as _html
+
+    return (
+        f"<p>{_html.escape(label)}</p>"
+        '<p style="font-family:monospace;font-size:13px;word-break:break-all;'
+        'background:#f2f5f8;padding:10px;border-radius:8px">'
+        f"{_html.escape(url)}</p>"
+    )
+
+
 class EmailError(Exception):
     pass
 

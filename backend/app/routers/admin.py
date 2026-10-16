@@ -19,7 +19,12 @@ from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
 from app.core.enums import Collection, UserRole
 from app.core.errors import ApiError
-from app.integrations.email import EmailClient, EmailMessage, get_email_client
+from app.integrations.email import (
+    EmailClient,
+    EmailMessage,
+    get_email_client,
+    plain_link_html,
+)
 from app.schemas.auth import (
     CreatePatientRequest,
     CreateStaffRequest,
@@ -61,12 +66,12 @@ def staff_setup_email(name: str, email: str, role: UserRole, link: str) -> Email
         f"Set your password using this link:\n{link}\n\n"
         "Then sign in at the CareFlow Staff Portal with this email address.\n"
     )
-    safe_name, safe_link = html.escape(name), html.escape(link, quote=True)
+    safe_name = html.escape(name)
     body_html = (
         f"<p>Hello {safe_name},</p>"
         f"<p>A CareFlow Staff Portal account (<b>{label}</b>) has been created for you.</p>"
-        f'<p><a href="{safe_link}">Set your password</a></p>'
-        "<p>Then sign in at the CareFlow Staff Portal with this email address.</p>"
+        + plain_link_html(link, "Set your password with this link (tap or copy it):")
+        + "<p>Then sign in at the CareFlow Staff Portal with this email address.</p>"
     )
     return EmailMessage(
         to_email=email,
@@ -280,12 +285,12 @@ def patient_setup_email(name: str, email: str, link: str) -> EmailMessage:
         "Then sign in to the CareFlow app with this email address and complete your health "
         "profile.\n"
     )
-    safe_name, safe_link = html.escape(name), html.escape(link, quote=True)
+    safe_name = html.escape(name)
     body_html = (
         f"<p>Hello {safe_name},</p>"
         "<p>The clinic has created a CareFlow account for you.</p>"
-        f'<p><a href="{safe_link}">Set your password</a></p>'
-        "<p>Then sign in to the CareFlow app with this email address and complete your "
+        + plain_link_html(link, "Set your password with this link (tap or copy it):")
+        + "<p>Then sign in to the CareFlow app with this email address and complete your "
         "health profile.</p>"
     )
     return EmailMessage(

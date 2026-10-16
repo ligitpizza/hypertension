@@ -29,7 +29,9 @@ def test_d65_existing_account_gets_a_branded_email(
     assert "Hello Ali," in mail.text
     # Firebase's secure page first, then back to CareFlow's "password changed" page.
     assert "continue=https://hypertension-dd85f.web.app/reset-done.html" in mail.text
-    assert "1 hour" in mail.text and 'href="https://example.test/reset' in mail.html
+    assert "1 hour" in mail.text
+    # Plain text, not <a href>: Brevo's click-tracking redirect would break the link.
+    assert "https://example.test/reset" in mail.html and "<a " not in mail.html
     assert audit.entries[-1]["action"] == "PASSWORD_RESET_REQUESTED"
     assert "taken@" not in audit.entries[-1]["details"]  # domain only
 

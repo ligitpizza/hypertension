@@ -1103,3 +1103,11 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   `reset-done.html` (in `app/web/`, deployed with the portal) with "Open the CareFlow app"
   and "Go to the staff portal". The app's Forgot-password screen calls the backend and
   explains the 1-hour link and spam folder. Tests: backend 4, Flutter 2 (514 total).
+- **Brevo link fix (D-65 follow-up):** the first real reset email arrived, but its button
+  went through Brevo's click-tracking redirect (`sendibt2.com`), which failed ("This link is
+  temporarily unavailable") and can't be switched off on the free plan. Reset, account-setup
+  and emergency emails now show links as plain text (`plain_link_html`); Gmail and other
+  mail apps make them clickable and they go straight to the real page. Also found while
+  wiring this: `EMAIL_API_KEY` held an SMTP key (`xsmtpsib-`), which the web API rejects
+  (401); Ping generated an API key (`xkeysib-`) and turned off Brevo's IP blocking for API
+  keys (Cloud Run addresses change).

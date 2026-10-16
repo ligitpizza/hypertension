@@ -27,7 +27,12 @@ from app.core.enums import (
 )
 from app.core.errors import ApiError
 from app.core.rate_limit import RateLimiter
-from app.integrations.email import EmailClient, EmailMessage, get_email_client
+from app.integrations.email import (
+    EmailClient,
+    EmailMessage,
+    get_email_client,
+    plain_link_html,
+)
 from app.schemas.auth import (
     LoginFailedRequest,
     OnboardingRequest,
@@ -302,13 +307,11 @@ def password_reset_email(name: str, email: str, link: str) -> EmailMessage:
         "Afterwards, return to the CareFlow app (or the staff portal) and sign in.\n"
         "If you did not ask for this, ignore this email; your password stays the same.\n"
     )
-    safe_link = html.escape(link, quote=True)
     body = (
         f"<p>{html.escape(greeting)}</p>"
         "<p>We received a request to reset your <b>CareFlow</b> password.</p>"
-        f'<p><a href="{safe_link}" style="background:#2D6A8E;color:#fff;padding:10px 18px;'
-        'border-radius:20px;text-decoration:none">Reset password</a></p>'
-        "<p>The link works for 1 hour. Afterwards, return to the CareFlow app (or the staff "
+        + plain_link_html(link, "Open this link to choose a new password (tap or copy it):")
+        + "<p>The link works for 1 hour. Afterwards, return to the CareFlow app (or the staff "
         "portal) and sign in.</p>"
         "<p>If you did not ask for this, ignore this email; your password stays the same.</p>"
     )

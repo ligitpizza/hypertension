@@ -18,7 +18,12 @@ from google.cloud import firestore as gfs
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.enums import Collection, FamilyLinkStatus, UserRole
 from app.core.firebase import get_firestore
-from app.integrations.email import EmailClient, EmailMessage, get_email_client
+from app.integrations.email import (
+    EmailClient,
+    EmailMessage,
+    get_email_client,
+    plain_link_html,
+)
 from app.integrations.push import PushMessage
 from app.integrations.sms import SmsClient, get_sms_client
 from app.services.notifications import Notifier, get_notifier
@@ -278,8 +283,7 @@ class EmergencyAlerts:
         body = (
             f"<p><b>{safe} {html.escape(what)}.</b></p>"
             + (
-                f'<p><a href="{html.escape(link, quote=True)}">Open their location in Google Maps'
-                "</a></p>"
+                plain_link_html(link, "Their location in Google Maps (tap or copy):")
                 if location
                 else "<p>Their phone did not share a location.</p>"
             )
