@@ -19,6 +19,9 @@ class AuthFailure implements Exception {
 
 /// Module 1 auth flows (Fig 4.1.1.1). Firebase Authentication on the device is
 /// the AuthNService; FastAPI creates profiles, sets role claims and audits.
+/// D-65: where Firebase's reset page continues (static page served with the portal).
+const passwordResetContinueUrl = 'https://hypertension-dd85f.web.app/reset-done.html';
+
 abstract interface class AuthRepository {
   /// Current Firebase user id, or null when signed out.
   Stream<String?> uidChanges();
@@ -190,8 +193,22 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
-  // D-65: the backend emails Firebase's reset link through Brevo (branded, from CareFlow).
-  Future<void> sendPasswordReset(String email) => _api.requestPasswordReset(email.trim());
+  // D-65 (revised): Firebase's own reset email, so password reset never depends on an
+  // email provider. After the new password is saved, Firebase continues to CareFlow's
+  // "Password changed" page (open the app / staff portal).
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(
+        email: email.trim(),
+        actionCodeSettings: ActionCodeSettings(url: passwordResetContinueUrl),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'too-many-requests') {
+        throw ApiException('RATE_LIMITED', 'Too many requests. Please wait and try again.');
+      }
+      rethrow; // the page answers neutrally (no account probing)
+    }
+  }
 
   @override
   Future<void> completeOnboarding(Map<String, dynamic> body) async {

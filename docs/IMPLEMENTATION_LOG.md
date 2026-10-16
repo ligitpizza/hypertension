@@ -1111,3 +1111,8 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   wiring this: `EMAIL_API_KEY` held an SMTP key (`xsmtpsib-`), which the web API rejects
   (401); Ping generated an API key (`xkeysib-`) and turned off Brevo's IP blocking for API
   keys (Cloud Run addresses change).
+- **D-65 revised:** Brevo put the new account under review (sending paused), likely
+  because of the @gmail.com sender and repeated reset emails. Password reset now uses
+  Firebase's built-in reset email from the app (continue URL `reset-done.html`), so it
+  never depends on an email provider; the sender name, subject and text can be edited in
+  Firebase Console → Authentication → Templates. The Brevo endpoint is kept for later.
