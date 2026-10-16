@@ -65,6 +65,10 @@ class MedicationOrder {
     this.deliveryFee = 0,
     this.total,
     this.deliveryAddress,
+    this.deliveryLat,
+    this.deliveryLng,
+    this.deliveryPhone,
+    this.suggestedPhone,
     this.courierRef,
     this.failureReason,
     this.cycleDate,
@@ -95,6 +99,14 @@ class MedicationOrder {
   final double deliveryFee;
   final double? total;
   final String? deliveryAddress;
+
+  /// D-67: drop-off point and contact number for the courier.
+  final double? deliveryLat;
+  final double? deliveryLng;
+  final String? deliveryPhone;
+
+  /// The patient's profile phone, to prefill the contact number (patient view only).
+  final String? suggestedPhone;
   final String? courierRef;
   final String? failureReason;
   final DateTime? cycleDate;
@@ -137,6 +149,10 @@ class MedicationOrder {
     deliveryFee: _num(d['deliveryFee']) ?? 0,
     total: _num(d['total']),
     deliveryAddress: d['deliveryAddress'] as String?,
+    deliveryLat: _num(d['deliveryLat']),
+    deliveryLng: _num(d['deliveryLng']),
+    deliveryPhone: d['deliveryPhone'] as String?,
+    suggestedPhone: d['suggestedPhone'] as String?,
     courierRef: d['courierRef'] as String?,
     failureReason: d['failureReason'] as String?,
     cycleDate: _time(d['cycleDate']),

@@ -192,6 +192,8 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | deliveryFee | Number | RM5.00 for home delivery, else 0 (D-66) | Required |
 | fulfilmentStatus | String | awaiting_confirmation / skipped / awaiting_payment / preparing / out_of_stock / ready_for_collection / ready_for_delivery / collected / delivered / failed (D-66) | Required |
 | deliveryAddress | String | Typed by the patient for home delivery (D-66) | Optional |
+| deliveryLat, deliveryLng | Number | Drop-off point from the phone's GPS at confirmation (D-67) | Required for home delivery |
+| deliveryPhone | String | Contact number for the courier, typed at confirmation (D-67) | Required for home delivery |
 | paymentIntentId | String | Stripe PaymentIntent (or simulated) id (D-66) | Optional |
 | courierRef | String | Courier booking id, e.g. GRB-1A2B3C (D-66) | Optional |
 | stockItemId | Reference (medication_stock) | Stock the units were taken from (D-66) | Optional |

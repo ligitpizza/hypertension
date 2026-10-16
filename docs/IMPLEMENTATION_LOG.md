@@ -1166,3 +1166,21 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Deviations vs Chapter 4: D-66 (new fields, `medication_stock`, orders read through the
   API, `method` empty until confirmation, no insurance, simulated courier, lookup without
   BP or allergies).
+- **D-67 GrabExpress sandbox (Ping asked for the real Grab sandbox):** `GrabExpressClient`
+  implements the courier interface from Grab's published API (OAuth client credentials
+  with token reuse and one re-sign-in on 401; `POST /v1/deliveries` with the pharmacy as
+  pickup and the patient as drop-off; `GET /v1/deliveries/{id}`; tracking webhook). Grab
+  statuses map to the four tracking stages; failures (FAILED, CANCELED, RETURNED) ask the
+  patient to reschedule or switch. Grab only gets "Pharmacy parcel", the patient's first
+  name and contact number. The client switches on when `GRAB_CLIENT_ID`/`GRAB_CLIENT_SECRET`
+  and `PHARMACY_ADDRESS`/`PHARMACY_LAT`/`PHARMACY_LNG`/`PHARMACY_PHONE` are set
+  (`set-grab-secrets`, deploy-backend); otherwise the simulator stays. Access needs a Grab
+  partner project: the Grab Developer dashboard shows "Goodies not ready! Please check with
+  your Grab PIC"; Ping requested sandbox access through Grab's Contact Us form on
+  2026-10-16. With Grab, only the order screen and the sweep poll Grab (lists don't).
+  Home delivery now needs "Use my current location" (geolocator; explains and opens
+  settings if location is off or refused) and a contact number prefilled from the
+  profile: `deliveryLat`, `deliveryLng`, `deliveryPhone`. Also fixed: an empty value in
+  the environment (e.g. `PHARMACY_LAT=`) is treated as unset instead of failing start-up.
+  Tests: backend 17 new (`test_grab_express.py`, D-67 order tests; 622 total);
+  Flutter 539 (location and contact-number tests).

@@ -508,8 +508,21 @@ class ApiClient {
   Future<Map<String, dynamic>> order(String id) => _get('/orders/$id');
 
   /// UC13.3: method is self_collection or home_delivery.
-  Future<Map<String, dynamic>> confirmOrder(String id, String method, {String? address}) =>
-      _post('/orders/$id/confirm', {'method': method, 'deliveryAddress': ?address});
+  /// D-67: home delivery also sends the phone's location and a contact number.
+  Future<Map<String, dynamic>> confirmOrder(
+    String id,
+    String method, {
+    String? address,
+    double? lat,
+    double? lng,
+    String? phone,
+  }) => _post('/orders/$id/confirm', {
+    'method': method,
+    'deliveryAddress': ?address,
+    'deliveryLat': ?lat,
+    'deliveryLng': ?lng,
+    'deliveryPhone': ?phone,
+  });
 
   /// UC13.2 A1.
   Future<void> skipOrder(String id) => _send('POST', '/orders/$id/skip', null);

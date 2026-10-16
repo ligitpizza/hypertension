@@ -750,9 +750,13 @@ class InMemoryOrderRepository:
         self.transactions: dict[str, dict[str, Any]] = {}
         self.tracking: list[dict[str, Any]] = []
         self.stock_items: dict[str, dict[str, Any]] = {}
+        self.phones: dict[str, str] = {}
 
     def user(self, uid: str) -> dict[str, Any] | None:
         return self._users.users.get(uid)
+
+    def profile_phone(self, uid: str) -> str | None:
+        return self.phones.get(uid)
 
     def staff(self, role: str) -> list[str]:
         return [

@@ -33,6 +33,13 @@ from tests.conftest import (
 )
 
 P, D, PH, A = "u-patient", "u-doctor", "u-pharm", "u-admin"
+# D-67: home delivery needs the address, the phone's location and a contact number.
+HOME = {
+    "deliveryAddress": "12 Jalan Ampang, KL",
+    "deliveryLat": 3.1579,
+    "deliveryLng": 101.7123,
+    "deliveryPhone": "012-345 6789",
+}
 PATIENT, DOCTOR, PHARM, ADMIN = (
     bearer("patient-token"),
     bearer("doctor-token"),
@@ -98,7 +105,7 @@ def paid_order(
     oid = priced_order(client, order_repo)
     body: dict[str, Any] = {"method": method}
     if method == "home_delivery":
-        body["deliveryAddress"] = "12 Jalan Ampang, KL"
+        body.update(HOME)
     assert (
         client.post(f"/api/v1/orders/{oid}/confirm", json=body, headers=PATIENT).status_code == 200
     )
@@ -261,10 +268,27 @@ def test_uc13_3_home_delivery_needs_an_address_and_adds_the_fee(
     url = f"/api/v1/orders/{oid}/confirm"
     res = client.post(url, json={"method": "home_delivery"}, headers=PATIENT)
     assert res.json()["error"]["code"] == "ADDRESS_REQUIRED"
+    no_gps = {"method": "home_delivery", "deliveryAddress": "12 Jalan Ampang"}
+    res = client.post(url, json=no_gps, headers=PATIENT)
+    assert res.json()["error"]["code"] == "LOCATION_REQUIRED"
     res = client.post(
-        url, json={"method": "home_delivery", "deliveryAddress": "12 Jalan Ampang"}, headers=PATIENT
+        url, json={**no_gps, "deliveryLat": 3.15, "deliveryLng": 101.71}, headers=PATIENT
     )
+    assert res.json()["error"]["code"] == "PHONE_REQUIRED"
+    res = client.post(url, json={"method": "home_delivery", **HOME}, headers=PATIENT)
     assert res.json()["total"] == 20.0 and res.json()["deliveryFee"] == 5.0
+    assert res.json()["deliveryLat"] == 3.1579 and res.json()["deliveryPhone"] == "012-345 6789"
+
+
+def test_d67_contact_number_is_prefilled_from_the_profile(
+    client: TestClient, order_repo: InMemoryOrderRepository
+) -> None:
+    oid = priced_order(client, order_repo)
+    order_repo.phones[P] = "0123456789"
+    assert client.get(f"/api/v1/orders/{oid}", headers=PATIENT).json()["suggestedPhone"] == (
+        "0123456789"
+    )
+    assert "suggestedPhone" not in client.get(f"/api/v1/orders/{oid}", headers=PHARM).json()
 
 
 def test_patients_only_see_their_own_orders(
@@ -604,7 +628,7 @@ def test_uc13_4_e1_dispatch_retries_then_fails(
     calls: list[str] = []
 
     class Down(FakeGrabClient):
-        def dispatch(self, order_id: str, address: str, now: datetime) -> Any:
+        def dispatch(self, order_id: str, dest: Any, now: datetime) -> Any:
             calls.append(order_id)
             raise DispatchError("No riders available.")
 
@@ -634,18 +658,49 @@ def test_admin_delivery_oversight(client: TestClient, order_repo: InMemoryOrderR
     assert res.json()["deliveryStatus"] == "dispatched"
 
 
-def test_grab_webhook_needs_the_shared_secret(
-    make_client: Any, order_repo: InMemoryOrderRepository
+def test_d67_grab_webhook_needs_the_token_and_maps_statuses(
+    make_client: Any, order_repo: InMemoryOrderRepository, push: LogPushClient
 ) -> None:
     client = make_client(dev_settings(grab_webhook_secret="s3cret"))
     oid = _deliver(client, order_repo)
-    body = {"orderId": oid, "status": "delivered"}
+    ref = order_repo.orders[oid]["courierRef"]
+    body = {
+        "deliveryID": ref,
+        "merchantOrderID": f"{oid}.1760000000",
+        "status": "IN_DELIVERY",
+        "timestamp": 1760000000,
+        "driver": {"name": "Ali", "currentLat": 3.1, "currentLng": 101.7},
+    }
     assert client.post("/api/v1/webhooks/grab", json=body).status_code == 403
-    res = client.post(
-        "/api/v1/webhooks/grab", json=body, headers={"X-CareFlow-Courier-Secret": "s3cret"}
-    )
-    assert res.json()["changed"] is True
+    bad = {"Authorization": "nope"}
+    assert client.post("/api/v1/webhooks/grab", json=body, headers=bad).status_code == 403
+    ok = {"Authorization": "s3cret"}
+    res = client.post("/api/v1/webhooks/grab", json=body, headers=ok)
+    assert res.json()["changed"] == 2  # picked_up, in_transit (dispatched already recorded)
+    assert order_repo.orders[oid]["deliveryStatus"] == "in_transit"
+    res = client.post("/api/v1/webhooks/grab", json={**body, "status": "COMPLETED"}, headers=ok)
     assert order_repo.orders[oid]["fulfilmentStatus"] == "delivered"
+    # A stale delivery id (an earlier attempt) is acknowledged but ignored.
+    old = {**body, "deliveryID": "IN-OLD", "status": "FAILED"}
+    assert client.post("/api/v1/webhooks/grab", json=old, headers=ok).json()["changed"] == 0
+    assert order_repo.orders[oid]["fulfilmentStatus"] == "delivered"
+
+
+def test_d67_grab_failure_webhook_asks_the_patient(
+    make_client: Any, order_repo: InMemoryOrderRepository, push: LogPushClient
+) -> None:
+    client = make_client(dev_settings(grab_webhook_secret="s3cret"))
+    oid = _deliver(client, order_repo)
+    body = {
+        "deliveryID": order_repo.orders[oid]["courierRef"],
+        "merchantOrderID": f"{oid}.1",
+        "status": "FAILED",
+        "failedReason": "Recipient unreachable",
+    }
+    client.post("/api/v1/webhooks/grab", json=body, headers={"Authorization": "Bearer s3cret"})
+    o = order_repo.orders[oid]
+    assert o["fulfilmentStatus"] == "failed" and o["failureReason"] == "Recipient unreachable"
+    assert "Delivery problem" in titles(push, P)
 
 
 def test_sweep_runs_the_order_job(client: TestClient, order_repo: InMemoryOrderRepository) -> None:

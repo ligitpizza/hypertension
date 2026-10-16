@@ -13,6 +13,10 @@ class _Body(BaseModel):
 class ConfirmOrderRequest(_Body):
     method: Literal["self_collection", "home_delivery"]
     deliveryAddress: str | None = Field(default=None, max_length=300)
+    # D-67: the phone's current location and a contact number, for the courier.
+    deliveryLat: float | None = Field(default=None, ge=-90, le=90)
+    deliveryLng: float | None = Field(default=None, ge=-180, le=180)
+    deliveryPhone: str | None = Field(default=None, max_length=20, pattern=r"^[0-9+\- ]*$")
 
 
 class FakePaymentRequest(_Body):
@@ -60,10 +64,15 @@ class ReceiveStockRequest(_Body):
     expiryDate: date
 
 
-class GrabWebhook(_Body):
-    orderId: str = Field(min_length=1, max_length=200)
-    status: Literal["dispatched", "picked_up", "in_transit", "delivered", "failed"]
-    location: str | None = Field(default=None, max_length=300)
+class GrabWebhook(BaseModel):
+    """GrabExpress tracking webhook body (developer.grab.com/docs/grab-express); only the
+    fields CareFlow uses. Grab may add fields, so extras are ignored."""
+
+    model_config = ConfigDict(extra="ignore")
+    deliveryID: str = Field(min_length=1, max_length=200)
+    merchantOrderID: str = Field(min_length=1, max_length=300)
+    status: str = Field(min_length=1, max_length=40)
+    failedReason: str | None = Field(default=None, max_length=500)
 
 
 class FailDeliveryRequest(_Body):

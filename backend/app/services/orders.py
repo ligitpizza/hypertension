@@ -30,7 +30,12 @@ from firebase_admin import firestore
 from app.core.audit import SYSTEM_SCHEDULER_USER, AuditLogger, get_audit_logger
 from app.core.enums import Collection, UserRole
 from app.core.firebase import get_firestore
-from app.integrations.delivery import CourierClient, DispatchError, get_courier_client
+from app.integrations.delivery import (
+    CourierClient,
+    Destination,
+    DispatchError,
+    get_courier_client,
+)
 from app.integrations.payments import PaymentIntent
 from app.integrations.push import PushMessage
 from app.services.medications import MYT
@@ -129,6 +134,9 @@ def order_view(
         "deliveryFee": o.get("deliveryFee") or 0.0,
         "total": total_of(o),
         "deliveryAddress": o.get("deliveryAddress"),
+        "deliveryLat": o.get("deliveryLat"),
+        "deliveryLng": o.get("deliveryLng"),
+        "deliveryPhone": o.get("deliveryPhone"),
         "courierRef": o.get("courierRef"),
         "failureReason": o.get("failureReason"),
         "stockItemId": o.get("stockItemId"),
@@ -176,6 +184,10 @@ def stock_view(stock_id: str, s: dict[str, Any]) -> dict[str, Any]:
 
 class OrderRepository(Protocol):
     def user(self, uid: str) -> dict[str, Any] | None: ...
+
+    def profile_phone(self, uid: str) -> str | None:
+        """The patient's phone from health_profiles.personalInfo (D-67 prefill)."""
+        ...
 
     def staff(self, role: str) -> list[str]:
         """Uids of active staff with [role] (pharmacists to notify, admins to flag)."""
@@ -238,6 +250,12 @@ class FirestoreOrderRepository:
     def user(self, uid: str) -> dict[str, Any] | None:
         snap = self._col(Collection.USERS).document(uid).get()
         return dict(snap.to_dict()) if snap.exists else None
+
+    def profile_phone(self, uid: str) -> str | None:
+        snap = self._col(Collection.HEALTH_PROFILES).document(uid).get()
+        personal = (snap.to_dict() or {}).get("personalInfo") if snap.exists else None
+        phone = personal.get("phone") if isinstance(personal, dict) else None
+        return str(phone) if phone else None
 
     def staff(self, role: str) -> list[str]:
         q = self._col(Collection.USERS).where(filter=firestore.FieldFilter("role", "==", role))
@@ -483,7 +501,16 @@ class OrderService:
             target_id=order_id,
         )
 
-    def confirm(self, order_id: str, uid: str, method: str, address: str | None) -> dict[str, Any]:
+    def confirm(
+        self,
+        order_id: str,
+        uid: str,
+        method: str,
+        address: str | None,
+        lat: float | None = None,
+        lng: float | None = None,
+        phone: str | None = None,
+    ) -> dict[str, Any]:
         o = self._order(order_id)
         if o.get("fulfilmentStatus") not in (AWAITING_CONFIRMATION, SKIPPED, AWAITING_PAYMENT):
             raise OrderError("ORDER_NOT_OPEN", "This order has already been paid.")
@@ -495,12 +522,22 @@ class OrderService:
         if method not in METHODS:
             raise OrderError("INVALID_METHOD", "Choose self-collection or home delivery.")
         address = (address or "").strip()
-        if method == HOME_DELIVERY and not address:
+        phone = (phone or "").strip()
+        home = method == HOME_DELIVERY
+        if home and not address:
             raise OrderError("ADDRESS_REQUIRED", "Enter the delivery address.")
+        # D-67: the courier needs the drop-off point and a number to call.
+        if home and (lat is None or lng is None):
+            raise OrderError("LOCATION_REQUIRED", "Share your current location for the courier.")
+        if home and sum(c.isdigit() for c in phone) < 8:
+            raise OrderError("PHONE_REQUIRED", "Enter a contact number for the courier.")
         update = {
             "method": method,
-            "deliveryFee": DELIVERY_FEE if method == HOME_DELIVERY else 0.0,
-            "deliveryAddress": address if method == HOME_DELIVERY else None,
+            "deliveryFee": DELIVERY_FEE if home else 0.0,
+            "deliveryAddress": address if home else None,
+            "deliveryLat": lat if home else None,
+            "deliveryLng": lng if home else None,
+            "deliveryPhone": phone if home else None,
             "fulfilmentStatus": AWAITING_PAYMENT,
             "confirmedAt": datetime.now(UTC),
         }
@@ -696,7 +733,7 @@ class OrderService:
         reason = "The courier could not be booked."
         for _ in range(DISPATCH_ATTEMPTS):
             try:
-                d = self.courier.dispatch(order_id, str(o.get("deliveryAddress") or ""), now)
+                d = self.courier.dispatch(order_id, _destination(o), now)
             except DispatchError as exc:
                 reason = str(exc) or reason
                 continue
@@ -798,17 +835,17 @@ class OrderService:
         return True
 
     def advance(self, order_id: str, o: dict[str, Any], now: datetime | None = None) -> int:
-        """Applies the simulated courier's progress (D-66: ~1 min per stage)."""
+        """Applies the courier's progress: the simulator's clock (D-66) or Grab's delivery
+        status (D-67), in case a webhook was missed."""
         now = now or datetime.now(UTC)
         since = o.get("dispatchedAt")
-        if (
-            not self.courier.simulated
-            or o.get("fulfilmentStatus") != READY_FOR_DELIVERY
-            or not isinstance(since, datetime)
-        ):
+        ref = o.get("courierRef")
+        if o.get("fulfilmentStatus") != READY_FOR_DELIVERY or not isinstance(since, datetime):
             return 0
         moved = 0
-        for u in self.courier.updates_since_dispatch(since, now):
+        for u in self.courier.poll(str(ref or ""), since, now):
+            if o.get("fulfilmentStatus") != READY_FOR_DELIVERY:
+                break
             if self.courier_update(order_id, o, u.status, u.at, u.location):
                 moved += 1
         return moved
@@ -839,6 +876,17 @@ class OrderService:
             target_type=Collection.MEDICATION_ORDERS.value,
             target_id=order_id,
         )
+
+
+def _destination(o: dict[str, Any]) -> Destination:
+    name = str(o.get("patientName") or "").strip()
+    return Destination(
+        address=str(o.get("deliveryAddress") or ""),
+        lat=o.get("deliveryLat"),
+        lng=o.get("deliveryLng"),
+        first_name=name.split(" ")[0] if name else "Patient",
+        phone=str(o.get("deliveryPhone") or ""),
+    )
 
 
 def get_order_service(

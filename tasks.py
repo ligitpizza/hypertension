@@ -33,6 +33,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
                           backend/.env in Secret Manager for the live AI agent
   set-stripe-secrets      One-time (D-66): store the Stripe TEST secret key (and webhook
                           secret, if set) from backend/.env in Secret Manager
+  set-grab-secrets        One-time (D-67): store the GrabExpress sandbox client secret (and
+                          webhook token, if set) from backend/.env in Secret Manager
   build-apk               Release APKs for the patient and family flavors
   phone-live              Build release apps and install the live-cloud patient app on
                           the phone (or double-click phone-live.cmd)
@@ -74,6 +76,9 @@ BREVO_SECRET = "brevo-api-key"
 # Stripe TEST keys for Module 13 payments (D-66); created by set-stripe-secrets.
 STRIPE_SECRET = "stripe-secret-key"
 STRIPE_WEBHOOK_SECRET = "stripe-webhook-secret"
+# GrabExpress sandbox OAuth secret and webhook token (D-67); created by set-grab-secrets.
+GRAB_SECRET = "grab-client-secret"
+GRAB_WEBHOOK_SECRET = "grab-webhook-secret"
 # demo- prefix: emulator-only project, can never reach the cloud (rules tests).
 RULES_TEST_PROJECT = "demo-careflow-rules"
 
@@ -374,6 +379,15 @@ def task_set_stripe_secrets() -> None:
         print("No STRIPE_WEBHOOK_SECRET yet; the app confirms payments by asking Stripe instead.")
 
 
+def task_set_grab_secrets() -> None:
+    """Store GRAB_CLIENT_SECRET (and GRAB_WEBHOOK_SECRET when set) for Cloud Run (D-67)."""
+    _store_secret(GRAB_SECRET, "GRAB_CLIENT_SECRET", "GrabExpress sandbox client secret")
+    if _local_env("GRAB_WEBHOOK_SECRET"):
+        _store_secret(GRAB_WEBHOOK_SECRET, "GRAB_WEBHOOK_SECRET", "Grab webhook token")
+    else:
+        print("No GRAB_WEBHOOK_SECRET yet; delivery status is read from Grab instead.")
+
+
 def task_deploy_backend() -> None:
     brevo = _secret_exists(BREVO_SECRET)
     stripe = _secret_exists(STRIPE_SECRET)
@@ -399,6 +413,12 @@ def task_deploy_backend() -> None:
             f"STRIPE_PUBLISHABLE_KEY={_local_env('STRIPE_PUBLISHABLE_KEY')}",
             # D-66 testing aid; set DEV_ORDER_TOOLS=false in backend/.env for real use.
             f"DEV_ORDER_TOOLS={_local_env('DEV_ORDER_TOOLS') or 'false'}",
+            # D-67 GrabExpress sandbox: client id and pickup point are not secret.
+            f"GRAB_CLIENT_ID={_local_env('GRAB_CLIENT_ID')}",
+            f"PHARMACY_ADDRESS={_local_env('PHARMACY_ADDRESS')}",
+            f"PHARMACY_LAT={_local_env('PHARMACY_LAT')}",
+            f"PHARMACY_LNG={_local_env('PHARMACY_LNG')}",
+            f"PHARMACY_PHONE={_local_env('PHARMACY_PHONE')}",
         ]
     )
     cmd = [
@@ -451,6 +471,12 @@ def task_deploy_backend() -> None:
             "Note: no Stripe secret yet, so payments use the simulated card form. "
             "Run: python tasks.py set-stripe-secrets --yes"
         )
+    if _secret_exists(GRAB_SECRET):
+        secrets.append(f"GRAB_CLIENT_SECRET={GRAB_SECRET}:latest")
+        if _secret_exists(GRAB_WEBHOOK_SECRET):
+            secrets.append(f"GRAB_WEBHOOK_SECRET={GRAB_WEBHOOK_SECRET}:latest")
+    else:
+        print("Note: no Grab secret yet, so deliveries use the simulated courier (D-11).")
     if secrets:
         cmd += ["--set-secrets", ",".join(secrets)]
     confirm_cloud(
@@ -993,6 +1019,7 @@ TASKS = {
     "set-gemini-secret": task_set_gemini_secret,
     "set-brevo-secret": task_set_brevo_secret,
     "set-stripe-secrets": task_set_stripe_secrets,
+    "set-grab-secrets": task_set_grab_secrets,
     "seed-catalog-live": task_seed_catalog_live,
     "build-apk": task_build_apk,
     "backend-url": task_backend_url,

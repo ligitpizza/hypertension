@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hypertension/features/family/data/location_source.dart';
+import 'package:hypertension/features/family/state/family_providers.dart';
 import 'package:hypertension/features/orders/data/order_models.dart';
 import 'package:hypertension/features/orders/data/payment_sheet.dart';
 import 'package:hypertension/features/orders/presentation/admin_deliveries_page.dart';
@@ -21,6 +23,7 @@ import '../helpers/order_fakes.dart';
 
 late FakeOrdersRepository repo;
 late FakePaymentSheet sheet;
+late FakeOrderLocation location;
 
 const id = 'rx1_2026-10';
 
@@ -59,6 +62,7 @@ Widget host(String initial) {
     overrides: [
       ordersRepositoryProvider.overrideWithValue(repo),
       paymentSheetProvider.overrideWithValue(sheet),
+      locationSourceProvider.overrideWithValue(location),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -68,6 +72,7 @@ void main() {
   setUp(() {
     repo = FakeOrdersRepository();
     sheet = FakePaymentSheet();
+    location = FakeOrderLocation();
   });
 
   group('UC13.2 entry and order list', () {
@@ -135,8 +140,20 @@ void main() {
       expect(find.text('Payment'), findsOneWidget);
     });
 
-    tallTest('home delivery adds RM5 and needs an address', (t) async {
-      repo.orders = {id: anOrder()};
+    tallTest('D-67 home delivery adds RM5 and needs address, location and phone', (t) async {
+      repo.orders = {
+        id: MedicationOrder.fromJson({
+          'id': id,
+          'ref': 'CF-ABC123',
+          'patientId': 'u-patient',
+          'prescriptionId': 'rx1',
+          'medicationDetails': 'Amlodipine 5mg',
+          'fulfilmentStatus': 'awaiting_confirmation',
+          'paymentStatus': 'pending',
+          'amount': 15,
+          'suggestedPhone': '012-345 6789',
+        }),
+      };
       await t.pumpWidget(host('/orders/$id/confirm'));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('method-delivery')));
@@ -148,7 +165,35 @@ void main() {
       await t.enterText(find.byKey(const Key('delivery-address')), '12 Jalan Ampang');
       await t.tap(find.byKey(const Key('confirm-order')));
       await t.pumpAndSettle();
-      expect(repo.calls, contains('confirm:$id:home_delivery:12 Jalan Ampang'));
+      expect(find.textContaining('Share your current location'), findsOneWidget);
+      // Contact number is prefilled from the profile.
+      expect(find.text('012-345 6789'), findsOneWidget);
+      await t.tap(find.byKey(const Key('use-location')));
+      await t.pumpAndSettle();
+      expect(find.text('Location shared for the courier'), findsOneWidget);
+      await t.tap(find.byKey(const Key('confirm-order')));
+      await t.pumpAndSettle();
+      expect(
+        repo.calls,
+        contains('confirm:$id:home_delivery:12 Jalan Ampang:3.1579,101.7123:012-345 6789'),
+      );
+    });
+
+    tallTest('D-67 location refused: explains and opens settings', (t) async {
+      repo.orders = {id: anOrder()};
+      location
+        ..here = null
+        ..access = LocationAccess.deniedForever;
+      await t.pumpWidget(host('/orders/$id/confirm'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('method-delivery')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('use-location')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Location permission was refused'), findsOneWidget);
+      await t.tap(find.byKey(const Key('use-location')));
+      await t.pumpAndSettle();
+      expect(location.settings, [LocationAccess.deniedForever]);
     });
 
     tallTest('unpriced order cannot be confirmed', (t) async {

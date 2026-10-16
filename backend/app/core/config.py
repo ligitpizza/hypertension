@@ -8,7 +8,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # Empty values (e.g. PHARMACY_LAT= in .env) count as unset rather than invalid.
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True
+    )
 
     app_env: Literal["dev", "prod"] = "prod"
     app_version: str = "0.1.0"
@@ -59,8 +62,16 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_publishable_key: str = ""
     stripe_webhook_secret: str = ""
-    # D-66 Grab: shared secret for /webhooks/grab (real courier only; the fake needs none).
+    # D-67 GrabExpress sandbox: OAuth client from the Grab partner project; empty = simulator.
+    grab_client_id: str = ""
+    grab_client_secret: str = ""
+    # Token key configured with Grab for its tracking webhook (sent as Authorization).
     grab_webhook_secret: str = ""
+    # Pickup point for Grab (D-67): the pharmacy's address, coordinates and phone.
+    pharmacy_address: str = ""
+    pharmacy_lat: float | None = None
+    pharmacy_lng: float | None = None
+    pharmacy_phone: str = ""
     # D-66 testing aid: patients may start next month's order cycle now.
     dev_order_tools: bool = False
     # Testing aid (D-57): patients may book any time, even a past one, so the doctor's

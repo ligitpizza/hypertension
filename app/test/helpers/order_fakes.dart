@@ -1,3 +1,4 @@
+import 'package:hypertension/features/family/data/location_source.dart';
 import 'package:hypertension/features/orders/data/order_models.dart';
 import 'package:hypertension/features/orders/data/orders_repository.dart';
 import 'package:hypertension/features/orders/data/payment_sheet.dart';
@@ -43,8 +44,17 @@ class FakeOrdersRepository implements OrdersRepository {
   Future<MedicationOrder> order(String id) async => orders[id]!;
 
   @override
-  Future<MedicationOrder> confirm(String id, String method, {String? address}) async {
-    calls.add('confirm:$id:$method:${address ?? ''}');
+  Future<MedicationOrder> confirm(
+    String id,
+    String method, {
+    String? address,
+    double? lat,
+    double? lng,
+    String? phone,
+  }) async {
+    calls.add(
+      'confirm:$id:$method:${address ?? ''}${lat == null ? '' : ':$lat,$lng:${phone ?? ''}'}',
+    );
     _maybeFail();
     return orders[id]!;
   }
@@ -185,3 +195,22 @@ MedicationOrder anOrder({
   etaAt: etaAt,
   events: events,
 );
+
+/// D-67: the phone's GPS for the delivery drop-off.
+class FakeOrderLocation implements LocationSource {
+  Map<String, double>? here = {'lat': 3.1579, 'lng': 101.7123};
+  LocationAccess access = LocationAccess.granted;
+  final settings = <LocationAccess>[];
+
+  @override
+  Future<Map<String, double>?> current({bool ask = false}) async => here;
+
+  @override
+  Future<bool> granted() async => access == LocationAccess.granted;
+
+  @override
+  Future<LocationAccess> request() async => access;
+
+  @override
+  Future<void> openSettings(LocationAccess access) async => settings.add(access);
+}

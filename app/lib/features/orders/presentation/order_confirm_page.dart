@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/utils/validators.dart';
 import '../../../shared/services/api/api_client.dart';
+import '../../family/data/location_source.dart';
+import '../../family/state/family_providers.dart';
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import 'order_widgets.dart';
@@ -20,6 +23,13 @@ class OrderConfirmPage extends ConsumerStatefulWidget {
 class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
   String? _method;
   final _address = TextEditingController();
+  final _phone = TextEditingController();
+
+  /// D-67: the drop-off point for the courier, from the phone's GPS.
+  Map<String, double>? _location;
+  bool _locating = false;
+  String? _locationNote;
+  LocationAccess? _locationFix;
   bool _busy = false;
   String? _error;
   bool _seeded = false;
@@ -27,6 +37,7 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
   @override
   void dispose() {
     _address.dispose();
+    _phone.dispose();
     super.dispose();
   }
 
@@ -39,13 +50,50 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
         o.deliveryAddress ??
         all.map((x) => x.deliveryAddress).whereType<String>().firstOrNull ??
         '';
+    _phone.text = o.deliveryPhone ?? o.suggestedPhone ?? '';
+    if (o.deliveryLat != null && o.deliveryLng != null) {
+      _location = {'lat': o.deliveryLat!, 'lng': o.deliveryLng!};
+    }
+  }
+
+  Future<void> _locate() async {
+    final source = ref.read(locationSourceProvider);
+    setState(() {
+      _locating = true;
+      _locationNote = null;
+      _locationFix = null;
+    });
+    final access = await source.request();
+    final pos = access == LocationAccess.granted ? await source.current(ask: true) : null;
+    if (!mounted) return;
+    setState(() {
+      _locating = false;
+      _location = pos ?? _location;
+      if (pos == null) {
+        final (text, action) = access == LocationAccess.granted
+            ? ("Couldn't get a GPS fix. Try again near a window.", null)
+            : locationAdvice(access);
+        _locationNote = text;
+        _locationFix = action == null ? null : access;
+      }
+    });
   }
 
   Future<void> _confirm() async {
     final method = _method;
     if (method == null) return;
-    if (method == homeDelivery && _address.text.trim().isEmpty) {
+    final home = method == homeDelivery;
+    if (home && _address.text.trim().isEmpty) {
       setState(() => _error = 'Enter the delivery address.');
+      return;
+    }
+    if (home && _location == null) {
+      setState(() => _error = 'Share your current location so the courier can find you.');
+      return;
+    }
+    final phoneError = home ? Validators.phone(_phone.text) : null;
+    if (phoneError != null) {
+      setState(() => _error = 'Contact number: $phoneError');
       return;
     }
     setState(() {
@@ -58,7 +106,10 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
           .confirm(
             widget.orderId,
             method,
-            address: method == homeDelivery ? _address.text.trim() : null,
+            address: home ? _address.text.trim() : null,
+            lat: home ? _location!['lat'] : null,
+            lng: home ? _location!['lng'] : null,
+            phone: home ? _phone.text.trim() : null,
           );
       ref.invalidate(myOrdersProvider);
       if (mounted) context.pushReplacement('/orders/${widget.orderId}/pay');
@@ -247,6 +298,58 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
             maxLength: 300,
             decoration: const InputDecoration(
               labelText: 'Delivery address',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          // D-67: the courier needs the exact drop-off point and a number to call.
+          Card(
+            key: const Key('delivery-location'),
+            child: ListTile(
+              leading: Icon(
+                _location == null ? Icons.location_off_outlined : Icons.location_on,
+                color: _location == null ? null : theme.colorScheme.primary,
+              ),
+              title: Text(
+                _location == null
+                    ? 'Share your location for the courier'
+                    : 'Location shared for the courier',
+              ),
+              subtitle: Text(
+                _locationNote ??
+                    (_location == null
+                        ? "Tap when you're at the delivery address."
+                        : '${_location!['lat']!.toStringAsFixed(5)}, '
+                              '${_location!['lng']!.toStringAsFixed(5)}'),
+              ),
+              trailing: _locating
+                  ? const SizedBox.square(
+                      dimension: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : TextButton(
+                      key: const Key('use-location'),
+                      onPressed: _locationFix != null
+                          ? () => ref.read(locationSourceProvider).openSettings(_locationFix!)
+                          : _locate,
+                      child: Text(
+                        _locationFix != null
+                            ? locationAdvice(_locationFix!).$2!
+                            : _location == null
+                            ? 'Use my current location'
+                            : 'Update',
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const Key('delivery-phone'),
+            controller: _phone,
+            keyboardType: TextInputType.phone,
+            maxLength: 20,
+            decoration: const InputDecoration(
+              labelText: 'Contact number for the courier',
+              helperText: 'Grab only gets your first name and this number.',
               border: OutlineInputBorder(),
             ),
           ),

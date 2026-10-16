@@ -6,7 +6,14 @@ import 'order_models.dart';
 abstract interface class OrdersRepository {
   Future<List<MedicationOrder>> myOrders();
   Future<MedicationOrder> order(String id);
-  Future<MedicationOrder> confirm(String id, String method, {String? address});
+  Future<MedicationOrder> confirm(
+    String id,
+    String method, {
+    String? address,
+    double? lat,
+    double? lng,
+    String? phone,
+  });
   Future<void> skip(String id);
   Future<PaymentStart> startPayment(String id);
   Future<PaymentResult> payFake(String id, String cardNumber);
@@ -55,8 +62,16 @@ class ApiOrdersRepository implements OrdersRepository {
   Future<MedicationOrder> order(String id) async => MedicationOrder.fromJson(await _api.order(id));
 
   @override
-  Future<MedicationOrder> confirm(String id, String method, {String? address}) async =>
-      MedicationOrder.fromJson(await _api.confirmOrder(id, method, address: address));
+  Future<MedicationOrder> confirm(
+    String id,
+    String method, {
+    String? address,
+    double? lat,
+    double? lng,
+    String? phone,
+  }) async => MedicationOrder.fromJson(
+    await _api.confirmOrder(id, method, address: address, lat: lat, lng: lng, phone: phone),
+  );
 
   @override
   Future<void> skip(String id) => _api.skipOrder(id);

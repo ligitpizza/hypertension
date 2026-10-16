@@ -27,6 +27,7 @@ from app.core.auth import CurrentUser, require_roles
 from app.core.config import Settings, get_settings
 from app.core.enums import Collection, PrescriptionSource, UserRole
 from app.core.errors import ApiError
+from app.integrations.delivery import grab_updates, order_id_from_merchant
 from app.integrations.payments import (
     CURRENCY,
     FakeGateway,
@@ -72,7 +73,7 @@ pharmacist_only = require_roles(UserRole.PHARMACIST)
 admin_only = require_roles(UserRole.ADMIN)
 pharmacy_staff = require_roles(UserRole.PHARMACIST, UserRole.ADMIN)
 
-_BAD_REQUEST = {"INVALID_METHOD", "ADDRESS_REQUIRED"}
+_BAD_REQUEST = {"INVALID_METHOD", "ADDRESS_REQUIRED", "LOCATION_REQUIRED", "PHONE_REQUIRED"}
 
 
 def _api(e: OrderError) -> ApiError:
@@ -96,9 +97,12 @@ def _own_order(svc: OrderService, order_id: str, uid: str) -> dict[str, Any]:
     return o
 
 
-def _fresh(svc: OrderService, order_id: str, o: dict[str, Any]) -> dict[str, Any]:
-    """Applies any simulated courier progress before showing the order."""
-    if o.get("fulfilmentStatus") == READY_FOR_DELIVERY:
+def _fresh(
+    svc: OrderService, order_id: str, o: dict[str, Any], single: bool = False
+) -> dict[str, Any]:
+    """Applies courier progress before showing the order. Lists only do this for the
+    simulator; with Grab each order is one API call, so only the order screen polls."""
+    if o.get("fulfilmentStatus") == READY_FOR_DELIVERY and (single or svc.courier.poll_in_lists):
         svc.advance(order_id, o)
         o = svc.repo.order(order_id) or o
     return o
@@ -139,8 +143,11 @@ def get_order(
     o = svc.repo.order(order_id)
     if o is None or (user.role == UserRole.PATIENT and o.get("patientId") != user.uid):
         raise _not_found()
-    o = _fresh(svc, order_id, o)
-    return order_view(order_id, o, svc.repo.events(order_id))
+    o = _fresh(svc, order_id, o, single=True)
+    view = order_view(order_id, o, svc.repo.events(order_id))
+    if user.role == UserRole.PATIENT:  # D-67: prefill the courier contact number
+        view["suggestedPhone"] = o.get("deliveryPhone") or svc.repo.profile_phone(user.uid)
+    return view
 
 
 @router.post("/orders/{order_id}/confirm")
@@ -152,7 +159,15 @@ def confirm_order(
 ) -> dict[str, Any]:
     _own_order(svc, order_id, user.uid)
     try:
-        o = svc.confirm(order_id, user.uid, body.method, body.deliveryAddress)
+        o = svc.confirm(
+            order_id,
+            user.uid,
+            body.method,
+            body.deliveryAddress,
+            body.deliveryLat,
+            body.deliveryLng,
+            body.deliveryPhone,
+        )
     except OrderError as e:
         raise _api(e) from e
     return order_view(order_id, o)
@@ -664,21 +679,23 @@ async def stripe_webhook(
 @router.post("/webhooks/grab")
 def grab_webhook(
     body: GrabWebhook,
-    x_careflow_courier_secret: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
     svc: OrderService = Depends(get_order_service),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    """Courier status push (UC13.5). A real Grab integration posts here with the shared
-    secret; the simulator doesn't need it."""
+    """GrabExpress tracking webhook (UC13.5; D-67). Grab sends the token key configured for
+    this endpoint in the Authorization header; anything else is refused."""
     secret = settings.grab_webhook_secret
-    if (
-        not secret
-        or not x_careflow_courier_secret
-        or not hmac.compare_digest(secret, x_careflow_courier_secret)
-    ):
+    sent = (authorization or "").removeprefix("Bearer ").strip()
+    if not secret or not sent or not hmac.compare_digest(secret, sent):
         raise ApiError("FORBIDDEN", "Webhook not verified.", status.HTTP_403_FORBIDDEN)
-    o = svc.repo.order(body.orderId)
-    if o is None:
-        raise _not_found()
-    changed = svc.courier_update(body.orderId, o, body.status, datetime.now(UTC), body.location)
+    order_id = order_id_from_merchant(body.merchantOrderID)
+    o = svc.repo.order(order_id)
+    if o is None or o.get("courierRef") != body.deliveryID:
+        # An old attempt (rescheduled since) or an unknown order: acknowledge and ignore.
+        return {"received": True, "changed": 0}
+    changed = 0
+    for u in grab_updates(body.status, datetime.now(UTC), body.failedReason):
+        if svc.courier_update(order_id, o, u.status, u.at, u.location):
+            changed += 1
     return {"received": True, "changed": changed}
