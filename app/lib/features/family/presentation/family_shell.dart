@@ -15,7 +15,7 @@ class FamilyShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final index = _tabs.indexWhere(location.startsWith);
-    // D-63: the family side keeps the teal family colours inside the CareFlow app.
+    // D-63: the family side keeps the teal family colours inside the Harvey app.
     return Theme(
       data: familyTheme(Theme.of(context)),
       child: Scaffold(

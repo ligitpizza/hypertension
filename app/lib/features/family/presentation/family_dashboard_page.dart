@@ -66,7 +66,7 @@ class _NotLinked extends StatelessWidget {
       Text(
         pending
             ? 'Your request was sent. You will see their health here once they approve it.'
-            : 'Ask your family member for the link code in their CareFlow app (Settings → '
+            : 'Ask your family member for the link code in their Harvey app (Settings → '
                   'Family), then enter it here.',
         textAlign: TextAlign.center,
       ),

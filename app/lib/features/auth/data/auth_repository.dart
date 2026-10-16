@@ -60,9 +60,9 @@ abstract interface class AuthRepository {
 abstract final class AuthMessages {
   static const invalidCredentials = 'Incorrect email or password.';
   static const deactivated = 'This account has been deactivated. Please contact support.';
-  static const useFamilyApp = 'Please use the CareFlow Family app.';
-  static const usePatientApp = 'Please use the CareFlow app.';
-  static const useStaffPortal = 'Please use the CareFlow Staff Portal.';
+  static const useFamilyApp = 'Please use the Harvey Family app.';
+  static const usePatientApp = 'Please use the Harvey app.';
+  static const useStaffPortal = 'Please use the Harvey Staff Portal.';
   static const roleMismatch = 'The selected role does not match this account.';
   static const tooManyAttempts = 'Too many attempts. Please wait a moment and try again.';
   static const emailInUse = 'This email is already registered. Please sign in instead.';
@@ -194,7 +194,7 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   // D-65 (revised): Firebase's own reset email, so password reset never depends on an
-  // email provider. After the new password is saved, Firebase continues to CareFlow's
+  // email provider. After the new password is saved, Firebase continues to Harvey's
   // "Password changed" page (open the app / staff portal).
   Future<void> sendPasswordReset(String email) async {
     try {
@@ -256,7 +256,7 @@ String? wrongAppMessage(UserRole? role, ClientApp app) {
   const staff = {UserRole.doctor, UserRole.pharmacist, UserRole.admin};
   switch (app) {
     case ClientApp.patient:
-      // D-63: one CareFlow app for patients and family members.
+      // D-63: one Harvey app for patients and family members.
       if (role == UserRole.patient || role == UserRole.familyMember) return null;
       return staff.contains(role) ? AuthMessages.useStaffPortal : AuthMessages.generic;
     case ClientApp.family:

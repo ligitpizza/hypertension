@@ -139,7 +139,7 @@ def test_d37_mild_reading_emails_the_doctor_once_a_day(
     assert first["bookAppointmentPrompt"] is True
     log(client, 118, 76)  # normal in between, so the next one is not a follow-up
     log(client, 136, 84)
-    reports = [m for m in emails.sent if m.subject.startswith("CareFlow: patient BP report")]
+    reports = [m for m in emails.sent if m.subject.startswith("Harvey: patient BP report")]
     assert len(reports) == 1
     assert reports[0].to_email == "john@clinic.test"
     assert "135/85" in reports[0].text

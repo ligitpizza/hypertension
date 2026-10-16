@@ -6,7 +6,7 @@ import '../../medications/domain/med_schedule.dart';
 /// Module 7 display helpers (D-53). All times are Malaysia time.
 
 /// Shown on the confirmation screen (Fig 4.3.6.2 location line); one clinic for the PoC.
-const clinicName = 'CareFlow Hypertension Clinic';
+const clinicName = 'Harvey Hypertension Clinic';
 
 /// UC7.2 E1: changing within this window shows a warning first.
 const lateChangeWindow = Duration(hours: 24);

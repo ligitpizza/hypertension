@@ -101,7 +101,7 @@ void main() {
     });
 
     test('D-26 / NFR-3.2 role must match the app', () {
-      // D-63: the CareFlow app serves family members too; staff still cannot use it.
+      // D-63: the Harvey app serves family members too; staff still cannot use it.
       expect(redirect(profile: user(role: UserRole.familyMember)), isNot('/wrong-app'));
       expect(redirect(profile: user(role: UserRole.doctor)), '/wrong-app');
       expect(redirect(app: ClientApp.staff, profile: user()), '/wrong-app');

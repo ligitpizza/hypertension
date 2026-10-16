@@ -44,7 +44,7 @@ class FamilySettingsPage extends ConsumerWidget {
             child: ListTile(
               leading: Icon(Icons.notifications_active_outlined),
               title: Text('Emergency alerts are always delivered.'),
-              subtitle: Text('Allow notifications for CareFlow Family so you never miss one.'),
+              subtitle: Text('Allow notifications for Harvey Family so you never miss one.'),
             ),
           ),
           const Card(

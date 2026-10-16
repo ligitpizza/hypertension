@@ -51,12 +51,12 @@ android {
         create("patient") {
             dimension = "app"
             applicationIdSuffix = ".patient"
-            resValue("string", "app_name", "CareFlow")
+            resValue("string", "app_name", "Harvey")
         }
         create("family") {
             dimension = "app"
             applicationIdSuffix = ".family"
-            resValue("string", "app_name", "CareFlow Family")
+            resValue("string", "app_name", "Harvey Family")
         }
     }
 

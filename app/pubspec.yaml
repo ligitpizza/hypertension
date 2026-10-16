@@ -87,6 +87,8 @@ flutter:
   # FR-14.4 high-risk message keywords (shared list, docs/06 section H).
   assets:
     - assets/high_risk_keywords.json
+    # D-75: Harvey logo (mark and full).
+    - assets/branding/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

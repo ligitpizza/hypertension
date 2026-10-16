@@ -95,7 +95,7 @@ class SecureStorageKeyVault implements KeyVault {
       // The saved key can no longer be read (on the web: its storage key was replaced).
       // Start again with a new key pair; older messages show the "earlier device" notice
       // (D-42 accepted key loss).
-      debugPrint('CareFlow: saved message key unreadable, creating a new one ($e)');
+      debugPrint('Harvey: saved message key unreadable, creating a new one ($e)');
       try {
         await _store.delete(storageKey);
       } catch (_) {}
@@ -104,7 +104,7 @@ class SecureStorageKeyVault implements KeyVault {
       try {
         return await _algorithm.newKeyPairFromSeed(base64Decode(saved));
       } on FormatException {
-        debugPrint('CareFlow: saved message key corrupt, creating a new one');
+        debugPrint('Harvey: saved message key corrupt, creating a new one');
       }
     }
     final pair = await _algorithm.newKeyPair();

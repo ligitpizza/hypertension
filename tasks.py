@@ -1,4 +1,4 @@
-"""CareFlow developer tasks (D-24): a cross-platform replacement for make and .sh scripts.
+"""Harvey developer tasks (D-24): a cross-platform replacement for make and .sh scripts.
 
 Usage:  python tasks.py <task> [--yes]
 
@@ -411,7 +411,7 @@ def task_deploy_backend() -> None:
             # falls back to its fake when its own key is missing).
             f"INTEGRATIONS_MODE={'real' if brevo or stripe else 'fake'}",
             f"EMAIL_FROM={_local_env('EMAIL_FROM')}",
-            f"EMAIL_FROM_NAME={_local_env('EMAIL_FROM_NAME') or 'CareFlow'}",
+            f"EMAIL_FROM_NAME={_local_env('EMAIL_FROM_NAME') or 'Harvey'}",
             f"SMS_SENDER={_local_env('SMS_SENDER')}",
             "INTERNAL_JOBS_AUTH=oidc",
             f"JOBS_OIDC_AUDIENCE={JOBS_AUDIENCE}",
@@ -652,7 +652,7 @@ def task_create_scheduler_jobs() -> None:
                 "--project",
                 PROJECT_ID,
                 "--display-name",
-                "CareFlow Cloud Scheduler (OIDC caller)",
+                "Harvey Cloud Scheduler (OIDC caller)",
             ],
         )
     confirm_cloud(
@@ -876,7 +876,7 @@ def task_dev() -> None:
 
     print(
         "\n========================================================\n"
-        " CareFlow local stack is running\n"
+        " Harvey local stack is running\n"
         "   Emulator UI (accounts, data, reset links): http://localhost:4000\n"
         "   FastAPI docs:                              http://localhost:8000/api/docs\n"
         "   Live staff portal (cloud):                 https://hypertension-dd85f.web.app\n"
@@ -904,7 +904,7 @@ def task_dev() -> None:
 
 
 def task_phone_live() -> None:
-    """Build the release apps (live cloud) and install the CareFlow app (D-63: patients
+    """Build the release apps (live cloud) and install the Harvey app (D-63: patients
     and family members use the same app)."""
     if not _phone_connected():
         sys.exit("No phone connected. Plug it in (USB debugging on) and try again.")
@@ -923,7 +923,7 @@ def task_phone_live() -> None:
             "1",
         ]
     )
-    print("Live-cloud CareFlow app installed. It no longer needs this PC.")
+    print("Live-cloud Harvey app installed. It no longer needs this PC.")
 
 
 def task_bootstrap_admin() -> None:

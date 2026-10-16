@@ -94,7 +94,7 @@ GoRouter _guardedRouter(
   );
 }
 
-/// FR-14.2 family screens (Figs 4.3.16.1-4.3.16.3; D-62). D-63: served by the CareFlow
+/// FR-14.2 family screens (Figs 4.3.16.1-4.3.16.3; D-62). D-63: served by the Harvey
 /// app to family-member accounts (and by the legacy Family build).
 final List<RouteBase> familyRoutes = [
   ShellRoute(
@@ -111,7 +111,7 @@ final List<RouteBase> familyRoutes = [
   ),
 ];
 
-/// D-63: one CareFlow app for patients and family members; each lands on its own home and
+/// D-63: one Harvey app for patients and family members; each lands on its own home and
 /// cannot open the other's screens.
 String? patientAppGuard(String location, UserRole? role) {
   final family = role == UserRole.familyMember;

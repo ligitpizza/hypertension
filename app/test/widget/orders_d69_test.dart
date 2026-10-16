@@ -323,7 +323,7 @@ void main() {
         id: 'm1',
         patientId: 'u-patient',
         senderRole: 'pharmacist',
-        senderName: 'CareFlow Pharmacy (Ahmad)',
+        senderName: 'Harvey Pharmacy (Ahmad)',
         text: 'Your refill is ready.',
         sentAt: DateTime.utc(2026, 10, 16, 2),
       ),

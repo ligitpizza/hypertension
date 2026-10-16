@@ -7,5 +7,5 @@ import 'firebase_options_patient.dart';
 Future<void> main() => bootstrap(
   flavor: AppFlavor.patient,
   firebaseOptions: DefaultFirebaseOptions.currentPlatform,
-  app: () => CareFlowApp(title: 'CareFlow', router: patientRouterProvider),
+  app: () => CareFlowApp(title: 'Harvey', router: patientRouterProvider),
 );

@@ -302,23 +302,23 @@ def get_reset_limiter() -> RateLimiter:
 def password_reset_email(name: str, email: str, link: str) -> EmailMessage:
     greeting = f"Hello {name}," if name else "Hello,"
     text = (
-        f"{greeting}\n\nWe received a request to reset your CareFlow password.\n"
+        f"{greeting}\n\nWe received a request to reset your Harvey password.\n"
         f"Choose a new password here (the link works for 1 hour):\n{link}\n\n"
-        "Afterwards, return to the CareFlow app (or the staff portal) and sign in.\n"
+        "Afterwards, return to the Harvey app (or the staff portal) and sign in.\n"
         "If you did not ask for this, ignore this email; your password stays the same.\n"
     )
     body = (
         f"<p>{html.escape(greeting)}</p>"
-        "<p>We received a request to reset your <b>CareFlow</b> password.</p>"
+        "<p>We received a request to reset your <b>Harvey</b> password.</p>"
         + plain_link_html(link, "Open this link to choose a new password (tap or copy it):")
-        + "<p>The link works for 1 hour. Afterwards, return to the CareFlow app (or the staff "
+        + "<p>The link works for 1 hour. Afterwards, return to the Harvey app (or the staff "
         "portal) and sign in.</p>"
         "<p>If you did not ask for this, ignore this email; your password stays the same.</p>"
     )
     return EmailMessage(
         to_email=email,
         to_name=name or email,
-        subject="Reset your CareFlow password",
+        subject="Reset your Harvey password",
         text=text,
         html=body,
     )

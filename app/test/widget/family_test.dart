@@ -463,7 +463,7 @@ void main() {
         ..access = LocationAccess.deniedForever;
       await t.pumpWidget(app('/sos', uid: 'p1'));
       await t.pumpAndSettle();
-      expect(find.textContaining('Allow it for CareFlow'), findsOneWidget);
+      expect(find.textContaining('Allow it for Harvey'), findsOneWidget);
       await t.tap(find.byKey(const Key('sos-location-retry')));
       await t.pumpAndSettle();
       expect(location.settings, [LocationAccess.deniedForever]);

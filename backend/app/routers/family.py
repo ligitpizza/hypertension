@@ -101,7 +101,7 @@ def request_link(
         patient_id,
         PushMessage(
             "Family link request",
-            f"{name} would like to follow your health. Open CareFlow to approve or reject.",
+            f"{name} would like to follow your health. Open Harvey to approve or reject.",
             {"type": "family_request", "requestId": request_id},
         ),
     )
@@ -154,7 +154,7 @@ def _decide(
         member,
         PushMessage(
             "Link approved" if approve else "Link request declined",
-            f"You can now follow {patient}'s health in CareFlow."
+            f"You can now follow {patient}'s health in Harvey."
             if approve
             else f"{patient} declined your request to follow their health.",
             {"type": "family_link", "status": new_status.value},
@@ -277,7 +277,7 @@ def sos(
             str(doctor),
             PushMessage(
                 "Patient SOS",
-                f"{name} pressed the SOS button in CareFlow.",
+                f"{name} pressed the SOS button in Harvey.",
                 {"type": "sos", "patientId": user.uid},
                 urgent=True,
             ),

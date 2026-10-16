@@ -1319,3 +1319,12 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - **Pharmacy queue:** waiting-for-patient prescriptions now appear inside the Active
   prescription queue (with Cancel), not in a separate card below it.
 - Tests: backend 669; Flutter 569.
+
+### 2026-10-17 — Rename to Harvey with the new logo (D-75)
+
+- All user-facing "CareFlow" text is now "Harvey" (75 files: app screens, Android app
+  names, staff portal "Harvey Pro", web title/manifest, backend emails, pushes, PDFs,
+  receipts, pharmacy chat, courier sender). Logo mark and full logo added as assets and
+  shown on sign-in screens and the portal header; launcher and web icons regenerated.
+  Infrastructure names unchanged. `EMAIL_FROM_NAME=Harvey` in the local `.env`.
+- Tests: backend 669; Flutter 569. Patient APK and staff web build.

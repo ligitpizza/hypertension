@@ -7,5 +7,5 @@ import 'firebase_options_family.dart';
 Future<void> main() => bootstrap(
   flavor: AppFlavor.family,
   firebaseOptions: DefaultFirebaseOptions.currentPlatform,
-  app: () => CareFlowApp(title: 'CareFlow Family', router: familyRouterProvider),
+  app: () => CareFlowApp(title: 'Harvey Family', router: familyRouterProvider),
 );

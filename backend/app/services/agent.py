@@ -24,7 +24,7 @@ from app.services.recommendations import DISCLAIMER
 
 log = logging.getLogger("careflow.agent")
 
-SYSTEM_PROMPT = """You are the CareFlow Health Assistant, helping an adult patient in Malaysia
+SYSTEM_PROMPT = """You are the Harvey Health Assistant, helping an adult patient in Malaysia
 manage high blood pressure. You are not a doctor.
 
 Rules:

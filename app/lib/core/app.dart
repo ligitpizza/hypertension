@@ -31,7 +31,7 @@ class CareFlowApp extends ConsumerWidget {
         ref
             .read(messagingRepositoryProvider)
             .publishKey(user.uid)
-            .catchError((Object e) => debugPrint('CareFlow: publishing message key failed: $e'));
+            .catchError((Object e) => debugPrint('Harvey: publishing message key failed: $e'));
       }
     });
     // D-43: keep this phone's dose reminders in step with the patient's medication list

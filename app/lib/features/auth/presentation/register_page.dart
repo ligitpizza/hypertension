@@ -60,7 +60,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   bool _submitting = false;
   String? _error;
 
-  /// D-63: the CareFlow app registers patients or family members (Fig 4.3.1.1 toggle).
+  /// D-63: the Harvey app registers patients or family members (Fig 4.3.1.1 toggle).
   late UserRole _role = ref.read(clientAppProvider) == ClientApp.family || widget.family
       ? UserRole.familyMember
       : UserRole.patient;

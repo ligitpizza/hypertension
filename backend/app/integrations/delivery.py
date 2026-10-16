@@ -10,7 +10,7 @@ Implementations of one interface, picked by `COURIER` (D-68):
   dispatched -> picked_up -> in_transit -> delivered about one minute per stage.
 
 Couriers only receive a generic parcel and the patient's first name and contact number;
-the medicine never leaves CareFlow (D-67).
+the medicine never leaves Harvey (D-67).
 """
 
 from __future__ import annotations
@@ -36,8 +36,8 @@ STAGE = timedelta(minutes=1)
 # Courier statuses in order (delivery_tracking_events.status, docs/04).
 STAGES = ("dispatched", "picked_up", "in_transit", "delivered")
 FAKE_LOCATIONS = {
-    "dispatched": "CareFlow pharmacy",
-    "picked_up": "CareFlow pharmacy",
+    "dispatched": "Harvey pharmacy",
+    "picked_up": "Harvey pharmacy",
     "in_transit": "On the way",
     "delivered": None,
 }
@@ -143,7 +143,7 @@ class FakeGrabClient:
 
 # ---------------- GrabExpress ----------------
 
-# Grab status -> CareFlow stages reached (in order); failures handled separately.
+# Grab status -> Harvey stages reached (in order); failures handled separately.
 _GRAB_REACHED = {
     "QUEUEING": 1,
     "ALLOCATING": 1,
@@ -159,7 +159,7 @@ GRAB_FAILED = {"FAILED", "CANCELED", "CANCELLED", "RETURNED", "IN_RETURN"}
 def grab_updates(
     status: str, now: datetime, failed_reason: str | None = None, place: str | None = None
 ) -> list[CourierUpdate]:
-    """CareFlow tracking stages implied by a Grab delivery status."""
+    """Harvey tracking stages implied by a Grab delivery status."""
     status = status.upper()
     if status in GRAB_FAILED:
         reason = failed_reason or f"Grab reported the delivery as {status.lower()}."
@@ -296,7 +296,7 @@ class GrabExpressClient:
                 "coordinates": {"latitude": dest.lat, "longitude": dest.lng},
             },
             "sender": {
-                "firstName": "CareFlow pharmacy",
+                "firstName": "Harvey pharmacy",
                 "phone": grab_phone(self._pharmacy_phone),
                 "smsEnabled": True,
             },
@@ -371,7 +371,7 @@ class GrabExpressClient:
 
 LALAMOVE_SANDBOX_URL = "https://rest.sandbox.lalamove.com"
 
-# Lalamove status -> CareFlow stages reached (in order).
+# Lalamove status -> Harvey stages reached (in order).
 _LALAMOVE_REACHED = {"ASSIGNING_DRIVER": 1, "ON_GOING": 1, "PICKED_UP": 3, "COMPLETED": 4}
 LALAMOVE_FAILED = {"CANCELED", "CANCELLED", "REJECTED", "EXPIRED"}
 
@@ -457,7 +457,7 @@ class LalamoveClient:
                 "quotationId": quote["quotationId"],
                 "sender": {
                     "stopId": stops[0]["stopId"],
-                    "name": "CareFlow pharmacy",
+                    "name": "Harvey pharmacy",
                     "phone": e164(self._pharmacy_phone),
                 },
                 "recipients": [

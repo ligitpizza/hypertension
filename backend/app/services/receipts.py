@@ -24,7 +24,7 @@ def receipt_pdf(order_id: str, order: dict[str, Any], charge_id: str, paid_at: d
 
     amount = float(order.get("amount") or 0)
     fee = float(order.get("deliveryFee") or 0)
-    line("CareFlow payment receipt", 16, "B")
+    line("Harvey payment receipt", 16, "B")
     line(f"Order {order_ref(order_id)}")
     line(f"Paid {paid_at.astimezone(MYT):%d %b %Y, %H:%M} (Malaysia time)")
     line(f"Payment reference: {charge_id}")
@@ -37,7 +37,7 @@ def receipt_pdf(order_id: str, order: dict[str, Any], charge_id: str, paid_at: d
         line("Self-collection: RM0.00")
     line(f"Total paid: RM{amount + fee:.2f}", 12, "B")
     pdf.ln(3)
-    line("Processed securely by Stripe (test mode). CareFlow never sees card details.", 9)
+    line("Processed securely by Stripe (test mode). Harvey never sees card details.", 9)
     return bytes(pdf.output())
 
 
@@ -60,7 +60,7 @@ def store_receipt(
         {
             "patientId": patient_id,
             "fileUrl": path,
-            "fileName": f"CareFlow receipt {order_ref(order_id)}.pdf",
+            "fileName": f"Harvey receipt {order_ref(order_id)}.pdf",
             "contentType": "application/pdf",
             "sizeBytes": len(data),
             "category": "other",

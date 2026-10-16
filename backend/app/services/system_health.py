@@ -107,7 +107,7 @@ def check(probe: Probe, reader: AuditReader, settings: Settings, now: datetime) 
         )
 
     api_uptime = uptime(reader, now)
-    add("api", "CareFlow API", "operational", 0.0, "Answering this request.", api_uptime)
+    add("api", "Harvey API", "operational", 0.0, "Answering this request.", api_uptime)
 
     ok, ms = _timed(probe.firestore)
     add(

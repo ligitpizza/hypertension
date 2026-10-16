@@ -8,7 +8,7 @@ import '../data/messaging_repository.dart';
 import '../state/messaging_providers.dart';
 
 /// Fig 4.3.15.1 Message Inbox (FR-10.1; UC10.1). Patient: their assigned doctor plus the
-/// AI Health Agent (the mockup's "CareFlow Assistant").
+/// AI Health Agent (the mockup's "Harvey Assistant").
 class PatientInboxPage extends ConsumerWidget {
   const PatientInboxPage({super.key});
 
@@ -43,7 +43,7 @@ class PatientInboxPage extends ConsumerWidget {
             child: ListTile(
               key: const Key('inbox-pharmacy'),
               leading: const CircleAvatar(child: Icon(Icons.local_pharmacy_outlined)),
-              title: const Text('CareFlow Pharmacy'),
+              title: const Text('Harvey Pharmacy'),
               subtitle: const Text('Orders, refills and deliveries'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/pharmacy-chat'),
@@ -54,7 +54,7 @@ class PatientInboxPage extends ConsumerWidget {
             child: ListTile(
               key: const Key('inbox-ai-agent'),
               leading: const CircleAvatar(child: Icon(Icons.smart_toy_outlined)),
-              title: const Text('CareFlow Assistant'),
+              title: const Text('Harvey Assistant'),
               subtitle: const Text('AI Health Agent · not a substitute for a doctor'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/ai-agent'),

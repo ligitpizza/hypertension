@@ -60,7 +60,7 @@ final backgroundAccessProvider = Provider<BackgroundAccess>(
   (ref) => kIsWeb ? const NoopBackgroundAccess() : const AndroidBackgroundAccess(),
 );
 
-/// Show the "let CareFlow run in the background" card: restricted and not dismissed.
+/// Show the "let Harvey run in the background" card: restricted and not dismissed.
 final backgroundPromptProvider = FutureProvider.autoDispose<bool>((ref) async {
   final access = ref.watch(backgroundAccessProvider);
   return !await access.unrestricted() && !await access.dismissed();
@@ -90,7 +90,7 @@ final reminderStatusProvider =
 Future<void> syncReminders(WidgetRef ref, List<Medication> meds) async {
   final status = await AsyncValue.guard(() => ref.read(doseRemindersProvider).sync(meds));
   if (status case AsyncError(:final error)) {
-    debugPrint('CareFlow: reminder sync failed: $error');
+    debugPrint('Harvey: reminder sync failed: $error');
   }
   ref.read(reminderStatusProvider.notifier).set(status);
 }

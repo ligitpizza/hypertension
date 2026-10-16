@@ -18,13 +18,13 @@ final shareTextProvider = Provider<Future<void> Function(String text)>(
 );
 
 String vitalsSummary(List<VitalReading> readings) {
-  if (readings.isEmpty) return 'CareFlow: no recent blood pressure readings.';
+  if (readings.isEmpty) return 'Harvey: no recent blood pressure readings.';
   final lines = [
     for (final r in readings.take(5))
       '${dateLabel(r.timestamp)} ${timeLabel(r.timestamp)}: ${r.systolic}/${r.diastolic} mmHg'
           '${r.heartRate == null ? '' : ', HR ${r.heartRate} (camera estimate)'}',
   ];
-  return 'CareFlow recent vitals:\n${lines.join('\n')}';
+  return 'Harvey recent vitals:\n${lines.join('\n')}';
 }
 
 /// Emergency SOS (Fig 4.3.9.1; FR-14.2, D-62): call 999, nearest hospitals, share vitals,

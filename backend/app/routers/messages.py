@@ -72,7 +72,7 @@ def notify(
             f"New message from {name}",
             # E2E: the server cannot include the text; it only knows a file was attached (D-52).
             {"image": "Sent you a photo.", "pdf": "Sent you a document."}.get(
-                str(msg.get("attachmentType")), "Open CareFlow to read it."
+                str(msg.get("attachmentType")), "Open Harvey to read it."
             ),
             {"type": "message", "from": user.uid},
             urgent=bool(msg.get("isFlagged")),

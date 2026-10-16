@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # Email (D-22: Brevo). Used for staff setup links (UC1.5) and later reminders.
     email_api_key: str = ""
     email_from: str = ""
-    email_from_name: str = "CareFlow"
+    email_from_name: str = "Harvey"
     # D-64: Brevo SMS sender name (registered for Malaysia); empty = SMS only logged.
     sms_sender: str = ""
     # D-65: where the password-reset page sends people afterwards (static page on Hosting).

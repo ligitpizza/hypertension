@@ -76,7 +76,7 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
                       const Icon(Icons.mark_email_read_outlined, size: 56),
                       const SizedBox(height: 16),
                       const Text(
-                        'If an account exists for that email, a reset link from CareFlow is on '
+                        'If an account exists for that email, a reset link from Harvey is on '
                         'its way (check spam too). The link works for 1 hour. Choose a new '
                         'password there, then come back and sign in.',
                         textAlign: TextAlign.center,

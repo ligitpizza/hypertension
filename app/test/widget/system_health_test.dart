@@ -28,7 +28,7 @@ void main() {
         services: const [
           ServiceHealth(
             key: 'api',
-            name: 'CareFlow API',
+            name: 'Harvey API',
             status: 'operational',
             latencyMs: 0,
             uptime: 99.31,

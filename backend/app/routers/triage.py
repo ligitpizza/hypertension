@@ -172,10 +172,10 @@ def submit(
                     f"symptom check: {names} ({body.severity.value}).",
                     dedupe=MILD_DEDUPE_WINDOW,
                     email_report=(
-                        f"Symptom checker report for {name} (CareFlow).\n\n"
+                        f"Symptom checker report for {name} (Harvey).\n\n"
                         f"Symptoms: {names} ({body.severity.value})\n{bp}{hr}\n"
                         f"Overall risk: {risk}\nOutcome: monitor at home (mild range).\n\n"
-                        "Open the CareFlow staff portal to review the patient's record."
+                        "Open the Harvey staff portal to review the patient's record."
                     ),
                 )
             )

@@ -36,7 +36,7 @@ router = APIRouter(prefix="/pharmacy-chat", tags=["pharmacy-chat"])
 patient_only = require_roles(UserRole.PATIENT)
 pharmacist_only = require_roles(UserRole.PHARMACIST)
 
-PHARMACY_NAME = "CareFlow Pharmacy"
+PHARMACY_NAME = "Harvey Pharmacy"
 
 
 class ChatMessageRequest(BaseModel):

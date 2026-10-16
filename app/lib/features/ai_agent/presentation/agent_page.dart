@@ -267,7 +267,7 @@ class _Bubble extends StatelessWidget {
           children: [
             if (!fromPatient)
               Text(
-                'CareFlow Assistant',
+                'Harvey Assistant',
                 style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
               ),
             SelectableText(

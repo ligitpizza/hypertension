@@ -62,21 +62,21 @@ def staff_setup_email(name: str, email: str, role: UserRole, link: str) -> Email
     label = _ROLE_LABEL[role]
     text = (
         f"Hello {name},\n\n"
-        f"A CareFlow Staff Portal account ({label}) has been created for you.\n"
+        f"A Harvey Staff Portal account ({label}) has been created for you.\n"
         f"Set your password using this link:\n{link}\n\n"
-        "Then sign in at the CareFlow Staff Portal with this email address.\n"
+        "Then sign in at the Harvey Staff Portal with this email address.\n"
     )
     safe_name = html.escape(name)
     body_html = (
         f"<p>Hello {safe_name},</p>"
-        f"<p>A CareFlow Staff Portal account (<b>{label}</b>) has been created for you.</p>"
+        f"<p>A Harvey Staff Portal account (<b>{label}</b>) has been created for you.</p>"
         + plain_link_html(link, "Set your password with this link (tap or copy it):")
-        + "<p>Then sign in at the CareFlow Staff Portal with this email address.</p>"
+        + "<p>Then sign in at the Harvey Staff Portal with this email address.</p>"
     )
     return EmailMessage(
         to_email=email,
         to_name=name,
-        subject="Your CareFlow Staff Portal account",
+        subject="Your Harvey Staff Portal account",
         text=text,
         html=body_html,
     )
@@ -280,23 +280,23 @@ def update_user(
 def patient_setup_email(name: str, email: str, link: str) -> EmailMessage:
     text = (
         f"Hello {name},\n\n"
-        "The clinic has created a CareFlow account for you.\n"
+        "The clinic has created a Harvey account for you.\n"
         f"Set your password using this link:\n{link}\n\n"
-        "Then sign in to the CareFlow app with this email address and complete your health "
+        "Then sign in to the Harvey app with this email address and complete your health "
         "profile.\n"
     )
     safe_name = html.escape(name)
     body_html = (
         f"<p>Hello {safe_name},</p>"
-        "<p>The clinic has created a CareFlow account for you.</p>"
+        "<p>The clinic has created a Harvey account for you.</p>"
         + plain_link_html(link, "Set your password with this link (tap or copy it):")
-        + "<p>Then sign in to the CareFlow app with this email address and complete your "
+        + "<p>Then sign in to the Harvey app with this email address and complete your "
         "health profile.</p>"
     )
     return EmailMessage(
         to_email=email,
         to_name=name,
-        subject="Your CareFlow account",
+        subject="Your Harvey account",
         text=text,
         html=body_html,
     )

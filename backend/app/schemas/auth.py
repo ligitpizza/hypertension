@@ -50,7 +50,7 @@ def check_dob(v: date) -> date:
     if age > MAX_AGE_YEARS:
         raise ValueError("Enter a valid date of birth.")
     if age < MIN_AGE_YEARS:
-        raise ValueError(f"You must be at least {MIN_AGE_YEARS} years old to use CareFlow.")
+        raise ValueError(f"You must be at least {MIN_AGE_YEARS} years old to use Harvey.")
     return v
 
 

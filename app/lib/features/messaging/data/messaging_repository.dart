@@ -19,7 +19,7 @@ class Contact {
   final String name;
   final String? subtitle; // specialty / "Patient"
 
-  /// Null until that user has opened CareFlow once (D-42): no messages can be sent yet.
+  /// Null until that user has opened Harvey once (D-42): no messages can be sent yet.
   final String? publicKey;
 
   factory Contact.fromUser(String uid, Map<String, dynamic> d) => Contact(

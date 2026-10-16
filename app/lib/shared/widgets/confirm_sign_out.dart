@@ -9,7 +9,7 @@ Future<void> confirmAndSignOut(BuildContext context, WidgetRef ref) async {
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Sign out?'),
-      content: const Text('You will need to sign in again to use CareFlow.'),
+      content: const Text('You will need to sign in again to use Harvey.'),
       actions: [
         TextButton(
           key: const Key('sign-out-cancel'),

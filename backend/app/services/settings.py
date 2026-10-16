@@ -316,7 +316,7 @@ def export_pdf(data: dict[str, Any]) -> bytes:
         # Start every line back at the left margin (fpdf2 otherwise continues to the right).
         pdf.multi_cell(width, 5 if size <= 10 else 8, _latin1(text), new_x="LMARGIN", new_y="NEXT")
 
-    line("CareFlow health data export", 16, "B")
+    line("Harvey health data export", 16, "B")
     line(f"Exported {_when(data['exportedAt'])} (Malaysia time)")
     pdf.ln(3)
     profile = data["profile"]

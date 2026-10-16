@@ -101,7 +101,7 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
   String? _error;
   final _ic = TextEditingController(); // D-51: patients must give it to finish
 
-  /// D-63: the CareFlow app may finish a patient or a family-member account.
+  /// D-63: the Harvey app may finish a patient or a family-member account.
   late UserRole _role = ref.read(clientAppProvider) == ClientApp.family
       ? UserRole.familyMember
       : UserRole.patient;
@@ -131,9 +131,7 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
       await ref
           .read(apiClientProvider)
           .registerProfile(
-            name: (user?.displayName?.trim().length ?? 0) >= 2
-                ? user!.displayName!
-                : 'CareFlow user',
+            name: (user?.displayName?.trim().length ?? 0) >= 2 ? user!.displayName! : 'Harvey user',
             role: _role.value,
             icNumber: patient ? parseIc(_ic.text).value : null,
           );

@@ -43,11 +43,11 @@ def test_brevo_sms_request(monkeypatch: pytest.MonkeyPatch) -> None:
         return httpx.Response(201, json={"messageId": 1})
 
     monkeypatch.setattr("app.integrations.sms.httpx.post", fake_post)
-    assert BrevoSmsClient("key-1", "CareFlow").send("012-3456789", "Help") is True
+    assert BrevoSmsClient("key-1", "Harvey").send("012-3456789", "Help") is True
     assert seen["url"] == BREVO_SMS_URL
     assert seen["headers"]["api-key"] == "key-1"
     assert seen["json"] == {
-        "sender": "CareFlow",
+        "sender": "Harvey",
         "recipient": "60123456789",
         "content": "Help",
         "type": "transactional",
@@ -60,22 +60,22 @@ def test_brevo_refusal_or_outage_never_raises(monkeypatch: pytest.MonkeyPatch) -
         "app.integrations.sms.httpx.post",
         lambda *a, **k: httpx.Response(402, text="not enough credits"),
     )
-    assert BrevoSmsClient("k", "CareFlow").send("0123456789", "x") is False
+    assert BrevoSmsClient("k", "Harvey").send("0123456789", "x") is False
 
     def boom(*a: Any, **k: Any) -> Any:
         raise httpx.ConnectError("down")
 
     monkeypatch.setattr("app.integrations.sms.httpx.post", boom)
-    assert BrevoSmsClient("k", "CareFlow").send("0123456789", "x") is False
-    assert BrevoSmsClient("k", "CareFlow").send("abc", "x") is False
+    assert BrevoSmsClient("k", "Harvey").send("0123456789", "x") is False
+    assert BrevoSmsClient("k", "Harvey").send("abc", "x") is False
 
 
 def test_real_sms_needs_mode_key_and_sender() -> None:
-    real = dev_settings(integrations_mode="real", email_api_key="k", sms_sender="CareFlow")
+    real = dev_settings(integrations_mode="real", email_api_key="k", sms_sender="Harvey")
     assert isinstance(build_sms_client(real), BrevoSmsClient)
     for missing in (
-        dev_settings(integrations_mode="fake", email_api_key="k", sms_sender="CareFlow"),
-        dev_settings(integrations_mode="real", email_api_key="", sms_sender="CareFlow"),
+        dev_settings(integrations_mode="fake", email_api_key="k", sms_sender="Harvey"),
+        dev_settings(integrations_mode="real", email_api_key="", sms_sender="Harvey"),
         dev_settings(integrations_mode="real", email_api_key="k", sms_sender=""),
     ):
         assert isinstance(build_sms_client(missing), LogSmsClient)
@@ -103,7 +103,7 @@ def test_d64_family_members_also_get_an_emergency_email(
     assert res.json()["familyAlerted"] == 1
     mail = emails.sent[-1]
     assert mail.to_email == "aisyah@example.com"
-    assert mail.subject == "CareFlow emergency: Siti"
+    assert mail.subject == "Harvey emergency: Siti"
     assert "pressed the SOS button" in mail.text
     assert "maps.google.com/?q=3.139000,101.686900" in mail.text
     assert "999" in mail.text

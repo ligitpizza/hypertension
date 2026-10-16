@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Exact dose reminders; the patient allows it under "Alarms & reminders" (D-43). -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-    <!-- Lets the patient exempt CareFlow from battery optimisation so reminders arrive. -->
+    <!-- Lets the patient exempt Harvey from battery optimisation so reminders arrive. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- FR-14.2 / D-62: GPS for emergency alerts (foreground only; no background tracking). -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>

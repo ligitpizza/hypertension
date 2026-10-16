@@ -66,7 +66,7 @@ abstract final class Validators {
   static String? dateOfBirth(DateTime? dob, DateTime now) {
     if (dob == null) return 'Date of birth is required.';
     if (ageOn(dob, now) < minimumAge) {
-      return 'You must be at least $minimumAge years old to use CareFlow.';
+      return 'You must be at least $minimumAge years old to use Harvey.';
     }
     return null;
   }

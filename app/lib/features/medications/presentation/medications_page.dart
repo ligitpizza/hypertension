@@ -255,7 +255,7 @@ class _ExactRemindersBanner extends ConsumerWidget {
       child: ListTile(
         leading: const Icon(Icons.alarm_off_outlined),
         title: const Text('Reminders may arrive late'),
-        subtitle: const Text('Allow "Alarms & reminders" so CareFlow reminds you on time.'),
+        subtitle: const Text('Allow "Alarms & reminders" so Harvey reminds you on time.'),
         trailing: TextButton(
           key: const Key('allow-exact-reminders'),
           onPressed: () async {
@@ -285,7 +285,7 @@ class _BackgroundBanner extends ConsumerWidget {
         title: const Text('Keep reminders on time'),
         content: const Text(
           'In the settings page that opens:\n\n'
-          'Honor / Huawei: Battery → App launch → CareFlow → turn off "Manage '
+          'Honor / Huawei: Battery → App launch → Harvey → turn off "Manage '
           'automatically", then turn on Auto-launch, Secondary launch and Run in background.\n\n'
           'Xiaomi / Redmi: turn on Autostart and set Battery saver to "No restrictions".\n\n'
           'Other phones: set Battery to "Unrestricted".',
@@ -318,7 +318,7 @@ class _BackgroundBanner extends ConsumerWidget {
               children: [
                 Icon(Icons.battery_alert_outlined),
                 SizedBox(width: 12),
-                Expanded(child: Text('Let CareFlow run in the background')),
+                Expanded(child: Text('Let Harvey run in the background')),
               ],
             ),
             const SizedBox(height: 4),

@@ -103,7 +103,7 @@ class NoLocationSource implements LocationSource {
     'Turn on location',
   ),
   LocationAccess.deniedForever => (
-    'Location permission was refused. Allow it for CareFlow in the phone\'s app settings.',
+    'Location permission was refused. Allow it for Harvey in the phone\'s app settings.',
     'Open app settings',
   ),
   LocationAccess.denied => ('Location permission was not allowed.', null),

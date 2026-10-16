@@ -8,6 +8,7 @@ import '../../../core/utils/validators.dart';
 import '../data/auth_repository.dart';
 import '../state/auth_providers.dart';
 import 'widgets/role_toggle.dart';
+import '../../../shared/widgets/harvey_logo.dart';
 
 /// Patient / Family mobile login (Fig 4.3.1.1, UC1.2). Role toggle per D-26;
 /// biometrics deferred (not required by an FR).
@@ -88,23 +89,26 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
                 children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(
-                      family ? Icons.family_restroom : Icons.favorite,
-                      key: Key(family ? 'login-icon-family' : 'login-icon-patient'),
-                      color: scheme.onPrimaryContainer,
-                      size: 34,
-                    ),
-                  ),
+                  if (family)
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(
+                        Icons.family_restroom,
+                        key: const Key('login-icon-family'),
+                        color: scheme.onPrimaryContainer,
+                        size: 34,
+                      ),
+                    )
+                  else
+                    const HarveyLogo.mark(key: Key('login-icon-patient'), size: 72),
                   const SizedBox(height: 16),
                   Text(
-                    isFamilyApp || family ? 'CareFlow Family' : 'CareFlow',
+                    isFamilyApp || family ? 'Harvey Family' : 'Harvey',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 4),
@@ -232,7 +236,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     alignment: WrapAlignment.center,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      const Text('New to CareFlow?'),
+                      const Text('New to Harvey?'),
                       TextButton(
                         key: const Key('login-create-account'),
                         onPressed: () => context.go(family ? '/register?role=family' : '/register'),

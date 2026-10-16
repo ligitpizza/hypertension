@@ -24,7 +24,7 @@ from app.integrations.delivery import (
 from tests.conftest import dev_settings
 
 NOW = datetime(2026, 10, 16, 6, 0, tzinfo=UTC)
-PHARMACY = Place("CareFlow Pharmacy, Jalan Genting Kelang, KL", 3.2163, 101.7266)
+PHARMACY = Place("Harvey Pharmacy, Jalan Genting Kelang, KL", 3.2163, 101.7266)
 DEST = Destination("12 Jalan Ampang, KL", 3.1579, 101.7123, "Siti", "012-345 6789")
 
 
@@ -123,7 +123,7 @@ def test_simulator_unless_grab_and_pharmacy_are_configured() -> None:
         courier="grab",
         grab_client_id="cid",
         grab_client_secret="s",
-        pharmacy_address="CareFlow Pharmacy",
+        pharmacy_address="Harvey Pharmacy",
         pharmacy_lat=3.2,
         pharmacy_lng=101.7,
         pharmacy_phone="0341450123",

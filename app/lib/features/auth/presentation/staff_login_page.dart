@@ -8,6 +8,7 @@ import '../../../shared/providers/api_providers.dart';
 import '../data/auth_repository.dart';
 import '../state/auth_providers.dart';
 import 'widgets/role_toggle.dart';
+import '../../../shared/widgets/harvey_logo.dart';
 
 /// Staff Portal login (Fig 4.3.14.8, UC1.2). Role toggle must match the
 /// account's role claim (D-26). SSO is out of scope, so the button is omitted.
@@ -81,23 +82,10 @@ class _StaffLoginPageState extends ConsumerState<StaffLoginPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Center(
-                              child: Container(
-                                width: 52,
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  color: scheme.primaryContainer,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  Icons.medical_services,
-                                  color: scheme.onPrimaryContainer,
-                                ),
-                              ),
-                            ),
+                            Center(child: const HarveyLogo.mark(size: 56)),
                             const SizedBox(height: 12),
                             Text(
-                              'CareFlow Pro',
+                              'Harvey Pro',
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.titleLarge,
                             ),

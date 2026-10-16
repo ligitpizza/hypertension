@@ -145,7 +145,7 @@ def test_dispatch_quotes_then_orders_with_signed_calls(monkeypatch: pytest.Monke
     assert q["item"]["categories"] == ["OTHERS"]
     o = order["data"]
     assert o["quotationId"] == "3607534427947324146"
-    assert o["sender"] == {"stopId": "s1", "name": "CareFlow pharmacy", "phone": "+60341450123"}
+    assert o["sender"] == {"stopId": "s1", "name": "Harvey pharmacy", "phone": "+60341450123"}
     assert o["recipients"][0]["phone"] == "+60123456789"
     assert o["recipients"][0]["name"] == "Siti"
     assert "Amlodipine" not in json.dumps(http.calls[0][2]) + json.dumps(order)

@@ -111,7 +111,7 @@ final List<RouteBase> patientFeatureRoutes = [
   ),
   // Module 13 (D-66; Figs 4.3.10.1-4.3.10.3).
   GoRoute(path: '/orders', builder: (_, _) => const OrdersPage()),
-  // D-69: the CareFlow Pharmacy conversation and the delivery address.
+  // D-69: the Harvey Pharmacy conversation and the delivery address.
   GoRoute(path: '/pharmacy-chat', builder: (_, _) => const PatientPharmacyChatPage()),
   GoRoute(path: '/settings/address', builder: (_, _) => const AddressPage()),
   GoRoute(

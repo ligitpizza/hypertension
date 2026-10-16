@@ -47,7 +47,7 @@ void main() {
     tallTest('D-26 sends the selected role; family app defaults to Family', (t) async {
       final repo = FakeAuthRepository();
       await t.pumpWidget(harness(const LoginPage(), repo: repo, app: ClientApp.family));
-      expect(find.text('CareFlow Family'), findsOneWidget);
+      expect(find.text('Harvey Family'), findsOneWidget);
       await fill(t, 'login-email', 'f@x.my');
       await fill(t, 'login-password', 'secret123');
       await t.tap(find.byKey(const Key('login-submit')));
@@ -63,7 +63,7 @@ void main() {
       await t.tap(find.text('Family'));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('login-icon-family')), findsOneWidget);
-      expect(find.text('CareFlow Family'), findsOneWidget);
+      expect(find.text('Harvey Family'), findsOneWidget);
       expect(find.text('Welcome, family member'), findsOneWidget);
       expect(find.byKey(const Key('login-family-note')), findsOneWidget);
       expect(find.text('Sign In as Family'), findsOneWidget);

@@ -244,14 +244,14 @@ class AppointmentJob:
             text = (
                 f"Hello {patient.get('name', '')},\n\nThis is a reminder of your appointment "
                 f"with {doctor_name} on {when} (Malaysia time).\n\nYou can reschedule or "
-                "cancel it in the CareFlow app.\n"
+                "cancel it in the Harvey app.\n"
             )
             try:
                 self.email.send(
                     EmailMessage(
                         to_email=str(address),
                         to_name=str(patient.get("name") or ""),
-                        subject=f"CareFlow: appointment {lead}",
+                        subject=f"Harvey: appointment {lead}",
                         text=text,
                         html=text.replace("\n", "<br>"),
                     )

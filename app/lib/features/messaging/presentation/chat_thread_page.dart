@@ -58,7 +58,7 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
     } on RecipientNotReadyException {
       setState(() => _error = '${to.name} has not set up secure messaging yet.');
     } catch (e) {
-      debugPrint('CareFlow: message send failed: $e');
+      debugPrint('Harvey: message send failed: $e');
       setState(() => _error = 'Could not send the message. Please try again.');
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -124,7 +124,7 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
     } on RecipientNotReadyException {
       setState(() => _error = '${to.name} has not set up secure messaging yet.');
     } catch (e) {
-      debugPrint('CareFlow: attachment send failed: $e');
+      debugPrint('Harvey: attachment send failed: $e');
       setState(
         () => _error = 'Could not send the file. Please check your connection and try again.',
       );
@@ -275,7 +275,7 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                '${contact.name} has not opened CareFlow yet, so secure messages cannot be '
+                '${contact.name} has not opened Harvey yet, so secure messages cannot be '
                 'sent to them for now.',
                 key: const Key('chat-not-ready'),
               ),

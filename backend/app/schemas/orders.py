@@ -103,7 +103,7 @@ class CatalogEditRequest(_Body):
 
 class GrabWebhook(BaseModel):
     """GrabExpress tracking webhook body (developer.grab.com/docs/grab-express); only the
-    fields CareFlow uses. Grab may add fields, so extras are ignored."""
+    fields Harvey uses. Grab may add fields, so extras are ignored."""
 
     model_config = ConfigDict(extra="ignore")
     deliveryID: str = Field(min_length=1, max_length=200)

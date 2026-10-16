@@ -117,7 +117,7 @@ class _LinkPageState extends ConsumerState<LinkPage> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Your family member must approve the link from their own CareFlow app before you '
+                'Your family member must approve the link from their own Harvey app before you '
                 'can view their data.',
               ),
               TextButton(
@@ -214,7 +214,7 @@ class _LinkPageState extends ConsumerState<LinkPage> {
             child: ListTile(
               leading: Icon(Icons.info_outline),
               title: Text(
-                'Once requested, the patient must approve the link from their own CareFlow app '
+                'Once requested, the patient must approve the link from their own Harvey app '
                 'before you can view their data.',
               ),
             ),

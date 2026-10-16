@@ -347,8 +347,8 @@ def test_pharmacy_chat_both_ways(
         json={"text": "Your refill is ready for collection."},
         headers=PHARM,
     )
-    assert res.status_code == 201 and res.json()["senderName"] == "CareFlow Pharmacy (Ahmad)"
-    assert "CareFlow Pharmacy" in titles(push, P)
+    assert res.status_code == 201 and res.json()["senderName"] == "Harvey Pharmacy (Ahmad)"
+    assert "Harvey Pharmacy" in titles(push, P)
     res = client.post("/api/v1/pharmacy-chat/messages", json={"text": "Thanks!"}, headers=PATIENT)
     assert res.status_code == 201 and "Message from Siti Aminah" in titles(push, PH)
     thread = client.get("/api/v1/pharmacy-chat/messages", headers=PATIENT).json()["messages"]

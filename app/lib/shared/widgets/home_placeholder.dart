@@ -17,7 +17,7 @@ class HomePlaceholder extends ConsumerWidget {
     final app = ref.watch(clientAppProvider);
     return Scaffold(
       appBar: AppBar(
-        title: Text(app == ClientApp.family ? 'CareFlow Family' : 'CareFlow'),
+        title: Text(app == ClientApp.family ? 'Harvey Family' : 'Harvey'),
         actions: [
           const ThemeModeMenuButton(),
           IconButton(

@@ -400,7 +400,7 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
     def pct(v: float | None) -> str:
         return "-" if v is None else f"{v:.1f}%"
 
-    line("CareFlow hospital-wide report", 16, "B")
+    line("Harvey hospital-wide report", 16, "B")
     line(f"Period: {period} (Malaysia time)")
     line(f"Generated {generated}")
     p, a, c, u = data["patients"], data["appointments"], data["care"], data["usage"]
@@ -472,7 +472,7 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
     pdf.ln(4)
     line(
         "Aggregated figures only; no individual patient is identified. Risk levels come from "
-        "the CareFlow prediction models and are not a diagnosis.",
+        "the Harvey prediction models and are not a diagnosis.",
         9,
         "I",
     )

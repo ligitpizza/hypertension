@@ -1,4 +1,4 @@
-"""CareFlow API entrypoint: `uvicorn app.main:app` (docs/10 §3)."""
+"""Harvey API entrypoint: `uvicorn app.main:app` (docs/10 §3)."""
 
 import logging
 
@@ -53,7 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     _configure_logging()
     app = FastAPI(
-        title="CareFlow API",
+        title="Harvey API",
         version=settings.app_version,
         # Interactive docs only in dev.
         docs_url="/api/docs" if settings.is_dev else None,

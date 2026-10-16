@@ -9,7 +9,7 @@ import '../state/orders_providers.dart';
 
 /// Module 13 display helpers (D-66). Times are Malaysia time.
 
-const pharmacyName = 'CareFlow pharmacy';
+const pharmacyName = 'Harvey pharmacy';
 
 const _months = [
   'January', 'February', 'March', 'April', 'May', 'June', //

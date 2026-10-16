@@ -156,7 +156,7 @@ class ShareSheetFileSharer implements FileSharer {
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path, mimeType: mimeType)],
-        subject: 'My CareFlow health data',
+        subject: 'My Harvey health data',
       ),
     );
   }

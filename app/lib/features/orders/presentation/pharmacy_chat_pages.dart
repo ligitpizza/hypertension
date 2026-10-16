@@ -9,7 +9,7 @@ import '../../appointments/domain/appointment_text.dart' show dateLabel, timeLab
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 
-/// D-69 pharmacy chat: one 'CareFlow Pharmacy' conversation per patient, shared by every
+/// D-69 pharmacy chat: one 'Harvey Pharmacy' conversation per patient, shared by every
 /// pharmacist. Not end-to-end encrypted (order and refill updates, not clinical advice).
 const pharmacyChatNote =
     'Messages with the pharmacy are about orders and refills. For medical advice, '
@@ -192,13 +192,13 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-/// Patient app: the CareFlow Pharmacy conversation.
+/// Patient app: the Harvey Pharmacy conversation.
 class PatientPharmacyChatPage extends StatelessWidget {
   const PatientPharmacyChatPage({super.key});
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('CareFlow Pharmacy')),
+    appBar: AppBar(title: const Text('Harvey Pharmacy')),
     body: const PharmacyChatView(),
   );
 }
@@ -239,7 +239,7 @@ class PharmacyMessagesPage extends ConsumerWidget {
             ),
           ],
         ),
-        const Text('Shared by all pharmacists. Patients see it as "CareFlow Pharmacy".'),
+        const Text('Shared by all pharmacists. Patients see it as "Harvey Pharmacy".'),
         const SizedBox(height: 12),
         list.when(
           loading: () => const LinearProgressIndicator(),

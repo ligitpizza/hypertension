@@ -43,7 +43,7 @@ class FamilyRequestsPage extends ConsumerWidget {
               leading: const Icon(Icons.key),
               title: Text(code ?? '-', style: theme.textTheme.headlineSmall),
               subtitle: const Text(
-                'Share this code with a family member. They enter it in the CareFlow Family app '
+                'Share this code with a family member. They enter it in the Harvey Family app '
                 'and you approve the request here.',
               ),
               trailing: code == null

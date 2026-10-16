@@ -136,7 +136,7 @@ class LocalDoseReminders implements DoseReminders {
       Future<void> schedule(AndroidScheduleMode mode) => _plugin.zonedSchedule(
         id: id,
         title: 'Time to take ${med.name}',
-        body: '${med.dosage} at ${t.label}. Open CareFlow to confirm.',
+        body: '${med.dosage} at ${t.label}. Open Harvey to confirm.',
         scheduledDate: at,
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
@@ -163,12 +163,12 @@ class LocalDoseReminders implements DoseReminders {
           );
         } on PlatformException catch (e) {
           if (!exact) rethrow;
-          debugPrint('CareFlow: exact reminder refused (${e.code}); using inexact');
+          debugPrint('Harvey: exact reminder refused (${e.code}); using inexact');
           await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
         }
         scheduled.add(label);
       } catch (e) {
-        debugPrint('CareFlow: reminder for $label failed: $e');
+        debugPrint('Harvey: reminder for $label failed: $e');
         errors.add('$label: $e');
       }
     }

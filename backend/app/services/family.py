@@ -252,7 +252,7 @@ class EmergencyAlerts:
                 member,
                 PushMessage(
                     f"Emergency: {name}",
-                    f"{name} {what}. Open CareFlow to see where they are; call 999 if they "
+                    f"{name} {what}. Open Harvey to see where they are; call 999 if they "
                     "are unwell.",
                     {
                         **message.data,
@@ -266,7 +266,7 @@ class EmergencyAlerts:
         if isinstance(contact, dict) and contact.get("phone"):
             self.sms.send(
                 str(contact["phone"]),
-                f"CareFlow emergency: {name} {what}. Location: {maps_link(location)}. "
+                f"Harvey emergency: {name} {what}. Location: {maps_link(location)}. "
                 "Call them now; call 999 if they are unwell.",
             )
         self.audit.log(
@@ -291,7 +291,7 @@ class EmergencyAlerts:
         text = (
             f"{name} {what}.\n\nLast known location: {link}\n\n"
             "Contact them now. If they are unwell or do not answer, call 999.\n"
-            "Open the CareFlow app (Family) to see the alert and the map.\n"
+            "Open the Harvey app (Family) to see the alert and the map.\n"
         )
         safe = html.escape(name)
         body = (
@@ -302,14 +302,14 @@ class EmergencyAlerts:
                 else "<p>Their phone did not share a location.</p>"
             )
             + "<p>Contact them now. If they are unwell or do not answer, call <b>999</b>.</p>"
-            "<p>Open the CareFlow app (Family) to see the alert and the map.</p>"
+            "<p>Open the Harvey app (Family) to see the alert and the map.</p>"
         )
         try:
             self.email.send(
                 EmailMessage(
                     to_email=str(address),
                     to_name=str(member.get("name") or "Family member"),
-                    subject=f"CareFlow emergency: {name}",
+                    subject=f"Harvey emergency: {name}",
                     text=text,
                     html=body,
                 )

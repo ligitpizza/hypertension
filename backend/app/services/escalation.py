@@ -117,7 +117,7 @@ def bp_report(
     review_note: str,
 ) -> str:
     """D-37 Mild email: recent readings and the risk breakdown, plain text."""
-    lines = [f"BP report for {patient_name} (CareFlow).", "", "Recent readings, newest first:"]
+    lines = [f"BP report for {patient_name} (Harvey).", "", "Recent readings, newest first:"]
     for r in recent[:7]:
         when = r.get("timestamp")
         stamp = when.strftime("%d %b %Y %H:%M UTC") if isinstance(when, datetime) else "just now"
@@ -131,7 +131,7 @@ def bp_report(
         ]
     if review_note:
         lines += ["", review_note]
-    lines += ["", "Open the CareFlow staff portal to review the patient's record."]
+    lines += ["", "Open the Harvey staff portal to review the patient's record."]
     return "\n".join(lines)
 
 
@@ -479,7 +479,7 @@ class Escalator:
                 EmailMessage(
                     to_email=str(address),
                     to_name=str(doctor.get("name") or "Doctor"),
-                    subject="CareFlow: patient BP report (mild range)",
+                    subject="Harvey: patient BP report (mild range)",
                     text=text,
                     html='<pre style="font-family:sans-serif">'
                     + text.replace("&", "&amp;").replace("<", "&lt;")

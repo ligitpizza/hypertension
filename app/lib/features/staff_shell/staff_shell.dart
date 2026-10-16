@@ -7,6 +7,7 @@ import '../../core/theme/theme_mode.dart';
 import '../auth/presentation/widgets/role_toggle.dart';
 import '../../shared/widgets/confirm_sign_out.dart';
 import '../auth/state/auth_providers.dart';
+import '../../shared/widgets/harvey_logo.dart';
 
 class StaffDestination {
   const StaffDestination(this.path, this.label, this.icon);
@@ -84,7 +85,10 @@ class StaffShell extends ConsumerWidget {
     Future<void> signOut() => confirmAndSignOut(context, ref);
 
     final header = AppBar(
-      title: const Text('CareFlow Pro'),
+      title: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [HarveyLogo.mark(size: 28), SizedBox(width: 10), Text('Harvey Pro')],
+      ),
       actions: [
         if (user != null)
           Padding(

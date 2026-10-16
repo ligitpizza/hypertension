@@ -25,9 +25,9 @@ def test_d65_existing_account_gets_a_branded_email(
     assert res.status_code == 202 and res.json() == {"status": "sent_if_exists"}
     mail = emails.sent[-1]
     assert mail.to_email == "taken@example.com"
-    assert mail.subject == "Reset your CareFlow password"
+    assert mail.subject == "Reset your Harvey password"
     assert "Hello Ali," in mail.text
-    # Firebase's secure page first, then back to CareFlow's "password changed" page.
+    # Firebase's secure page first, then back to Harvey's "password changed" page.
     assert "continue=https://hypertension-dd85f.web.app/reset-done.html" in mail.text
     assert "1 hour" in mail.text
     # Plain text, not <a href>: Brevo's click-tracking redirect would break the link.

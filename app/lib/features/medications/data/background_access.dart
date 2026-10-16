@@ -8,10 +8,10 @@ abstract interface class BackgroundAccess {
   /// True when the app is exempt from battery optimisation (or the platform has none).
   Future<bool> unrestricted();
 
-  /// Shows Android's "Allow CareFlow to always run in the background?" dialog.
+  /// Shows Android's "Allow Harvey to always run in the background?" dialog.
   Future<void> request();
 
-  /// Opens CareFlow's page in the phone's settings (for the brand-specific switches).
+  /// Opens Harvey's page in the phone's settings (for the brand-specific switches).
   Future<void> openSettings();
 
   /// The patient chose "Not now" on this phone.

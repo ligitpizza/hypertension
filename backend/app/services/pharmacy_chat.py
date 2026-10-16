@@ -1,4 +1,4 @@
-"""Pharmacy chat (D-69): one 'CareFlow Pharmacy' conversation per patient.
+"""Pharmacy chat (D-69): one 'Harvey Pharmacy' conversation per patient.
 
 Every pharmacist can read and answer it. Messages go through FastAPI (pushes, audit) and
 are stored in `pharmacy_messages`, protected by Security Rules and HTTPS. Unlike the
