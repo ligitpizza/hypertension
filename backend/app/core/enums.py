@@ -32,6 +32,8 @@ class Collection(StrEnum):
     FAMILY_LINK_REQUESTS = "family_link_requests"  # D-06
     CLINICAL_ALERTS = "clinical_alerts"  # D-32
     MEDICATION_STOCK = "medication_stock"  # D-66
+    MEDICATION_CATALOG = "medication_catalog"  # D-69
+    PHARMACY_MESSAGES = "pharmacy_messages"  # D-69
 
 
 class UserRole(StrEnum):

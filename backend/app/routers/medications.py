@@ -21,6 +21,7 @@ from app.schemas.medications import DoseRequest, MedicationRequest
 from app.services.interactions import check
 from app.services.medications import (
     DEFAULT_REFILL_DAYS,
+    DOCTOR_SOURCE,
     MYT,
     MedicationDoc,
     MedicationRepository,
@@ -129,10 +130,21 @@ def edit_medication(
     repo: MedicationRepository = Depends(get_medication_repository),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
-    _owned(repo, medication_id, user.uid)
+    med = _owned(repo, medication_id, user.uid)
     data = _validated(body)
-    others = [m for m in repo.list_for(user.uid) if m.id != medication_id]
-    _check_or_raise(body, others, data)
+    if med.data.get("source") == DOCTOR_SOURCE:
+        # D-69: set by the doctor; the patient may only change the reminder times.
+        if (body.name, body.dosage) != (med.data.get("name"), med.data.get("dosage")):
+            raise ApiError(
+                "MEDICATION_LOCKED",
+                "This medicine was prescribed by your doctor. You can only change the "
+                "reminder times.",
+                status.HTTP_409_CONFLICT,
+            )
+        data = {"schedule": data["schedule"]}
+    else:
+        others = [m for m in repo.list_for(user.uid) if m.id != medication_id]
+        _check_or_raise(body, others, data)
     repo.update(medication_id, data)
     audit.log(
         user_id=user.uid,
@@ -151,7 +163,13 @@ def delete_medication(
     repo: MedicationRepository = Depends(get_medication_repository),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> None:
-    _owned(repo, medication_id, user.uid)
+    med = _owned(repo, medication_id, user.uid)
+    if med.data.get("source") == DOCTOR_SOURCE:
+        raise ApiError(
+            "MEDICATION_LOCKED",
+            "This medicine was prescribed by your doctor. Ask your doctor to stop it.",
+            status.HTTP_409_CONFLICT,
+        )
     repo.delete(medication_id)
     audit.log(
         user_id=user.uid,

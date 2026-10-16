@@ -21,6 +21,9 @@ AS_NEEDED = "as_needed"
 MISSED_WINDOW = timedelta(hours=2)  # UC5.4: unconfirmed this long after the dose time
 ADHERENCE_WINDOW = timedelta(days=30)  # algorithm C rolling window
 DEFAULT_REFILL_DAYS = 7  # D-05
+# D-69: medicines added from a doctor's prescription; the patient may only change reminder
+# times (and log doses).
+DOCTOR_SOURCE = "doctor"
 _TIME = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 

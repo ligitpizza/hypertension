@@ -38,7 +38,8 @@ from app.integrations.delivery import (
 )
 from app.integrations.payments import PaymentIntent
 from app.integrations.push import PushMessage
-from app.services.medications import MYT
+from app.services.catalog import items_total
+from app.services.medications import MYT, MedicationRepository, get_medication_repository
 from app.services.notifications import Notifier, get_notifier
 from app.services.records import (
     FileStore,
@@ -98,6 +99,18 @@ def order_id_for(rx_id: str, cycle: datetime) -> str:
     return f"{rx_id}_{cycle.astimezone(MYT):%Y-%m}"
 
 
+def phone_from_profile(profile: dict[str, Any] | None) -> str | None:
+    """personalInfo is a JSON string (D-25); the D-67 prefill reads its phone."""
+    from app.services.settings import parse_profile_field
+
+    phone = parse_profile_field((profile or {}).get("personalInfo")).get("phone")
+    return str(phone) if phone else None
+
+
+def line_total(item: dict[str, Any]) -> float:
+    return round(float(item.get("unitPrice") or 0) * int(item.get("quantity") or 0), 2)
+
+
 def order_ref(order_id: str) -> str:
     """Short reference shown to people, e.g. CF-3A9F1C."""
     return "CF-" + hashlib.sha256(order_id.encode()).hexdigest()[:6].upper()
@@ -126,6 +139,7 @@ def order_view(
         "prescriptionId": o.get("prescriptionId"),
         "pharmacistId": o.get("pharmacistId"),
         "medicationDetails": o.get("medicationDetails"),
+        "items": [{**i, "lineTotal": line_total(i)} for i in (o.get("items") or [])],
         "method": o.get("method"),
         "paymentStatus": o.get("paymentStatus"),
         "deliveryStatus": o.get("deliveryStatus"),
@@ -173,6 +187,7 @@ def stock_view(stock_id: str, s: dict[str, Any]) -> dict[str, Any]:
         "name": s.get("name"),
         "units": units,
         "lowStockAt": low_at,
+        "catalogId": s.get("catalogId"),
         "low": units < low_at,
         "expiryDate": expiry.astimezone(MYT).date().isoformat()
         if isinstance(expiry, datetime)
@@ -188,6 +203,18 @@ class OrderRepository(Protocol):
 
     def profile_phone(self, uid: str) -> str | None:
         """The patient's phone from health_profiles.personalInfo (D-67 prefill)."""
+        ...
+
+    def health_profile(self, uid: str) -> dict[str, Any] | None:
+        """health_profiles/{uid} as stored (fields are JSON strings, D-25)."""
+        ...
+
+    def prescriptions_for(self, uid: str) -> list[dict[str, Any]]:
+        """The patient's prescriptions, each with its "id" (D-69 pharmacist view)."""
+        ...
+
+    def order_patients(self) -> set[str]:
+        """Patients with at least one order: the pharmacy's patients (D-69)."""
         ...
 
     def staff(self, role: str) -> list[str]:
@@ -238,6 +265,12 @@ class OrderRepository(Protocol):
         """Atomically deducts [units]; False (and no change) if not enough are left."""
         ...
 
+    def return_stock(self, stock_id: str, units: int) -> None: ...
+
+    def stock_for_catalog(self, catalog_id: str) -> tuple[str, dict[str, Any]] | None:
+        """The stock item linked to a catalogue medicine (D-69)."""
+        ...
+
 
 def _pairs(query: Any) -> list[tuple[str, dict[str, Any]]]:
     return [(d.id, dict(d.to_dict())) for d in query.stream()]
@@ -254,11 +287,22 @@ class FirestoreOrderRepository:
         snap = self._col(Collection.USERS).document(uid).get()
         return dict(snap.to_dict()) if snap.exists else None
 
-    def profile_phone(self, uid: str) -> str | None:
+    def health_profile(self, uid: str) -> dict[str, Any] | None:
         snap = self._col(Collection.HEALTH_PROFILES).document(uid).get()
-        personal = (snap.to_dict() or {}).get("personalInfo") if snap.exists else None
-        phone = personal.get("phone") if isinstance(personal, dict) else None
-        return str(phone) if phone else None
+        return dict(snap.to_dict()) if snap.exists else None
+
+    def profile_phone(self, uid: str) -> str | None:
+        return phone_from_profile(self.health_profile(uid))
+
+    def prescriptions_for(self, uid: str) -> list[dict[str, Any]]:
+        q = self._col(Collection.PRESCRIPTIONS).where(
+            filter=firestore.FieldFilter("patientId", "==", uid)
+        )
+        return [{**d, "id": i} for i, d in _pairs(q)]
+
+    def order_patients(self) -> set[str]:
+        docs = self._col(Collection.MEDICATION_ORDERS).select(["patientId"]).stream()
+        return {str(d.get("patientId")) for d in docs if d.get("patientId")}
 
     def staff(self, role: str) -> list[str]:
         q = self._col(Collection.USERS).where(filter=firestore.FieldFilter("role", "==", role))
@@ -368,6 +412,18 @@ class FirestoreOrderRepository:
 
         return bool(_take(self._db.transaction()))
 
+    def return_stock(self, stock_id: str, units: int) -> None:
+        self._col(Collection.MEDICATION_STOCK).document(stock_id).update(
+            {"units": firestore.Increment(units), "updatedAt": firestore.SERVER_TIMESTAMP}
+        )
+
+    def stock_for_catalog(self, catalog_id: str) -> tuple[str, dict[str, Any]] | None:
+        q = self._col(Collection.MEDICATION_STOCK).where(
+            filter=firestore.FieldFilter("catalogId", "==", catalog_id)
+        )
+        found = _pairs(q.limit(1))
+        return found[0] if found else None
+
 
 def get_order_repository() -> OrderRepository:
     return FirestoreOrderRepository(get_firestore())
@@ -384,6 +440,8 @@ class OrderService:
     audit: AuditLogger
     # Saves the payment receipt to health records: (order id, order, charge id) -> record id.
     receipts: Callable[[str, dict[str, Any], str], str] | None = None
+    # D-69: the patient's medicines, topped up when an order arrives.
+    medications: MedicationRepository | None = None
 
     # ----- notifications -----
 
@@ -408,7 +466,10 @@ class OrderService:
         """Creates this cycle's order (pending payment) and prompts the patient."""
         order_id = order_id_for(rx_id, cycle)
         patient = self.repo.user(str(rx["patientId"])) or {}
-        price = rx.get("monthlyPrice")
+        items = rx.get("items") or []
+        # D-69: catalogue prescriptions are priced from their items; older single-text ones
+        # wait for the pharmacist's monthlyPrice (D-66).
+        price = items_total(items) if items else rx.get("monthlyPrice")
         created = self.repo.create_order(
             order_id,
             {
@@ -422,6 +483,7 @@ class OrderService:
                 "fulfilmentStatus": AWAITING_CONFIRMATION,
                 "cycleDate": cycle,
                 "medicationDetails": rx.get("medicationDetails"),
+                "items": items,
                 "amount": float(price) if price is not None else None,
                 "deliveryFee": 0.0,
                 "createdAt": datetime.now(UTC),
@@ -626,6 +688,11 @@ class OrderService:
         rx = self.repo.prescription(rx_id)
         if rx is None:
             raise OrderError("PRESCRIPTION_NOT_FOUND", "Prescription not found.")
+        if rx.get("items"):
+            raise OrderError(
+                "PRICED_FROM_CATALOGUE",
+                "This prescription is priced from the medication catalogue.",
+            )
         self.repo.update_prescription(rx_id, {"monthlyPrice": round(price, 2)})
         updated = 0
         for order_id, o in self.repo.orders_for_prescription(rx_id):
@@ -649,19 +716,57 @@ class OrderService:
         )
         return updated
 
-    def mark_ready(self, order_id: str, uid: str, stock_id: str, units: int) -> dict[str, Any]:
+    def _take_items(self, items: list[dict[str, Any]]) -> list[str]:
+        """D-69: takes each item's quantity from its catalogue-linked stock, all or nothing.
+        Returns the stock ids used."""
+        plan: list[tuple[str, int, str]] = []
+        short: list[str] = []
+        for i in items:
+            found = self.repo.stock_for_catalog(str(i.get("catalogId")))
+            qty = int(i.get("quantity") or 0)
+            label = f"{i.get('name')} {i.get('strength') or ''}".strip()
+            if found is None or int(found[1].get("units") or 0) < qty:
+                short.append(label)
+            else:
+                plan.append((found[0], qty, label))
+        if short:
+            raise OrderError(
+                "INSUFFICIENT_STOCK",
+                f"Not enough stock of {', '.join(short)}. "
+                "Add stock or mark the order out of stock.",
+            )
+        taken: list[tuple[str, int]] = []
+        for stock_id, qty, label in plan:
+            if not self.repo.take_stock(stock_id, qty):
+                for back_id, back_qty in taken:  # undo, so stock is never half-used
+                    self.repo.return_stock(back_id, back_qty)
+                raise OrderError("INSUFFICIENT_STOCK", f"Not enough stock of {label}.")
+            taken.append((stock_id, qty))
+        return [t[0] for t in taken]
+
+    def mark_ready(
+        self, order_id: str, uid: str, stock_id: str | None = None, units: int | None = None
+    ) -> dict[str, Any]:
         o = self._order(order_id)
         if o.get("fulfilmentStatus") not in (PREPARING, OUT_OF_STOCK):
             raise OrderError(
                 "ORDER_NOT_PREPARING", "Only paid orders being prepared can be marked ready."
             )
-        if self.repo.stock_item(stock_id) is None:
-            raise OrderError("STOCK_NOT_FOUND", "Stock item not found.")
-        if not self.repo.take_stock(stock_id, units):
-            raise OrderError(
-                "INSUFFICIENT_STOCK",
-                "Not enough units in stock. Add stock or mark the order out of stock.",
-            )
+        items = o.get("items") or []
+        if items:
+            used = self._take_items(items)
+            units = sum(int(i.get("quantity") or 0) for i in items)
+            stock_id = used[0] if len(used) == 1 else None
+        else:
+            if not stock_id or not units:
+                raise OrderError("STOCK_REQUIRED", "Choose the stock item and units.")
+            if self.repo.stock_item(stock_id) is None:
+                raise OrderError("STOCK_NOT_FOUND", "Stock item not found.")
+            if not self.repo.take_stock(stock_id, units):
+                raise OrderError(
+                    "INSUFFICIENT_STOCK",
+                    "Not enough units in stock. Add stock or mark the order out of stock.",
+                )
         now = datetime.now(UTC)
         delivery = o.get("method") == HOME_DELIVERY
         update: dict[str, Any] = {
@@ -726,6 +831,7 @@ class OrderService:
         if o.get("fulfilmentStatus") != READY_FOR_COLLECTION:
             raise OrderError("ORDER_NOT_READY", "This order isn't waiting for collection.")
         self.repo.update_order(order_id, {"fulfilmentStatus": COLLECTED})
+        self._restock_patient(o)
         self.audit.log(
             user_id=uid,
             action="ORDER_COLLECTED",
@@ -733,6 +839,25 @@ class OrderService:
             target_type=Collection.MEDICATION_ORDERS.value,
             target_id=order_id,
         )
+
+    def _restock_patient(self, o: dict[str, Any]) -> None:
+        """D-69: a delivered or collected order adds its quantities to the patient's
+        doctor-set medicines (refill tracking, D-05)."""
+        if self.medications is None or not o.get("items"):
+            return
+        try:
+            mine = self.medications.list_for(str(o["patientId"]))
+            for i in o["items"]:
+                for m in mine:
+                    if m.data.get("prescriptionId") == o.get("prescriptionId") and m.data.get(
+                        "catalogId"
+                    ) == i.get("catalogId"):
+                        have = float(m.data.get("quantityOnHand") or 0)
+                        self.medications.update(
+                            m.id, {"quantityOnHand": have + int(i.get("quantity") or 0)}
+                        )
+        except Exception:  # the order is done either way
+            log.exception("Medicine quantities not updated for %s", o.get("prescriptionId"))
 
     # ----- UC13.4 / UC13.5 delivery -----
 
@@ -840,6 +965,8 @@ class OrderService:
         if update:
             self.repo.update_order(order_id, update)
             o.update(update)
+        if status == "delivered":
+            self._restock_patient(o)
         title, body = {
             "picked_up": ("Courier picked up your order", "Your medication is with the courier."),
             "in_transit": ("Out for delivery", "Your medication is on the way."),
@@ -910,10 +1037,11 @@ def get_order_service(
     audit: AuditLogger = Depends(get_audit_logger),
     records: RecordRepository = Depends(get_record_repository),
     files: FileStore = Depends(get_file_store),
+    medications: MedicationRepository = Depends(get_medication_repository),
 ) -> OrderService:
     from app.services.receipts import store_receipt
 
     def receipts(order_id: str, order: dict[str, Any], charge_id: str) -> str:
         return store_receipt(records, files, order_id, order, charge_id)
 
-    return OrderService(repo, notifier, courier, audit, receipts)
+    return OrderService(repo, notifier, courier, audit, receipts, medications)

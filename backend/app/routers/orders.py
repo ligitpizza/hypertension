@@ -40,6 +40,8 @@ from app.integrations.payments import (
     intent_from_stripe,
 )
 from app.schemas.orders import (
+    CatalogEditRequest,
+    CatalogItemRequest,
     ConfirmOrderRequest,
     FailDeliveryRequest,
     FakePaymentRequest,
@@ -52,6 +54,7 @@ from app.schemas.orders import (
     StockEditRequest,
     StockRequest,
 )
+from app.services.catalog import CatalogRepository, catalog_view, get_catalog_repository
 from app.services.medications import MYT
 from app.services.orders import (
     AWAITING_PAYMENT,
@@ -169,8 +172,12 @@ def get_order(
         raise _not_found()
     o = _fresh(svc, order_id, o, single=True)
     view = _view(svc, order_id, o, svc.repo.events(order_id))
-    if user.role == UserRole.PATIENT:  # D-67: prefill the courier contact number
+    if user.role == UserRole.PATIENT:  # D-67/D-69: prefill the checkout from the profile
         view["suggestedPhone"] = o.get("deliveryPhone") or svc.repo.profile_phone(user.uid)
+        me = svc.repo.user(user.uid) or {}
+        view["suggestedAddress"] = me.get("address")
+        view["suggestedLat"] = me.get("addressLat")
+        view["suggestedLng"] = me.get("addressLng")
     return view
 
 
@@ -407,7 +414,8 @@ def pharmacy_queue(
     ]
     needs_price = []
     for rx in svc.repo.recurring_prescriptions():
-        if rx.get("monthlyPrice") is None:
+        # Catalogue prescriptions carry their own prices (D-69).
+        if rx.get("monthlyPrice") is None and not rx.get("items"):
             patient = svc.repo.user(str(rx.get("patientId"))) or {}
             needs_price.append(
                 {
@@ -497,6 +505,7 @@ def add_stock(
 ) -> dict[str, Any]:
     data = {
         "name": body.name,
+        "catalogId": body.catalogId,
         "units": body.units,
         "expiryDate": _expiry(body.expiryDate),
         "lowStockAt": body.lowStockAt,
@@ -582,10 +591,10 @@ def lookup_patients(
     _: CurrentUser = Depends(pharmacist_only),
     svc: OrderService = Depends(get_order_service),
 ) -> dict[str, Any]:
-    """Patient lookup (Fig 4.3.13.1), limited to patients the pharmacy serves: those with a
-    recurring prescription. Shows the regimen and recent orders, not clinical data."""
+    """Patient lookup (Fig 4.3.13.1), limited to patients the pharmacy serves: those with an
+    order or a recurring prescription (D-69). Shows the regimen and recent orders only."""
     term = q.strip().lower()
-    by_patient: dict[str, list[dict[str, Any]]] = {}
+    by_patient: dict[str, list[dict[str, Any]]] = {uid: [] for uid in svc.repo.order_patients()}
     for rx in svc.repo.recurring_prescriptions():
         by_patient.setdefault(str(rx.get("patientId")), []).append(rx)
     out = []
@@ -772,3 +781,157 @@ def _order_ids(payload: Any, depth: int = 0) -> list[str]:
         for v in payload:
             found += _order_ids(v, depth + 1)
     return found
+
+
+# ---------------- D-69: pharmacist patient view ----------------
+
+
+def _age(dob: Any) -> int | None:
+    if not isinstance(dob, datetime):
+        return None
+    today = datetime.now(UTC).astimezone(MYT).date()
+    born = dob.astimezone(MYT).date()
+    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+
+@router.get("/pharmacy/patients/{patient_id}")
+def pharmacy_patient(
+    patient_id: str,
+    user: CurrentUser = Depends(pharmacist_only),
+    svc: OrderService = Depends(get_order_service),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """Dispensing details for a patient the pharmacy serves (D-69): profile, allergies and
+    conditions, medicines, prescriptions and orders. No readings, risk, notes or files."""
+    from app.services.settings import parse_profile_field
+
+    served = patient_id in svc.repo.order_patients() or any(
+        rx.get("patientId") == patient_id for rx in svc.repo.recurring_prescriptions()
+    )
+    u = svc.repo.user(patient_id) if served else None
+    if u is None or u.get("role") != UserRole.PATIENT.value:
+        raise ApiError("PATIENT_NOT_FOUND", "Patient not found.", status.HTTP_404_NOT_FOUND)
+    profile = svc.repo.health_profile(patient_id) or {}
+    history = parse_profile_field(profile.get("medicalHistory"))
+    meds = svc.medications.list_for(patient_id) if svc.medications else []
+    orders = _newest_first(svc.repo.orders_for_patient(patient_id))
+    prescriptions = sorted(
+        svc.repo.prescriptions_for(patient_id),
+        key=lambda r: r.get("issuedAt") or datetime.min.replace(tzinfo=UTC),
+        reverse=True,
+    )
+    audit.log(
+        user_id=user.uid,
+        action="VIEW_PATIENT_DISPENSING",
+        details="Pharmacist opened a patient's dispensing details.",
+        target_type=Collection.USERS.value,
+        target_id=patient_id,
+    )
+    return {
+        "id": patient_id,
+        "name": u.get("name"),
+        "email": u.get("email"),
+        "phone": svc.repo.profile_phone(patient_id),
+        "gender": u.get("gender"),
+        "age": _age(u.get("dateOfBirth")),
+        "address": u.get("address"),
+        "allergies": history.get("allergies") or "",
+        "conditions": history.get("conditions") or [],
+        "medications": [
+            {
+                "id": m.id,
+                "name": m.data.get("name"),
+                "dosage": m.data.get("dosage"),
+                "schedule": m.data.get("schedule"),
+                "quantityOnHand": m.data.get("quantityOnHand"),
+                "source": m.data.get("source") or "patient",
+                "prescribedBy": m.data.get("prescribedBy"),
+            }
+            for m in meds
+        ],
+        "prescriptions": [
+            {
+                "id": r["id"],
+                "medicationDetails": r.get("medicationDetails"),
+                "items": r.get("items") or [],
+                "isRecurring": bool(r.get("isRecurring")),
+                "source": r.get("source"),
+                "issuedAt": r["issuedAt"].isoformat()
+                if isinstance(r.get("issuedAt"), datetime)
+                else None,
+            }
+            for r in prescriptions
+        ],
+        "orders": [_view(svc, i, o) for i, o in orders],
+    }
+
+
+# ---------------- D-69: medication catalogue ----------------
+
+
+@router.get("/catalog")
+def list_catalog(
+    _: CurrentUser = Depends(require_roles(UserRole.DOCTOR, UserRole.PHARMACIST, UserRole.ADMIN)),
+    catalog: CatalogRepository = Depends(get_catalog_repository),
+) -> dict[str, Any]:
+    items = [catalog_view(i, c) for i, c in catalog.all()]
+    items.sort(key=lambda c: (str(c["name"]).lower(), str(c["strength"])))
+    return {"items": items}
+
+
+@router.post("/catalog", status_code=status.HTTP_201_CREATED)
+def add_catalog_item(
+    body: CatalogItemRequest,
+    user: CurrentUser = Depends(pharmacy_staff),
+    catalog: CatalogRepository = Depends(get_catalog_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    data = {
+        "name": body.name,
+        "strength": body.strength,
+        "form": body.form,
+        "unitLabel": body.form,
+        "drugClass": body.drugClass,
+        "unitPrice": round(body.unitPrice, 2),
+        "active": True,
+        "updatedAt": datetime.now(UTC),
+    }
+    item_id = catalog.create(data)
+    audit.log(
+        user_id=user.uid,
+        action="ADD_CATALOG_ITEM",
+        details=f"Catalogue medicine added: {body.name} {body.strength}.",
+        target_type=Collection.MEDICATION_CATALOG.value,
+        target_id=item_id,
+    )
+    return catalog_view(item_id, data)
+
+
+@router.patch("/catalog/{item_id}")
+def edit_catalog_item(
+    item_id: str,
+    body: CatalogEditRequest,
+    user: CurrentUser = Depends(pharmacy_staff),
+    catalog: CatalogRepository = Depends(get_catalog_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    c = catalog.get(item_id)
+    if c is None:
+        raise ApiError("CATALOG_ITEM_NOT_FOUND", "Medicine not found.", status.HTTP_404_NOT_FOUND)
+    update: dict[str, Any] = {"updatedAt": datetime.now(UTC)}
+    if body.unitPrice is not None:
+        update["unitPrice"] = round(body.unitPrice, 2)
+    if body.active is not None:
+        update["active"] = body.active
+    catalog.update(item_id, update)
+    audit.log(
+        user_id=user.uid,
+        action="EDIT_CATALOG_ITEM",
+        details="Catalogue medicine updated"
+        + (f"; price RM{body.unitPrice:.2f}" if body.unitPrice is not None else "")
+        + ("" if body.active is None else f"; {'active' if body.active else 'inactive'}")
+        + ".",
+        target_type=Collection.MEDICATION_CATALOG.value,
+        target_id=item_id,
+    )
+    return catalog_view(item_id, {**c, **update})

@@ -176,6 +176,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---- D-69: medication catalogue and pharmacy chat ----
+    // Catalogue: read by prescribing / dispensing staff; prices change through FastAPI.
+    match /medication_catalog/{itemId} {
+      allow read: if hasRole('doctor') || hasRole('pharmacist') || isAdmin();
+      allow write: if false;
+    }
+
+    // One pharmacy conversation per patient, shared by all pharmacists. Written only
+    // through FastAPI (pushes, audit); not end-to-end encrypted (D-69 deviation).
+    match /pharmacy_messages/{messageId} {
+      allow read: if isSelf(resource.data.patientId) || hasRole('pharmacist');
+      allow write: if false;
+    }
+
     // ---- agent_messages (FR-14.1, Table 4.2.3.16) ----
     // Written only by FastAPI (it calls Gemini). Read by the patient for the chat screen,
     // and by the assigned doctor / admin like other patient-owned data (docs/04).

@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.enums import Gender
 from app.schemas.auth import (
@@ -51,3 +51,12 @@ class NotificationPrefs(_Strict):
 
     medicationReminders: bool = True
     healthUpdates: bool = True
+
+
+class AddressUpdate(BaseModel):
+    """D-69: the patient's delivery address; the map point is optional (typed address)."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    address: str = Field(min_length=5, max_length=300)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)

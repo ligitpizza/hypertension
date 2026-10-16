@@ -47,6 +47,7 @@ from app.services.analytics import get_analytics_source
 from app.services.appointments import get_appointment_repository
 from app.services.assignments import get_assignment_repository
 from app.services.audit_view import get_audit_reader
+from app.services.catalog import get_catalog_repository
 from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
 from app.services.family import get_family_repository
@@ -54,6 +55,7 @@ from app.services.identity import EmailAlreadyRegisteredError, get_identity_prov
 from app.services.medications import MedicationDoc, get_medication_repository
 from app.services.notifications import Notifier, get_notifier, get_token_repository
 from app.services.orders import get_order_repository
+from app.services.pharmacy_chat import get_pharmacy_chat_repository
 from app.services.provider import get_provider_repository
 from app.services.records import get_file_store, get_record_repository
 from app.services.risk import get_risk_data_repository
@@ -756,7 +758,27 @@ class InMemoryOrderRepository:
         return self._users.users.get(uid)
 
     def profile_phone(self, uid: str) -> str | None:
-        return self.phones.get(uid)
+        from app.services.orders import phone_from_profile
+
+        return self.phones.get(uid) or phone_from_profile(self.health_profile(uid))
+
+    def health_profile(self, uid: str) -> dict[str, Any] | None:
+        return self._users.health_profiles.get(uid)
+
+    def prescriptions_for(self, uid: str) -> list[dict[str, Any]]:
+        return [dict(p) for p in self._provider.prescriptions if p.get("patientId") == uid]
+
+    def order_patients(self) -> set[str]:
+        return {str(o.get("patientId")) for o in self.orders.values()}
+
+    def return_stock(self, stock_id: str, units: int) -> None:
+        self.stock_items[stock_id]["units"] = int(self.stock_items[stock_id]["units"]) + units
+
+    def stock_for_catalog(self, catalog_id: str) -> tuple[str, dict[str, Any]] | None:
+        return next(
+            ((i, dict(s)) for i, s in self.stock_items.items() if s.get("catalogId") == catalog_id),
+            None,
+        )
 
     def staff(self, role: str) -> list[str]:
         return [
@@ -837,6 +859,71 @@ class InMemoryOrderRepository:
             return False
         s["units"] = int(s["units"]) - units
         return True
+
+
+class InMemoryCatalogRepository:
+    """D-69 medication catalogue."""
+
+    def __init__(self) -> None:
+        self.items: dict[str, dict[str, Any]] = {
+            "amlodipine-5": {
+                "name": "Amlodipine",
+                "strength": "5mg",
+                "form": "tablet",
+                "drugClass": "Calcium channel blocker",
+                "unitPrice": 0.30,
+                "active": True,
+            },
+            "losartan-50": {
+                "name": "Losartan",
+                "strength": "50mg",
+                "form": "tablet",
+                "drugClass": "Angiotensin receptor blocker",
+                "unitPrice": 0.90,
+                "active": True,
+            },
+            "spironolactone-25": {
+                "name": "Spironolactone",
+                "strength": "25mg",
+                "form": "tablet",
+                "drugClass": "Potassium-sparing diuretic",
+                "unitPrice": 0.50,
+                "active": True,
+            },
+        }
+
+    def all(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(c)) for i, c in self.items.items()]
+
+    def get(self, item_id: str) -> dict[str, Any] | None:
+        c = self.items.get(item_id)
+        return dict(c) if c else None
+
+    def create(self, data: dict[str, Any]) -> str:
+        item_id = f"cat{len(self.items) + 1}"
+        self.items[item_id] = dict(data)
+        return item_id
+
+    def update(self, item_id: str, data: dict[str, Any]) -> None:
+        self.items[item_id].update(data)
+
+
+class InMemoryPharmacyChatRepository:
+    """D-69 pharmacy chat."""
+
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, dict[str, Any]]] = []
+
+    def add(self, data: dict[str, Any]) -> str:
+        message_id = f"pm{len(self.messages) + 1}"
+        self.messages.append((message_id, dict(data)))
+        return message_id
+
+    def thread(self, patient_id: str) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(m)) for i, m in self.messages if m["patientId"] == patient_id]
+
+    def recent(self, limit: int) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(m)) for i, m in reversed(self.messages)][:limit]
 
 
 class InMemoryAgentDataRepository:
@@ -1201,6 +1288,16 @@ def order_repo(
 
 
 @pytest.fixture
+def catalog() -> InMemoryCatalogRepository:
+    return InMemoryCatalogRepository()
+
+
+@pytest.fixture
+def pharmacy_chat() -> InMemoryPharmacyChatRepository:
+    return InMemoryPharmacyChatRepository()
+
+
+@pytest.fixture
 def gateway() -> FakeGateway:
     return FakeGateway()
 
@@ -1243,6 +1340,8 @@ def make_client(
     order_repo: InMemoryOrderRepository,
     gateway: FakeGateway,
     courier: FakeGrabClient,
+    catalog: InMemoryCatalogRepository,
+    pharmacy_chat: InMemoryPharmacyChatRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -1282,6 +1381,8 @@ def make_client(
         app.dependency_overrides[get_order_repository] = lambda: order_repo
         app.dependency_overrides[get_payment_gateway] = lambda: gateway
         app.dependency_overrides[get_courier_client] = lambda: courier
+        app.dependency_overrides[get_catalog_repository] = lambda: catalog
+        app.dependency_overrides[get_pharmacy_chat_repository] = lambda: pharmacy_chat
         return TestClient(app)
 
     return _make

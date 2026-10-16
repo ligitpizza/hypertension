@@ -35,8 +35,10 @@ class PriceRequest(_Body):
 
 
 class ReadyRequest(_Body):
-    stockItemId: str = Field(min_length=1, max_length=100)
-    units: int = Field(ge=1, le=1000)
+    # Catalogue orders take each item from its linked stock automatically (D-69); older
+    # single-text orders name the stock item and units.
+    stockItemId: str | None = Field(default=None, min_length=1, max_length=100)
+    units: int | None = Field(default=None, ge=1, le=1000)
 
 
 class OutOfStockRequest(_Body):
@@ -45,6 +47,7 @@ class OutOfStockRequest(_Body):
 
 class StockRequest(_Body):
     name: str = Field(min_length=2, max_length=100)
+    catalogId: str | None = Field(default=None, max_length=100)  # D-69
     units: int = Field(ge=0, le=1_000_000)
     expiryDate: date
     lowStockAt: int = Field(default=50, ge=0, le=1_000_000)
@@ -62,6 +65,21 @@ class ReceiveStockRequest(_Body):
 
     units: int = Field(ge=1, le=1_000_000)
     expiryDate: date
+
+
+class CatalogItemRequest(_Body):
+    """D-69: a medicine pharmacists and admins add to the catalogue."""
+
+    name: str = Field(min_length=2, max_length=80)
+    strength: str = Field(min_length=1, max_length=30)
+    form: Literal["tablet", "capsule", "syrup", "injection", "other"] = "tablet"
+    drugClass: str = Field(default="", max_length=60)
+    unitPrice: float = Field(ge=0.01, le=1000)
+
+
+class CatalogEditRequest(_Body):
+    unitPrice: float | None = Field(default=None, ge=0.01, le=1000)
+    active: bool | None = None
 
 
 class GrabWebhook(BaseModel):

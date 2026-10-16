@@ -1,4 +1,5 @@
-"""Load the symptom_catalog reference list into the LIVE Firestore (FR-14.3, D-10).
+"""Load reference data into the LIVE Firestore: symptom_catalog (FR-14.3, D-10) and the
+medication_catalog with demo stock (D-69).
 
 Reference data only: writes the 14 symptoms from symptom_catalog.json (same stable ids,
 so re-running just overwrites them). Never touches patient or user data.
@@ -14,7 +15,7 @@ import sys
 import firebase_admin
 from firebase_admin import firestore
 
-from seed import seed_symptoms
+from seed import seed_medication_catalog, seed_symptoms
 
 PROJECT_ID = "hypertension-dd85f"
 
@@ -24,8 +25,12 @@ def main() -> None:
         if os.environ.get(var):
             sys.exit(f"Refusing: {var} is set. This script is for the live project only.")
     firebase_admin.initialize_app(options={"projectId": PROJECT_ID})
-    count = seed_symptoms(firestore.client())
+    db = firestore.client()
+    count = seed_symptoms(db)
     print(f"Live symptom_catalog: {count} symptoms written.")
+    # D-69: create-only, so prices and stock the pharmacy has changed are kept.
+    items, stock = seed_medication_catalog(db)
+    print(f"Live medication_catalog: {items} new medicines, {stock} new demo stock items.")
 
 
 if __name__ == "__main__":

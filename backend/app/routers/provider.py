@@ -20,8 +20,22 @@ from app.core.enums import Collection, PrescriptionSource, UserRole
 from app.core.errors import ApiError
 from app.ml.risk_model import RiskModel, get_risk_model
 from app.schemas.provider import CarePlanRequest, NoteRequest, PrescriptionRequest
+from app.services.catalog import (
+    FREQUENCIES,
+    CatalogRepository,
+    get_catalog_repository,
+    item_label,
+    items_summary,
+    items_total,
+)
 from app.services.interactions import check
 from app.services.medication_effect import medication_effect
+from app.services.medications import (
+    DEFAULT_REFILL_DAYS,
+    DOCTOR_SOURCE,
+    MedicationRepository,
+    get_medication_repository,
+)
 from app.services.orders import OrderService, get_order_service
 from app.services.provider import (
     ProviderRepository,
@@ -93,6 +107,32 @@ def update_care_plan(
     return {"id": patient_id}
 
 
+def _catalog_items(body: PrescriptionRequest, catalog: CatalogRepository) -> list[dict[str, Any]]:
+    """D-69: each requested item filled in from the catalogue (name, strength, price)."""
+    items = []
+    for req in body.items or []:
+        c = catalog.get(req.catalogId)
+        if c is None or c.get("active", True) is False:
+            raise ApiError(
+                "CATALOG_ITEM_NOT_FOUND",
+                "A selected medicine is not in the catalogue.",
+                status.HTTP_404_NOT_FOUND,
+            )
+        items.append(
+            {
+                "catalogId": req.catalogId,
+                "name": c.get("name"),
+                "strength": c.get("strength"),
+                "form": c.get("form"),
+                "dose": req.dose,
+                "frequency": req.frequency,
+                "quantity": req.quantity,
+                "unitPrice": float(c.get("unitPrice") or 0),
+            }
+        )
+    return items
+
+
 @router.post("/{patient_id}/prescriptions", status_code=status.HTTP_201_CREATED)
 def issue_prescription(
     patient_id: str,
@@ -101,9 +141,19 @@ def issue_prescription(
     repo: ProviderRepository = Depends(get_provider_repository),
     audit: AuditLogger = Depends(get_audit_logger),
     orders: OrderService = Depends(get_order_service),
+    catalog: CatalogRepository = Depends(get_catalog_repository),
+    meds: MedicationRepository = Depends(get_medication_repository),
 ) -> dict[str, Any]:
     _assigned_patient(patient_id, doctor, repo)
-    interactions = check(body.medicationName, repo.current_medicines(patient_id))
+    items = _catalog_items(body, catalog)
+    current = repo.current_medicines(patient_id)
+    interactions = []
+    if items:  # every item against current medicines and the other items (UC8.4 E1)
+        for n, item in enumerate(items):
+            others = current + [item_label(o) for k, o in enumerate(items) if k != n]
+            interactions += [i for i in check(item_label(item), others) if i not in interactions]
+    else:
+        interactions = check(str(body.medicationName), current)
     if interactions and not body.acknowledgeInteractions:
         raise ApiError(
             "DRUG_INTERACTION",
@@ -111,24 +161,56 @@ def issue_prescription(
             status.HTTP_409_CONFLICT,
             details=[i.to_dict() for i in interactions],
         )
-    details = medication_details(body.medicationName, body.dosage, body.frequency, body.duration)
-    rx_id = repo.add_prescription(
-        {
-            "patientId": patient_id,
-            "doctorId": doctor.uid,
-            "medicationDetails": details,
-            "isRecurring": body.isRecurring,
-            "source": PrescriptionSource.DOCTOR.value,  # D-50
-        }
+    details = (
+        items_summary(items)
+        if items
+        else medication_details(
+            str(body.medicationName), str(body.dosage), str(body.frequency), body.duration
+        )
     )
-    if body.isRecurring:  # UC13.1: the first monthly order starts now (D-66)
+    data: dict[str, Any] = {
+        "patientId": patient_id,
+        "doctorId": doctor.uid,
+        "medicationDetails": details,
+        "isRecurring": body.isRecurring,
+        "source": PrescriptionSource.DOCTOR.value,  # D-50
+    }
+    if items:
+        data["items"] = items
+    rx_id = repo.add_prescription(data)
+    order_id = None
+    if items:
+        # D-69: the prescribed medicines join the patient's Meds tab (locked) and an order
+        # goes to the pharmacy straight away; recurring ones repeat monthly (D-66).
+        doctor_doc = repo.patient(doctor.uid) or {}
+        for item in items:
+            meds.create(
+                {
+                    "patientId": patient_id,
+                    "name": item_label(item),
+                    "dosage": item["dose"],
+                    "schedule": FREQUENCIES[item["frequency"]][1],
+                    "quantityOnHand": float(item["quantity"]),
+                    "refillThresholdDays": DEFAULT_REFILL_DAYS,
+                    "adherenceRate": None,
+                    "source": DOCTOR_SOURCE,
+                    "prescriptionId": rx_id,
+                    "catalogId": item["catalogId"],
+                    "prescribedBy": doctor_doc.get("name"),
+                }
+            )
         rx = repo.prescription(rx_id)
         if rx is not None:
-            orders.start_cycle(rx_id, rx, datetime.now(UTC), doctor.uid)
+            order_id = orders.start_cycle(rx_id, rx, datetime.now(UTC), doctor.uid)
+    elif body.isRecurring:  # UC13.1: the first monthly order starts now (D-66)
+        rx = repo.prescription(rx_id)
+        if rx is not None:
+            order_id = orders.start_cycle(rx_id, rx, datetime.now(UTC), doctor.uid)
     audit.log(
         user_id=doctor.uid,
         action="ISSUE_PRESCRIPTION",
         details=f"Prescription issued{' (recurring)' if body.isRecurring else ''}"
+        f"{f' with {len(items)} item(s)' if items else ''}"
         f"{f'; {len(interactions)} interaction warning(s) acknowledged' if interactions else ''}.",
         target_type=Collection.PRESCRIPTIONS.value,
         target_id=rx_id,
@@ -136,6 +218,9 @@ def issue_prescription(
     return {
         "id": rx_id,
         "medicationDetails": details,
+        "items": items,
+        "total": items_total(items) if items else None,
+        "orderId": order_id,
         "interactions": [i.to_dict() for i in interactions],
     }
 
@@ -147,8 +232,10 @@ def delete_prescription(
     doctor: CurrentUser = Depends(doctor_only),
     repo: ProviderRepository = Depends(get_provider_repository),
     audit: AuditLogger = Depends(get_audit_logger),
+    meds: MedicationRepository = Depends(get_medication_repository),
 ) -> None:
-    """D-50: the doctor who issued a prescription may delete it (development use)."""
+    """D-50: the doctor who issued a prescription may delete it (development use). D-69: its
+    medicines leave the patient's Meds tab."""
     _assigned_patient(patient_id, doctor, repo)
     rx = repo.prescription(rx_id)
     if rx is None or rx.get("patientId") != patient_id or rx.get("doctorId") != doctor.uid:
@@ -156,6 +243,9 @@ def delete_prescription(
             "PRESCRIPTION_NOT_FOUND", "Prescription not found.", status.HTTP_404_NOT_FOUND
         )
     repo.delete_prescription(rx_id)
+    for m in meds.list_for(patient_id):
+        if m.data.get("prescriptionId") == rx_id:
+            meds.delete(m.id)
     audit.log(
         user_id=doctor.uid,
         action="DELETE_PRESCRIPTION",

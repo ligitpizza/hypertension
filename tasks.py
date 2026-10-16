@@ -25,8 +25,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
   set-storage-cors        Let the staff portal (browser) download message attachments
                           (idempotent; firebase/storage.cors.json; also run by deploy-all)
   create-scheduler-jobs   Idempotent Cloud Scheduler jobs calling /internal/jobs/*
-  seed-catalog-live       Write the symptom_catalog reference list to the live project
-                          (idempotent; also run by deploy-all)
+  seed-catalog-live       Write symptom_catalog and the medication catalogue (+ demo stock)
+                          to the live project (idempotent; also run by deploy-all)
   set-brevo-secret        One-time (and when the key changes): store EMAIL_API_KEY (Brevo
                           email + SMS) from backend/.env in Secret Manager for Cloud Run
   set-gemini-secret       One-time (and when the key changes): store GEMINI_API_KEY from
@@ -951,7 +951,11 @@ def task_bootstrap_admin() -> None:
 def task_seed_catalog_live() -> None:
     """Load symptom_catalog reference data into the LIVE Firestore (idempotent, FR-14.3)."""
     cmd = [venv_python(), str(FIREBASE / "seed" / "catalog_live.py")]
-    confirm_cloud("write the 14-symptom symptom_catalog reference list to the LIVE project", [cmd])
+    confirm_cloud(
+        "write symptom_catalog and medication_catalog (+ demo stock, create-only) to the LIVE "
+        "project",
+        [cmd],
+    )
     live_env = {
         k: v
         for k, v in os.environ.items()

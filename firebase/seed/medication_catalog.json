@@ -1,0 +1,33 @@
+{
+  "_note": "D-69: medication_catalog reference data. Indicative DEMO prices in RM per unit for the prototype, not real pharmacy prices. Stable ids so re-seeding never duplicates; seeding never overwrites a price the pharmacy has edited. demoStock = units created once in medication_stock.",
+  "medicines": [
+    {"id": "amlodipine-5", "name": "Amlodipine", "strength": "5mg", "form": "tablet", "drugClass": "Calcium channel blocker", "unitPrice": 0.30, "demoStock": 600},
+    {"id": "amlodipine-10", "name": "Amlodipine", "strength": "10mg", "form": "tablet", "drugClass": "Calcium channel blocker", "unitPrice": 0.45, "demoStock": 400},
+    {"id": "nifedipine-la-30", "name": "Nifedipine LA", "strength": "30mg", "form": "tablet", "drugClass": "Calcium channel blocker", "unitPrice": 1.10, "demoStock": 200},
+    {"id": "felodipine-5", "name": "Felodipine", "strength": "5mg", "form": "tablet", "drugClass": "Calcium channel blocker", "unitPrice": 0.90, "demoStock": 200},
+    {"id": "perindopril-4", "name": "Perindopril", "strength": "4mg", "form": "tablet", "drugClass": "ACE inhibitor", "unitPrice": 0.80, "demoStock": 400},
+    {"id": "lisinopril-10", "name": "Lisinopril", "strength": "10mg", "form": "tablet", "drugClass": "ACE inhibitor", "unitPrice": 0.50, "demoStock": 400},
+    {"id": "enalapril-10", "name": "Enalapril", "strength": "10mg", "form": "tablet", "drugClass": "ACE inhibitor", "unitPrice": 0.40, "demoStock": 300},
+    {"id": "captopril-25", "name": "Captopril", "strength": "25mg", "form": "tablet", "drugClass": "ACE inhibitor", "unitPrice": 0.25, "demoStock": 200},
+    {"id": "ramipril-5", "name": "Ramipril", "strength": "5mg", "form": "capsule", "drugClass": "ACE inhibitor", "unitPrice": 0.90, "demoStock": 200},
+    {"id": "losartan-50", "name": "Losartan", "strength": "50mg", "form": "tablet", "drugClass": "Angiotensin receptor blocker", "unitPrice": 0.90, "demoStock": 500},
+    {"id": "valsartan-80", "name": "Valsartan", "strength": "80mg", "form": "tablet", "drugClass": "Angiotensin receptor blocker", "unitPrice": 1.50, "demoStock": 300},
+    {"id": "telmisartan-40", "name": "Telmisartan", "strength": "40mg", "form": "tablet", "drugClass": "Angiotensin receptor blocker", "unitPrice": 1.60, "demoStock": 300},
+    {"id": "irbesartan-150", "name": "Irbesartan", "strength": "150mg", "form": "tablet", "drugClass": "Angiotensin receptor blocker", "unitPrice": 1.40, "demoStock": 200},
+    {"id": "candesartan-8", "name": "Candesartan", "strength": "8mg", "form": "tablet", "drugClass": "Angiotensin receptor blocker", "unitPrice": 1.50, "demoStock": 200},
+    {"id": "hydrochlorothiazide-25", "name": "Hydrochlorothiazide", "strength": "25mg", "form": "tablet", "drugClass": "Thiazide diuretic", "unitPrice": 0.15, "demoStock": 400},
+    {"id": "indapamide-sr-1.5", "name": "Indapamide SR", "strength": "1.5mg", "form": "tablet", "drugClass": "Thiazide-like diuretic", "unitPrice": 0.60, "demoStock": 300},
+    {"id": "spironolactone-25", "name": "Spironolactone", "strength": "25mg", "form": "tablet", "drugClass": "Potassium-sparing diuretic", "unitPrice": 0.50, "demoStock": 200},
+    {"id": "furosemide-40", "name": "Furosemide", "strength": "40mg", "form": "tablet", "drugClass": "Loop diuretic", "unitPrice": 0.15, "demoStock": 200},
+    {"id": "bisoprolol-5", "name": "Bisoprolol", "strength": "5mg", "form": "tablet", "drugClass": "Beta blocker", "unitPrice": 0.50, "demoStock": 300},
+    {"id": "atenolol-50", "name": "Atenolol", "strength": "50mg", "form": "tablet", "drugClass": "Beta blocker", "unitPrice": 0.20, "demoStock": 300},
+    {"id": "metoprolol-100", "name": "Metoprolol", "strength": "100mg", "form": "tablet", "drugClass": "Beta blocker", "unitPrice": 0.25, "demoStock": 200},
+    {"id": "carvedilol-6.25", "name": "Carvedilol", "strength": "6.25mg", "form": "tablet", "drugClass": "Beta blocker", "unitPrice": 0.60, "demoStock": 200},
+    {"id": "methyldopa-250", "name": "Methyldopa", "strength": "250mg", "form": "tablet", "drugClass": "Central alpha agonist", "unitPrice": 0.30, "demoStock": 200},
+    {"id": "prazosin-1", "name": "Prazosin", "strength": "1mg", "form": "tablet", "drugClass": "Alpha blocker", "unitPrice": 0.40, "demoStock": 150},
+    {"id": "atorvastatin-20", "name": "Atorvastatin", "strength": "20mg", "form": "tablet", "drugClass": "Statin", "unitPrice": 0.80, "demoStock": 400},
+    {"id": "simvastatin-20", "name": "Simvastatin", "strength": "20mg", "form": "tablet", "drugClass": "Statin", "unitPrice": 0.40, "demoStock": 300},
+    {"id": "aspirin-100", "name": "Aspirin", "strength": "100mg", "form": "tablet", "drugClass": "Antiplatelet", "unitPrice": 0.10, "demoStock": 500},
+    {"id": "metformin-500", "name": "Metformin", "strength": "500mg", "form": "tablet", "drugClass": "Biguanide (diabetes)", "unitPrice": 0.15, "demoStock": 500}
+  ]
+}

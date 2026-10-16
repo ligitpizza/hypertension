@@ -71,3 +71,34 @@ describe('payment and tracking records stay server-only', () => {
       await assertFails(getDoc(doc(admin(), `${c}/${id}`)));
     });
 });
+
+describe('D-69 medication_catalog and pharmacy_messages', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'medication_catalog/amlodipine-5'), { name: 'Amlodipine', unitPrice: 0.3 });
+      await setDoc(doc(db, 'pharmacy_messages/m1'), { patientId: P, text: 'Ready', senderRole: 'pharmacist' });
+      await setDoc(doc(db, 'pharmacy_messages/m2'), { patientId: 'u-other', text: 'Hi', senderRole: 'patient' });
+    });
+  });
+  test('doctor, pharmacist and admin read the catalogue; patients do not', async () => {
+    await assertSucceeds(getDoc(doc(doctor(), 'medication_catalog/amlodipine-5')));
+    await assertSucceeds(getDoc(doc(pharmacist(), 'medication_catalog/amlodipine-5')));
+    await assertSucceeds(getDoc(doc(admin(), 'medication_catalog/amlodipine-5')));
+    await assertFails(getDoc(doc(patient(), 'medication_catalog/amlodipine-5')));
+  });
+  test('nobody changes catalogue prices from the client', async () => {
+    await assertFails(updateDoc(doc(pharmacist(), 'medication_catalog/amlodipine-5'), { unitPrice: 0.01 }));
+  });
+  test('patient reads own pharmacy chat only; pharmacists read all', async () => {
+    await assertSucceeds(getDoc(doc(patient(), 'pharmacy_messages/m1')));
+    await assertFails(getDoc(doc(patient(), 'pharmacy_messages/m2')));
+    await assertSucceeds(getDoc(doc(pharmacist(), 'pharmacy_messages/m2')));
+    await assertFails(getDoc(doc(doctor(), 'pharmacy_messages/m1')));
+    await assertFails(getDoc(doc(family(), 'pharmacy_messages/m1')));
+  });
+  test('chat messages are written only through the API', async () => {
+    await assertFails(setDoc(doc(patient(), 'pharmacy_messages/x'), { patientId: P, text: 'hi' }));
+    await assertFails(setDoc(doc(pharmacist(), 'pharmacy_messages/y'), { patientId: P, text: 'hi' }));
+  });
+});

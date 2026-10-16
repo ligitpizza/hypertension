@@ -28,6 +28,8 @@ abstract final class Collections {
   static const familyLinkRequests = 'family_link_requests';
   static const clinicalAlerts = 'clinical_alerts'; // D-32
   static const medicationStock = 'medication_stock'; // D-66
+  static const medicationCatalog = 'medication_catalog'; // D-69
+  static const pharmacyMessages = 'pharmacy_messages'; // D-69
 
   static const all = [
     users,
@@ -54,6 +56,8 @@ abstract final class Collections {
     familyLinkRequests,
     clinicalAlerts,
     medicationStock,
+    medicationCatalog,
+    pharmacyMessages,
   ];
 }
 

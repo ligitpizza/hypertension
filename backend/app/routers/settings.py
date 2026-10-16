@@ -21,6 +21,7 @@ from app.core.enums import Collection, UserRole
 from app.core.errors import ApiError
 from app.ml.risk_model import RiskModel, get_risk_model
 from app.schemas.settings import (
+    AddressUpdate,
     ContactUpdate,
     HealthProfileUpdate,
     NotificationPrefs,
@@ -298,3 +299,26 @@ def delete_account(
         target_id=user.uid,
     )
     return {"status": "deactivated", "purgeAfter": (now + DELETION_GRACE).isoformat()}
+
+
+@router.put("/address")
+def update_address(
+    body: AddressUpdate,
+    user: CurrentUser = Depends(patient_only),
+    repo: SettingsRepository = Depends(get_settings_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-69: the patient's address (text + map point) for deliveries."""
+    _active_patient(repo, user.uid)
+    repo.update_user(
+        user.uid,
+        {"address": body.address, "addressLat": body.lat, "addressLng": body.lng},
+    )
+    audit.log(
+        user_id=user.uid,
+        action="UPDATE_PROFILE",
+        details="Address updated.",
+        target_type=Collection.USERS.value,
+        target_id=user.uid,
+    )
+    return {"status": "ok"}

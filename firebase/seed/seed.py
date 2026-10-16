@@ -1,4 +1,5 @@
-"""Seed the Firebase Emulator Suite: symptom_catalog + one demo account per role.
+"""Seed the Firebase Emulator Suite: symptom_catalog, medication_catalog (D-69) and one
+demo account per role.
 
 EMULATOR ONLY. Refuses to run unless FIRESTORE_EMULATOR_HOST and
 FIREBASE_AUTH_EMULATOR_HOST are set, so it can never touch the cloud project.
@@ -54,6 +55,47 @@ def seed_symptoms(db: Any) -> int:
     return len(symptoms)
 
 
+def seed_medication_catalog(db: Any) -> tuple[int, int]:
+    """D-69: catalogue items and their demo stock. Create-only, so a price or stock level
+    the pharmacy has changed is never overwritten. Returns (new items, new stock items)."""
+    from google.api_core.exceptions import AlreadyExists
+
+    now = datetime.now(UTC)
+    items = stock = 0
+    for m in _load("medication_catalog.json")["medicines"]:
+        doc = {
+            "name": m["name"],
+            "strength": m["strength"],
+            "form": m["form"],
+            "unitLabel": m["form"],
+            "drugClass": m["drugClass"],
+            "unitPrice": m["unitPrice"],
+            "active": True,
+            "updatedAt": now,
+        }
+        try:
+            db.collection("medication_catalog").document(m["id"]).create(doc)
+            items += 1
+        except AlreadyExists:
+            pass
+        try:
+            db.collection("medication_stock").document(f"stock-{m['id']}").create(
+                {
+                    "name": f"{m['name']} {m['strength']}",
+                    "catalogId": m["id"],
+                    "units": m["demoStock"],
+                    # Demo batch: expires two years after seeding.
+                    "expiryDate": now.replace(year=now.year + 2),
+                    "lowStockAt": 50,
+                    "updatedAt": now,
+                }
+            )
+            stock += 1
+        except AlreadyExists:
+            pass
+    return items, stock
+
+
 def _user_doc(acc: dict[str, Any]) -> dict[str, Any]:
     now = firestore.SERVER_TIMESTAMP
     doc: dict[str, Any] = {
@@ -105,7 +147,11 @@ def main() -> None:
     db = firestore.client()
     n_sym = seed_symptoms(db)
     n_acc = seed_accounts(db)
-    print(f"Seeded {n_sym} symptoms and {n_acc} demo accounts into the emulators.")
+    n_med, n_stock = seed_medication_catalog(db)
+    print(
+        f"Seeded {n_sym} symptoms, {n_acc} demo accounts, {n_med} catalogue medicines and "
+        f"{n_stock} stock items into the emulators."
+    )
 
 
 if __name__ == "__main__":

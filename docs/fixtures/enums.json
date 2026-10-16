@@ -24,7 +24,9 @@
     "delivery_tracking_events",
     "family_link_requests",
     "clinical_alerts",
-    "medication_stock"
+    "medication_stock",
+    "medication_catalog",
+    "pharmacy_messages"
   ],
   "user_role": [
     "patient",
