@@ -18,6 +18,14 @@ subprojects {
 subprojects {
     project.evaluationDependsOn(":app")
 }
+// D-66: flutter_stripe's release lint check resolves play-services-tapandpay (Google Wallet
+// push provisioning), which is not on any public repository. CareFlow doesn't use it, so
+// skip the plugins' release lint (the app's own code is still checked by flutter analyze).
+subprojects {
+    if (project.name != "app") {
+        tasks.matching { it.name.startsWith("lintVital") }.configureEach { enabled = false }
+    }
+}
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
