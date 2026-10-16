@@ -255,3 +255,57 @@ def test_lalamove_webhook_rereads_the_status(
     unknown = {"data": {"order": {"orderId": "nope", "status": "COMPLETED"}}}
     assert client.post("/api/v1/webhooks/lalamove", json=unknown).json()["changed"] == 0
     assert client.post("/api/v1/webhooks/lalamove", content=b"").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        lambda ref: {"eventType": "ORDER_STATUS_CHANGED", "data": {"order": {"orderId": ref}}},
+        lambda ref: {"eventType": "ORDER_STATUS_CHANGED", "data": {"orderId": ref}},
+        lambda ref: {"data": {"order": {"OrderID": int(ref)}}},
+    ],
+)
+def test_webhook_finds_the_order_id_in_any_shape(
+    shape: Any, client: TestClient, order_repo: InMemoryOrderRepository
+) -> None:
+    oid = _home_order(client, order_repo)
+    o = order_repo.orders[oid]
+    o["courierRef"] = "3607496166784815549"
+    o["dispatchedAt"] -= STAGE * 5
+    res = client.post("/api/v1/webhooks/lalamove", json=shape("3607496166784815549"))
+    assert res.json()["changed"] == 3
+    assert order_repo.orders[oid]["fulfilmentStatus"] == "delivered"
+
+
+class SlowCourier(FakeGrabClient):
+    """A real-courier stand-in: polling is an API call, so lists must throttle it."""
+
+    poll_in_lists = False
+
+    def __init__(self) -> None:
+        super().__init__("Lalamove")
+        self.polls = 0
+
+    def poll(self, delivery_id: str, dispatched_at: datetime, now: datetime) -> Any:
+        self.polls += 1
+        return super().poll(delivery_id, dispatched_at, now)
+
+
+def test_pharmacy_queue_polls_a_real_courier_but_throttled(
+    make_client: Any, order_repo: InMemoryOrderRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.routers import orders as orders_router
+
+    courier = SlowCourier()
+    c = make_client()
+    c.app.dependency_overrides[get_courier_client] = lambda: courier
+    oid = _home_order(c, order_repo)
+    order_repo.orders[oid]["dispatchedAt"] -= STAGE * 5
+    monkeypatch.setattr(orders_router, "_last_list_poll", {})
+    pharm = bearer("pharmacist-token")
+    queue = c.get("/api/v1/pharmacy/queue", headers=pharm).json()["orders"]
+    assert courier.polls == 1
+    assert order_repo.orders[oid]["fulfilmentStatus"] == "delivered"
+    assert queue == []  # delivered orders leave the queue
+    c.get("/api/v1/admin/deliveries", headers=bearer("admin-token"))
+    assert courier.polls == 1  # already final, no more calls

@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 from datetime import UTC, datetime, time
+from time import monotonic
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request, status
@@ -66,6 +68,7 @@ from app.services.orders import (
 from app.services.orders import order_view as _order_view
 
 router = APIRouter(tags=["orders"])
+log = logging.getLogger("careflow.orders")
 
 patient_only = require_roles(UserRole.PATIENT)
 doctor_only = require_roles(UserRole.DOCTOR)
@@ -107,15 +110,26 @@ def _own_order(svc: OrderService, order_id: str, uid: str) -> dict[str, Any]:
     return o
 
 
+# A real courier is asked from lists at most once per order in this window.
+LIST_POLL_EVERY = 20.0
+_last_list_poll: dict[str, float] = {}
+
+
 def _fresh(
     svc: OrderService, order_id: str, o: dict[str, Any], single: bool = False
 ) -> dict[str, Any]:
-    """Applies courier progress before showing the order. Lists only do this for the
-    simulator; with Grab each order is one API call, so only the order screen polls."""
-    if o.get("fulfilmentStatus") == READY_FOR_DELIVERY and (single or svc.courier.poll_in_lists):
-        svc.advance(order_id, o)
-        o = svc.repo.order(order_id) or o
-    return o
+    """Applies courier progress before showing the order. Each poll of a real courier is an
+    API call, so lists (pharmacy queue, admin deliveries) poll each order at most every
+    20 s; the order screen always does."""
+    if o.get("fulfilmentStatus") != READY_FOR_DELIVERY:
+        return o
+    if not (single or svc.courier.poll_in_lists):
+        now = monotonic()
+        if now - _last_list_poll.get(order_id, -LIST_POLL_EVERY) < LIST_POLL_EVERY:
+            return o
+        _last_list_poll[order_id] = now
+    svc.advance(order_id, o)
+    return svc.repo.order(order_id) or o
 
 
 def _newest_first(pairs: list[tuple[str, dict[str, Any]]]) -> list[tuple[str, dict[str, Any]]]:
@@ -386,8 +400,10 @@ def pharmacy_queue(
     svc: OrderService = Depends(get_order_service),
 ) -> dict[str, Any]:
     orders = [
-        _view(svc, i, _fresh(svc, i, o))
+        _view(svc, i, fresh)
         for i, o in _newest_first(svc.repo.orders_with_status(PHARMACY_QUEUE))
+        # A delivery the courier has just completed leaves the queue straight away.
+        if (fresh := _fresh(svc, i, o)).get("fulfilmentStatus") in PHARMACY_QUEUE
     ]
     needs_price = []
     for rx in svc.repo.recurring_prescriptions():
@@ -726,12 +742,33 @@ async def lalamove_webhook(
         payload = await request.json()
     except ValueError:
         return {"received": True, "changed": 0}
-    data = payload.get("data") if isinstance(payload, dict) else None
-    order = data.get("order") if isinstance(data, dict) else None
-    ref = (order or {}).get("orderId") if isinstance(order, dict) else None
-    ref = ref or (data or {}).get("orderId") if isinstance(data, dict) else ref
-    found = svc.repo.order_by_courier_ref(str(ref)) if ref else None
+    event = payload.get("eventType") if isinstance(payload, dict) else None
+    found = None
+    refs = _order_ids(payload)
+    for ref in refs:
+        found = svc.repo.order_by_courier_ref(ref)
+        if found is not None:
+            break
+    # Ids only (no personal data), so the real payload shape can be checked in the logs.
+    log.info("Lalamove webhook %s, ids %s, matched %s", event, refs[:3], found is not None)
     if found is None:
         return {"received": True, "changed": 0}
     order_id, o = found
     return {"received": True, "changed": svc.advance(order_id, o)}
+
+
+def _order_ids(payload: Any, depth: int = 0) -> list[str]:
+    """Every value under a key named orderId (any case, any depth) in a Lalamove webhook."""
+    if depth > 5:
+        return []
+    found: list[str] = []
+    if isinstance(payload, dict):
+        for k, v in payload.items():
+            if str(k).lower() == "orderid" and isinstance(v, str | int) and str(v):
+                found.append(str(v))
+            else:
+                found += _order_ids(v, depth + 1)
+    elif isinstance(payload, list):
+        for v in payload:
+            found += _order_ids(v, depth + 1)
+    return found
