@@ -44,6 +44,7 @@ import '../../features/orders/presentation/pharmacy_patient_page.dart';
 import '../../features/orders/presentation/inventory_page.dart';
 import '../../features/orders/presentation/pharmacy_patients_page.dart';
 import '../../features/orders/presentation/tracking_page.dart';
+import '../../features/orders/presentation/staff_order_page.dart';
 
 // One router per entrypoint; each registers only its own roles' routes
 // (docs/05 "Routes per entrypoint", NFR-3.2). Feature routes are added per module.
@@ -300,9 +301,35 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             builder: (_, _) => const HospitalAnalyticsPage(),
           ),
           GoRoute(path: '/admin/analytics/system', builder: (_, _) => const SystemAnalyticsPage()),
-          GoRoute(path: '/admin/deliveries', builder: (_, _) => const AdminDeliveriesPage()),
+          GoRoute(
+            path: '/admin/deliveries',
+            builder: (_, _) => const AdminDeliveriesPage(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                builder: (_, s) => StaffOrderPage(
+                  orderId: s.pathParameters['id']!,
+                  backPath: '/admin/deliveries',
+                  backLabel: 'Deliveries',
+                ),
+              ),
+            ],
+          ),
           // D-70: order tracking and drug inventory for admins.
-          GoRoute(path: '/admin/orders', builder: (_, _) => const OrderTrackingPage(admin: true)),
+          GoRoute(
+            path: '/admin/orders',
+            builder: (_, _) => const OrderTrackingPage(admin: true),
+            routes: [
+              GoRoute(
+                path: ':id',
+                builder: (_, s) => StaffOrderPage(
+                  orderId: s.pathParameters['id']!,
+                  backPath: '/admin/orders',
+                  backLabel: 'Orders',
+                ),
+              ),
+            ],
+          ),
           GoRoute(path: '/admin/inventory', builder: (_, _) => const InventoryPage(admin: true)),
           GoRoute(path: '/admin/assignments', builder: (_, _) => const AdminAssignmentsPage()),
         ],

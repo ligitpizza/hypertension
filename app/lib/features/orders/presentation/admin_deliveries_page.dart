@@ -7,6 +7,7 @@ import '../../../shared/services/api/api_client.dart';
 import '../../appointments/domain/appointment_text.dart' show timeLabel;
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
+import 'package:go_router/go_router.dart';
 
 /// Fig 4.3.14.4 Delivery oversight (FR-11.4, FR-13.4; D-66): every paid home delivery with
 /// courier, status and ETA, out-of-stock flags from the pharmacy, and manual dispatch.
@@ -132,6 +133,7 @@ class _AdminDeliveriesPageState extends ConsumerState<AdminDeliveriesPage> {
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: DataTable(
+                        showCheckboxColumn: false,
                         columns: const [
                           DataColumn(label: Text('Order')),
                           DataColumn(label: Text('Patient')),
@@ -145,6 +147,8 @@ class _AdminDeliveriesPageState extends ConsumerState<AdminDeliveriesPage> {
                           for (final o in d.orders)
                             DataRow(
                               key: ValueKey('delivery-${o.id}'),
+                              // D-73: the order's detail page.
+                              onSelectChanged: (_) => context.go('/admin/deliveries/${o.id}'),
                               cells: [
                                 DataCell(Text(o.ref)),
                                 DataCell(Text(o.patientName ?? 'Patient')),

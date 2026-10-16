@@ -18,6 +18,7 @@ import '../helpers/fakes.dart';
 import '../helpers/order_fakes.dart';
 import 'package:hypertension/features/orders/presentation/inventory_page.dart';
 import 'package:hypertension/features/orders/presentation/pharmacy_patients_page.dart';
+import 'package:hypertension/features/orders/presentation/staff_order_page.dart';
 import 'package:hypertension/features/orders/presentation/tracking_page.dart';
 
 // D-69: consolidated orders, Orders tabs, address picker, pharmacy patient view, catalogue
@@ -485,5 +486,84 @@ void main() {
     );
     await t.pumpAndSettle();
     expect(find.textContaining('Estimated ready by 12:00 PM'), findsOneWidget);
+  });
+
+  tallTest('D-73 the pharmacy sees new prescriptions before the patient pays', (t) async {
+    repo.overviewData = OrdersOverview(
+      orders: [itemOrder()],
+      counts: const {'awaiting_patient': 1},
+    );
+    await t.pumpWidget(host('/pharmacy'));
+    await t.pumpAndSettle();
+    expect(repo.calls, contains('overview:awaiting_patient:'));
+    expect(find.byKey(const Key('incoming-$id')), findsOneWidget);
+    expect(find.textContaining('Siti · Amlodipine 5mg ×30, Losartan 50mg ×60'), findsOneWidget);
+    expect(find.textContaining('Waiting for you to confirm'), findsOneWidget);
+  });
+
+  tallTest('D-73 admin order detail shows medicines, payment, delivery and history', (t) async {
+    repo.orders = {
+      id: MedicationOrder.fromJson({
+        'id': id,
+        'ref': 'CF-ABC123',
+        'patientId': 'u-patient',
+        'patientName': 'Siti',
+        'prescriptionId': 'rx1',
+        'medicationDetails': 'x',
+        'fulfilmentStatus': 'ready_for_delivery',
+        'paymentStatus': 'paid',
+        'method': 'home_delivery',
+        'deliveryStatus': 'in_transit',
+        'deliveryAddress': '25 Lintang Sungai Ara 6',
+        'deliveryPhone': '0143997403',
+        'courierRef': '3607496166784815549',
+        'courierBrand': 'Lalamove',
+        'trackingUrl': 'https://share.sandbox.lalamove.com?x',
+        'amount': 63,
+        'deliveryFee': 13.8,
+        'total': 76.8,
+        'paidAt': '2026-10-16T02:00:00+00:00',
+        'items': [
+          {
+            'catalogId': 'amlodipine-5',
+            'name': 'Amlodipine',
+            'strength': '5mg',
+            'dose': '1 tablet',
+            'frequency': 'once_daily',
+            'quantity': 30,
+            'unitPrice': 0.3,
+          },
+        ],
+        'events': [
+          {'status': 'dispatched', 'timestamp': '2026-10-16T03:00:00+00:00'},
+        ],
+      }),
+    };
+    final router = GoRouter(
+      initialLocation: '/o',
+      routes: [
+        GoRoute(
+          path: '/o',
+          builder: (_, _) => const Scaffold(
+            body: StaffOrderPage(orderId: id, backPath: '/o', backLabel: 'Orders'),
+          ),
+        ),
+      ],
+    );
+    await t.pumpWidget(
+      ProviderScope(
+        overrides: [ordersRepositoryProvider.overrideWithValue(repo)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await t.pumpAndSettle();
+    expect(find.text('Order CF-ABC123'), findsOneWidget);
+    expect(find.text('1 tablet, once daily · 30 × RM0.30 = RM9.00'), findsOneWidget);
+    expect(find.text('RM13.80'), findsOneWidget);
+    expect(find.text('RM76.80'), findsOneWidget);
+    expect(find.text('25 Lintang Sungai Ara 6'), findsOneWidget);
+    expect(find.text('3607496166784815549'), findsOneWidget);
+    expect(find.text('Courier: dispatched'), findsOneWidget);
+    expect(find.byKey(const Key('staff-courier-tracking')), findsOneWidget);
   });
 }

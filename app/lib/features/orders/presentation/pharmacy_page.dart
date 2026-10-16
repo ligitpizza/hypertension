@@ -19,7 +19,13 @@ class PharmacyPage extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, box) {
         final wide = box.maxWidth >= 1000;
-        const main = [_QueueCard(), SizedBox(height: 16), _PriceCard()];
+        const main = [
+          _QueueCard(),
+          SizedBox(height: 16),
+          _IncomingCard(),
+          SizedBox(height: 16),
+          _PriceCard(),
+        ];
         const side = [_QuickActions()];
         return ListView(
           padding: const EdgeInsets.all(24),
@@ -31,6 +37,7 @@ class PharmacyPage extends ConsumerWidget {
                   key: const Key('pharmacy-refresh'),
                   tooltip: 'Refresh',
                   onPressed: () => ref
+                    ..invalidate(ordersOverviewProvider((group: 'awaiting_patient', query: '')))
                     ..invalidate(pharmacyQueueProvider)
                     ..invalidate(stockProvider),
                   icon: const Icon(Icons.refresh),
@@ -419,6 +426,58 @@ class _QuickActions extends ConsumerWidget {
           link('quick-patients', Icons.people_outline, 'Patients', '/pharmacy/patients'),
           link('quick-messages', Icons.chat_bubble_outline, 'Messages', '/pharmacy/messages'),
         ],
+      ),
+    );
+  }
+}
+
+/// D-73: prescriptions the doctor has issued that are waiting for the patient to confirm
+/// and pay; they move to the queue above once paid.
+class _IncomingCard extends ConsumerWidget {
+  const _IncomingCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final waiting = ref.watch(ordersOverviewProvider((group: 'awaiting_patient', query: '')));
+    return PharmacySection(
+      icon: Icons.move_to_inbox_outlined,
+      title: 'New prescriptions',
+      child: waiting.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (_, _) => TextButton(
+          onPressed: () =>
+              ref.invalidate(ordersOverviewProvider((group: 'awaiting_patient', query: ''))),
+          child: const Text('Could not load. Retry'),
+        ),
+        data: (d) => d.orders.isEmpty
+            ? const Text('No prescriptions waiting for patients.', key: Key('incoming-empty'))
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Issued by doctors; the patient still has to confirm and pay. '
+                    'They move to the queue above once paid.',
+                  ),
+                  for (final o in d.orders)
+                    ListTile(
+                      key: Key('incoming-${o.id}'),
+                      contentPadding: EdgeInsets.zero,
+                      onTap: () => context.go('/pharmacy/patients/${o.patientId}'),
+                      leading: const Icon(Icons.receipt_long_outlined),
+                      title: Text(
+                        '${o.patientName ?? 'Patient'} · '
+                        '${o.items.isEmpty ? o.medicationDetails : o.items.map((i) => '${i.label} ×${i.quantity}').join(', ')}',
+                      ),
+                      subtitle: Text(
+                        [
+                          o.ref,
+                          o.status.label,
+                          if (o.total != null) rm(o.total!) else 'awaiting price',
+                        ].join(' · '),
+                      ),
+                    ),
+                ],
+              ),
       ),
     );
   }

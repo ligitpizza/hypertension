@@ -129,9 +129,10 @@ class _OrderTrackingPageState extends ConsumerState<OrderTrackingPage> {
                         for (final o in d.orders)
                           DataRow(
                             key: ValueKey('tracking-${o.id}'),
+                            // D-73: admins open the order itself; pharmacists the patient.
                             onSelectChanged: (_) => context.go(
                               widget.admin
-                                  ? '/admin/users/${o.patientId}'
+                                  ? '/admin/orders/${o.id}'
                                   : '/pharmacy/patients/${o.patientId}',
                             ),
                             cells: [

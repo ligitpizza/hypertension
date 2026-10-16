@@ -1297,3 +1297,7 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   (D-53); emergency events stored as triage/alert/audit records, not Health Records
   files; Lalamove instead of Grab (D-68); family SMS simulated (D-71).
 - Tests: backend 665; Flutter 563.
+- **D-73:** the pharmacy Orders page shows "New prescriptions" waiting for the patient to
+  confirm and pay (they were invisible until paid); admin Orders and Deliveries rows open
+  an order detail page (medicines and prices, payment, delivery/collection, courier and
+  tracking link, status history). Tests: Flutter 565.
