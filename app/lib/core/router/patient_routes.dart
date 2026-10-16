@@ -28,6 +28,10 @@ import '../../features/vitals/data/vitals_repository.dart';
 import '../../features/vitals/presentation/log_vitals_page.dart';
 import '../../features/vitals/presentation/reading_saved_page.dart';
 import '../../features/vitals/presentation/vitals_page.dart';
+import '../../features/orders/presentation/order_confirm_page.dart';
+import '../../features/orders/presentation/order_pay_page.dart';
+import '../../features/orders/presentation/order_track_page.dart';
+import '../../features/orders/presentation/orders_page.dart';
 
 /// Patient app feature routes (docs/05). Tabs live inside the bottom-navigation
 /// shell; full-screen flows sit outside it. Placeholders are replaced module by module.
@@ -102,6 +106,20 @@ final List<RouteBase> patientFeatureRoutes = [
     // Optional quick replies passed by the screen that opened the chat (triage, reading).
     builder: (_, state) =>
         AgentPage(quickReplies: state.extra is List<String> ? state.extra! as List<String> : null),
+  ),
+  // Module 13 (D-66; Figs 4.3.10.1-4.3.10.3).
+  GoRoute(path: '/orders', builder: (_, _) => const OrdersPage()),
+  GoRoute(
+    path: '/orders/:id/confirm',
+    builder: (_, s) => OrderConfirmPage(orderId: s.pathParameters['id']!),
+  ),
+  GoRoute(
+    path: '/orders/:id/pay',
+    builder: (_, s) => OrderPayPage(orderId: s.pathParameters['id']!),
+  ),
+  GoRoute(
+    path: '/orders/:id/track',
+    builder: (_, s) => OrderTrackPage(orderId: s.pathParameters['id']!),
   ),
   // Module 7 (D-53).
   GoRoute(path: '/appointments', builder: (_, _) => const AppointmentsPage()),

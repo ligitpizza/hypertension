@@ -1,5 +1,6 @@
 package fyp.hypertension
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// flutter_stripe's PaymentSheet needs a FragmentActivity (D-66).
+class MainActivity : FlutterFragmentActivity()

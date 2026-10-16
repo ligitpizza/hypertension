@@ -501,6 +501,79 @@ class ApiClient {
     }
   }
 
+  // ---- Module 13 orders, payment and delivery (FR-13.x; D-66) ----
+
+  Future<Map<String, dynamic>> myOrders() => _get('/orders');
+
+  Future<Map<String, dynamic>> order(String id) => _get('/orders/$id');
+
+  /// UC13.3: method is self_collection or home_delivery.
+  Future<Map<String, dynamic>> confirmOrder(String id, String method, {String? address}) =>
+      _post('/orders/$id/confirm', {'method': method, 'deliveryAddress': ?address});
+
+  /// UC13.2 A1.
+  Future<void> skipOrder(String id) => _send('POST', '/orders/$id/skip', null);
+
+  /// UC13.3: a PaymentIntent (mode stripe) or the simulated card form (mode fake).
+  Future<Map<String, dynamic>> startPayment(String id) => _send('POST', '/orders/$id/pay', null);
+
+  Future<Map<String, dynamic>> payFake(String id, String cardNumber) =>
+      _post('/orders/$id/pay/fake', {'cardNumber': cardNumber});
+
+  Future<Map<String, dynamic>> refreshPayment(String id) =>
+      _send('POST', '/orders/$id/pay/refresh', null);
+
+  /// FR-13.5.
+  Future<Map<String, dynamic>> rescheduleDelivery(String id) =>
+      _send('POST', '/orders/$id/reschedule', null);
+
+  Future<void> switchToCollection(String id) =>
+      _send('POST', '/orders/$id/switch-to-collection', null);
+
+  /// D-66 testing aid (DEV_ORDER_TOOLS).
+  Future<Map<String, dynamic>> devNextOrderCycle() => _send('POST', '/orders/dev/next-cycle', null);
+
+  /// UC13.1: the doctor flags a prescription recurring (or stops it).
+  Future<Map<String, dynamic>> setRecurring(String prescriptionId, bool recurring) =>
+      _post('/prescriptions/$prescriptionId/recurring', {'isRecurring': recurring});
+
+  /// UC13.6 pharmacist (Fig 4.3.13.1).
+  Future<Map<String, dynamic>> pharmacyQueue() => _get('/pharmacy/queue');
+
+  Future<Map<String, dynamic>> setMonthlyPrice(String prescriptionId, double price) =>
+      _send('PUT', '/pharmacy/prescriptions/$prescriptionId/price', {'monthlyPrice': price});
+
+  Future<Map<String, dynamic>> markOrderReady(String id, String stockItemId, int units) =>
+      _post('/pharmacy/orders/$id/ready', {'stockItemId': stockItemId, 'units': units});
+
+  Future<void> markOutOfStock(String id, {String? note}) =>
+      _post('/pharmacy/orders/$id/out-of-stock', {'note': ?note});
+
+  Future<void> markCollected(String id) => _send('POST', '/pharmacy/orders/$id/collected', null);
+
+  Future<Map<String, dynamic>> pharmacyStock() => _get('/pharmacy/stock');
+
+  Future<Map<String, dynamic>> addStockItem(Map<String, dynamic> body) =>
+      _post('/pharmacy/stock', body);
+
+  Future<Map<String, dynamic>> editStockItem(String id, Map<String, dynamic> body) =>
+      _send('PATCH', '/pharmacy/stock/$id', body);
+
+  Future<Map<String, dynamic>> receiveStock(String id, int units, String expiryDate) =>
+      _post('/pharmacy/stock/$id/receive', {'units': units, 'expiryDate': expiryDate});
+
+  Future<Map<String, dynamic>> pharmacyPatients(String query) =>
+      _getQuery('/pharmacy/patients', {'q': query});
+
+  /// FR-11.4 delivery oversight (Fig 4.3.14.4).
+  Future<Map<String, dynamic>> adminDeliveries() => _get('/admin/deliveries');
+
+  Future<Map<String, dynamic>> adminDispatch(String id) =>
+      _send('POST', '/admin/deliveries/$id/dispatch', null);
+
+  Future<Map<String, dynamic>> adminSimulateFailure(String id) =>
+      _post('/admin/deliveries/$id/simulate-failure', const {});
+
   Future<Map<String, dynamic>> _get(String path) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(path);

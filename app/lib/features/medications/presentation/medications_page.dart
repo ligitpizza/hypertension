@@ -13,6 +13,7 @@ import '../domain/med_schedule.dart';
 import '../../../shared/widgets/prescription_style.dart';
 import '../domain/prescription_import.dart';
 import '../state/medication_providers.dart';
+import '../../orders/presentation/order_widgets.dart';
 
 /// Fig 4.3.5.1 Medications (FR-5.1, FR-5.2, FR-5.3, FR-5.4; UC5.2, UC5.3, UC5.5).
 class MedicationsPage extends ConsumerStatefulWidget {
@@ -121,6 +122,7 @@ class _MedicationsPageState extends ConsumerState<MedicationsPage> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
             children: [
               _ScheduleHeader(now: now),
+              const MonthlyOrdersBanner(), // UC13.2 (D-66)
               if (scheduled.isNotEmpty) const _ReminderStatusLine(),
               if (scheduled.isNotEmpty) const _ExactRemindersBanner(),
               if (scheduled.isNotEmpty) const _BackgroundBanner(),

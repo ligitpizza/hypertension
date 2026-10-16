@@ -43,6 +43,26 @@ class PortalPrescriptionTile extends ConsumerWidget {
     }
   }
 
+  /// UC13.1: turning it on starts this month's order for the patient (D-66).
+  Future<void> _toggleRecurring(BuildContext context, WidgetRef ref) async {
+    final on = !prescription.isRecurring;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(portalRepositoryProvider).setRecurring(prescription.id, on);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            on
+                ? 'Repeats monthly. The patient will be asked to confirm each order.'
+                : 'Monthly repeat stopped.',
+          ),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('Could not change the repeat.')));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = prescription;
@@ -66,11 +86,24 @@ class PortalPrescriptionTile extends ConsumerWidget {
         ],
       ),
       trailing: mine
-          ? IconButton(
-              key: Key('rx-delete-${p.id}'),
-              tooltip: 'Delete prescription',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => _delete(context, ref),
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: Key('rx-recurring-${p.id}'),
+                  tooltip: p.isRecurring ? 'Stop monthly repeat' : 'Repeat monthly',
+                  isSelected: p.isRecurring,
+                  icon: const Icon(Icons.repeat),
+                  selectedIcon: const Icon(Icons.repeat_on),
+                  onPressed: () => _toggleRecurring(context, ref),
+                ),
+                IconButton(
+                  key: Key('rx-delete-${p.id}'),
+                  tooltip: 'Delete prescription',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => _delete(context, ref),
+                ),
+              ],
             )
           : null,
     );

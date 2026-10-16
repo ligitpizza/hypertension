@@ -157,8 +157,15 @@ def check(probe: Probe, reader: AuditReader, settings: Settings, now: datetime) 
         "operational" if live_sms else "simulated",
         note=f"Brevo SMS as {settings.sms_sender}" if live_sms else "Messages are logged.",
     )
-    for key, name in (("stripe", "Stripe payments"), ("grab", "Grab delivery API")):
-        add(key, name, "simulated", note="Test-mode adapter; ordering arrives with Module 13.")
+    live_stripe = settings.integrations_mode == "real" and bool(settings.stripe_secret_key)
+    add(
+        "stripe",
+        "Stripe payments",
+        "operational" if live_stripe else "simulated",
+        note="Stripe test mode" if live_stripe else "Simulated card form (no Stripe keys).",
+    )
+    # D-11/D-66: Grab sandbox needs business onboarding, so the courier is simulated.
+    add("grab", "Grab delivery API", "simulated", note="Simulated courier (about 1 min per stage).")
 
     statuses = {s["status"] for s in services}
     overall = (

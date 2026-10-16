@@ -31,6 +31,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
                           email + SMS) from backend/.env in Secret Manager for Cloud Run
   set-gemini-secret       One-time (and when the key changes): store GEMINI_API_KEY from
                           backend/.env in Secret Manager for the live AI agent
+  set-stripe-secrets      One-time (D-66): store the Stripe TEST secret key (and webhook
+                          secret, if set) from backend/.env in Secret Manager
   build-apk               Release APKs for the patient and family flavors
   phone-live              Build release apps and install the live-cloud patient app on
                           the phone (or double-click phone-live.cmd)
@@ -69,6 +71,9 @@ TIMEZONE = "Asia/Kuala_Lumpur"
 GEMINI_SECRET = "gemini-api-key"
 # Brevo key for real email and SMS (D-22, D-64); created by set-brevo-secret.
 BREVO_SECRET = "brevo-api-key"
+# Stripe TEST keys for Module 13 payments (D-66); created by set-stripe-secrets.
+STRIPE_SECRET = "stripe-secret-key"
+STRIPE_WEBHOOK_SECRET = "stripe-webhook-secret"
 # demo- prefix: emulator-only project, can never reach the cloud (rules tests).
 RULES_TEST_PROJECT = "demo-careflow-rules"
 
@@ -356,13 +361,28 @@ def task_set_brevo_secret() -> None:
     _store_secret(BREVO_SECRET, "EMAIL_API_KEY", "Brevo API key")
 
 
+def task_set_stripe_secrets() -> None:
+    """Store STRIPE_SECRET_KEY (and STRIPE_WEBHOOK_SECRET when set) for Cloud Run (D-66).
+    Test-mode keys only; the backend refuses live keys."""
+    key = _local_env("STRIPE_SECRET_KEY")
+    if key and not key.startswith("sk_test_"):
+        sys.exit("STRIPE_SECRET_KEY must be a test key (sk_test_...). Live keys are not allowed.")
+    _store_secret(STRIPE_SECRET, "STRIPE_SECRET_KEY", "Stripe test secret key")
+    if _local_env("STRIPE_WEBHOOK_SECRET"):
+        _store_secret(STRIPE_WEBHOOK_SECRET, "STRIPE_WEBHOOK_SECRET", "Stripe webhook secret")
+    else:
+        print("No STRIPE_WEBHOOK_SECRET yet; the app confirms payments by asking Stripe instead.")
+
+
 def task_deploy_backend() -> None:
     brevo = _secret_exists(BREVO_SECRET)
+    stripe = _secret_exists(STRIPE_SECRET)
     env_vars = ",".join(
         [
             "APP_ENV=prod",
-            # D-64: real Brevo email/SMS once the key is in Secret Manager.
-            f"INTEGRATIONS_MODE={'real' if brevo else 'fake'}",
+            # D-64/D-66: real adapters once a key is in Secret Manager (each adapter still
+            # falls back to its fake when its own key is missing).
+            f"INTEGRATIONS_MODE={'real' if brevo or stripe else 'fake'}",
             f"EMAIL_FROM={_local_env('EMAIL_FROM')}",
             f"EMAIL_FROM_NAME={_local_env('EMAIL_FROM_NAME') or 'CareFlow'}",
             f"SMS_SENDER={_local_env('SMS_SENDER')}",
@@ -375,6 +395,10 @@ def task_deploy_backend() -> None:
             f"GEMINI_MODEL={_local_env('GEMINI_MODEL') or 'gemini-3.1-flash-lite'}",
             # D-57 testing aid; set DEV_APPOINTMENT_TIMES=false in backend/.env for real use.
             f"DEV_APPOINTMENT_TIMES={_local_env('DEV_APPOINTMENT_TIMES') or 'false'}",
+            # D-66: publishable key is public by design; the secret key goes via Secret Manager.
+            f"STRIPE_PUBLISHABLE_KEY={_local_env('STRIPE_PUBLISHABLE_KEY')}",
+            # D-66 testing aid; set DEV_ORDER_TOOLS=false in backend/.env for real use.
+            f"DEV_ORDER_TOOLS={_local_env('DEV_ORDER_TOOLS') or 'false'}",
         ]
     )
     cmd = [
@@ -417,6 +441,15 @@ def task_deploy_backend() -> None:
         print(
             "Note: no Brevo secret yet, so live email and SMS are only logged. "
             "Run: python tasks.py set-brevo-secret --yes"
+        )
+    if stripe:
+        secrets.append(f"STRIPE_SECRET_KEY={STRIPE_SECRET}:latest")
+        if _secret_exists(STRIPE_WEBHOOK_SECRET):
+            secrets.append(f"STRIPE_WEBHOOK_SECRET={STRIPE_WEBHOOK_SECRET}:latest")
+    else:
+        print(
+            "Note: no Stripe secret yet, so payments use the simulated card form. "
+            "Run: python tasks.py set-stripe-secrets --yes"
         )
     if secrets:
         cmd += ["--set-secrets", ",".join(secrets)]
@@ -959,6 +992,7 @@ TASKS = {
     "create-scheduler-jobs": task_create_scheduler_jobs,
     "set-gemini-secret": task_set_gemini_secret,
     "set-brevo-secret": task_set_brevo_secret,
+    "set-stripe-secrets": task_set_stripe_secrets,
     "seed-catalog-live": task_seed_catalog_live,
     "build-apk": task_build_apk,
     "backend-url": task_backend_url,

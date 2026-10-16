@@ -1116,3 +1116,53 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   Firebase's built-in reset email from the app (continue URL `reset-done.html`), so it
   never depends on an email provider; the sender name, subject and text can be edited in
   Firebase Console → Authentication → Templates. The Brevo endpoint is kept for later.
+
+### 2026-10-16 — Increment 3 — Module 13: Recurring Medication, Payment & Delivery
+
+- FRs / UCs: FR-13.1–FR-13.5 (and FR-11.4 delivery oversight); UC13.1–UC13.6. Sequence
+  Fig 4.1.1.13; activity Fig 3.51; mockups Figs 4.3.10.1–4.3.10.3, 4.3.13.1, 4.3.14.4.
+  Decision D-66 (agreed with Ping); closes open questions 1 (Grab: simulator) and 2 (prices).
+- **Cycle (UC13.1, UC13.2):** a doctor-issued prescription marked recurring (at issue, or
+  later with the repeat button on the prescription in the portal, `POST
+  /prescriptions/{id}/recurring`) starts this month's `medication_orders` doc
+  (`{prescriptionId}_{YYYY-MM}`, pending payment) and pushes "Confirm this month's order".
+  The 15-minute sweep creates the next one on the same day each month, sends a single 48 h
+  reminder, and moves the simulated courier on. Skip pauses until the next cycle (the
+  patient can still confirm that month). Testing aid `DEV_ORDER_TOOLS` lets the patient
+  start next month's order from the Orders menu.
+- **Price:** the pharmacist sets `prescriptions.monthlyPrice` from "Recurring prescriptions
+  to price"; unpriced orders can't be confirmed and the patient is pushed once it's priced.
+  Home delivery adds RM5; the mockup's insurance line is dropped.
+- **Payment (UC13.3, NFR-2.3):** `PaymentGateway` adapter. Stripe test mode creates a
+  PaymentIntent (MYR); the app opens Stripe's PaymentSheet (flutter_stripe; MainActivity is
+  now a FlutterFragmentActivity with AppCompat themes) and then asks the server, which reads
+  the intent from Stripe; `/webhooks/stripe` (signature checked, 5-minute tolerance) does
+  the same. Live keys are refused. Without keys a simulated card form is used (4242…
+  succeeds, 4000 0000 0000 0002 declines). A decline keeps the order payable with the same
+  intent (E1). Success writes `payment_transactions`, sets paid/preparing, pushes all
+  pharmacists, and saves a receipt PDF in the patient's health records (category Other).
+- **Pharmacy (UC13.6):** `/pharmacy` replaces the placeholder: paid-order queue (Mark ready
+  from a stock item and unit count, Out of stock with a note → admin push + patient delay
+  push (E1), Collected), pricing list, `medication_stock` inventory (new item, receive
+  stock keeps the earliest expiry, low-stock warning level), patient lookup limited to
+  patients with recurring prescriptions (regimen and recent orders only), quick actions.
+- **Delivery (UC13.4, UC13.5, FR-13.5):** marking a delivery order ready books the courier
+  (`FakeGrabClient`, one retry); every stage (dispatched → picked_up → in_transit →
+  delivered, about 1 minute each) is a `delivery_tracking_events` doc and a push. On failure
+  the patient sees Reschedule or Switch to self-collection. `/webhooks/grab` accepts a real
+  courier's updates with a shared secret. Admin `/admin/deliveries` lists paid deliveries
+  and out-of-stock flags, with Dispatch (failed / undispatched) and Simulate failure.
+- **Patient app:** Meds tab banner → `/orders` list; `/orders/:id/confirm` (Fig 4.3.10.1),
+  `/pay` (Fig 4.3.10.2), `/track` (Fig 4.3.10.3: 4-stage timeline with ETA, collection slip
+  with prescription ID and ready time, delay and failure states; refreshes every 10 s).
+- System Health shows Stripe as Operational (test mode) once its key is set, Grab as
+  Simulated. `deploy-backend` passes `STRIPE_PUBLISHABLE_KEY` and `DEV_ORDER_TOOLS`, and the
+  Stripe secrets when `set-stripe-secrets` has stored them.
+- Rules: `medication_orders` readable by the owner, pharmacists and admin; `medication_stock`
+  by pharmacists and admin; no client writes; payment and tracking records stay server-only.
+- Tests: backend 30 (`test_orders.py`; 603 total); rules 8 new (201 total; the Increment 0
+  "orders stay closed" placeholder now uses an unlisted collection); Flutter 24
+  (`orders_test.dart`, doctor repeat toggle; 538 total). Staff web and patient APK build.
+- Deviations vs Chapter 4: D-66 (new fields, `medication_stock`, orders read through the
+  API, `method` empty until confirmation, no insurance, simulated courier, lookup without
+  BP or allergies).

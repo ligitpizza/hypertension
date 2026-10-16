@@ -48,6 +48,9 @@ abstract interface class PortalRepository {
 
   /// D-50: the issuing doctor deletes their own prescription.
   Future<void> deletePrescription(String patientId, String prescriptionId);
+
+  /// UC13.1: flag a prescription as a long-term monthly refill (or stop it).
+  Future<void> setRecurring(String prescriptionId, bool recurring);
 }
 
 class FirestorePortalRepository implements PortalRepository {
@@ -159,4 +162,8 @@ class FirestorePortalRepository implements PortalRepository {
   @override
   Future<void> deletePrescription(String patientId, String prescriptionId) =>
       _api.deletePrescription(patientId, prescriptionId);
+
+  @override
+  Future<void> setRecurring(String prescriptionId, bool recurring) =>
+      _api.setRecurring(prescriptionId, recurring);
 }

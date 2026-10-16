@@ -37,6 +37,8 @@ import '../../features/provider_portal/presentation/prescription_page.dart';
 import '../../features/staff_shell/staff_shell.dart';
 import '../constants/enums.dart';
 import 'patient_routes.dart';
+import '../../features/orders/presentation/admin_deliveries_page.dart';
+import '../../features/orders/presentation/pharmacy_page.dart';
 
 // One router per entrypoint; each registers only its own roles' routes
 // (docs/05 "Routes per entrypoint", NFR-3.2). Feature routes are added per module.
@@ -223,13 +225,8 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          GoRoute(
-            path: '/pharmacy',
-            builder: (_, _) => const ComingSoon(
-              title: 'Prescription queue',
-              note: 'The prescription and order queue is coming soon.',
-            ),
-          ),
+          // Module 13 pharmacist view (Fig 4.3.13.1; D-66).
+          GoRoute(path: '/pharmacy', builder: (_, _) => const PharmacyPage()),
           GoRoute(
             path: '/admin/users',
             builder: (_, _) => const AdminUsersPage(),
@@ -270,13 +267,7 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             builder: (_, _) => const HospitalAnalyticsPage(),
           ),
           GoRoute(path: '/admin/analytics/system', builder: (_, _) => const SystemAnalyticsPage()),
-          GoRoute(
-            path: '/admin/deliveries',
-            builder: (_, _) => const ComingSoon(
-              title: 'Delivery oversight',
-              note: 'Delivery oversight arrives with medication ordering and delivery (Module 13).',
-            ),
-          ),
+          GoRoute(path: '/admin/deliveries', builder: (_, _) => const AdminDeliveriesPage()),
           GoRoute(path: '/admin/assignments', builder: (_, _) => const AdminAssignmentsPage()),
         ],
       ),

@@ -38,7 +38,7 @@ void main() {
             key: 'grab',
             name: 'Grab delivery API',
             status: 'simulated',
-            note: 'Test-mode adapter; ordering arrives with Module 13.',
+            note: 'Simulated courier (about 1 min per stage).',
           ),
         ],
       );
@@ -56,7 +56,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('3400ms'), findsOneWidget);
-    expect(find.textContaining('arrives with Module 13'), findsOneWidget);
+    expect(find.textContaining('Simulated courier'), findsOneWidget);
   });
 
   tallTest('refresh checks again', (t) async {

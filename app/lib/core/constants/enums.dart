@@ -53,6 +53,7 @@ abstract final class Collections {
     deliveryTrackingEvents,
     familyLinkRequests,
     clinicalAlerts,
+    medicationStock,
   ];
 }
 

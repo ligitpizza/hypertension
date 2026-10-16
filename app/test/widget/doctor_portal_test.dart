@@ -123,6 +123,12 @@ class FakeDoseLogs implements MedicationsRepository {
 final doseLogs = FakeDoseLogs();
 
 class FakePortalRepository implements PortalRepository {
+  final recurringCalls = <(String, bool)>[];
+
+  @override
+  Future<void> setRecurring(String prescriptionId, bool recurring) async =>
+      recurringCalls.add((prescriptionId, recurring));
+
   List<PortalPatient> patients = const [];
   List<ClinicalAlert> alerts = const [];
   List<ClinicalNote> notesList = const [];
@@ -582,6 +588,20 @@ void main() {
       await t.tap(find.byKey(const Key('rx-delete-confirm')));
       await t.pumpAndSettle();
       expect(repo.deletedRx, ['a']);
+    });
+
+    tallTest('UC13.1 the issuing doctor makes a prescription repeat monthly', (t) async {
+      repo.rxList = [rx('a', doctorId: 'u-doctor'), rx('b', doctorId: 'someone-else')];
+      addTearDown(() => repo.rxList = const []);
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Medications'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('rx-recurring-b')), findsNothing);
+      await t.tap(find.byKey(const Key('rx-recurring-a')));
+      await t.pumpAndSettle();
+      expect(repo.recurringCalls, [('a', true)]);
+      expect(find.textContaining('Repeats monthly'), findsOneWidget);
     });
   });
 

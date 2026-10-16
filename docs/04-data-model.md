@@ -151,6 +151,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | medicationDetails | String | Prescribed medication details | Required |
 | isRecurring | Boolean | Flags a long-term chronic prescription | Default: false (UC13.1) |
 | issuedAt | Timestamp | Issue time | Required |
+| monthlyPrice | Number | Price of one month's supply in RM, set by the pharmacist (D-66) | Optional; ≥ 2.00; a recurring order can't be paid until set |
 
 ### `care_plans`  (Table 4.2.3.12)
 
@@ -185,6 +186,21 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | paymentStatus | String | pending / paid / failed | Required |
 | deliveryStatus | String | dispatched / in_transit / delivered / failed | Optional; only applies when method = home_delivery |
 | cycleDate | Date | Monthly recurrence date | Required |
+| medicationDetails | String | Snapshot of the prescription details (D-66) | Required |
+| patientName | String | Copied for the pharmacy queue (D-66) | Optional |
+| amount | Number | Medicine price in RM, from `prescriptions.monthlyPrice` (D-66) | Null until priced |
+| deliveryFee | Number | RM5.00 for home delivery, else 0 (D-66) | Required |
+| fulfilmentStatus | String | awaiting_confirmation / skipped / awaiting_payment / preparing / out_of_stock / ready_for_collection / ready_for_delivery / collected / delivered / failed (D-66) | Required |
+| deliveryAddress | String | Typed by the patient for home delivery (D-66) | Optional |
+| paymentIntentId | String | Stripe PaymentIntent (or simulated) id (D-66) | Optional |
+| courierRef | String | Courier booking id, e.g. GRB-1A2B3C (D-66) | Optional |
+| stockItemId | Reference (medication_stock) | Stock the units were taken from (D-66) | Optional |
+| receiptRecordId | Reference (health_records) | Receipt PDF saved for the patient (D-66) | Optional |
+| failureReason | String | Out-of-stock note or delivery failure reason (D-66) | Optional |
+| createdAt, confirmedAt, paidAt, readyAt, dispatchedAt, etaAt, reminderSentAt | Timestamp | Order timeline (D-66) | Optional except createdAt |
+
+> D-66: one order per recurring prescription per month, document id `{prescriptionId}_{YYYY-MM}`.
+> `method` stays empty until the patient confirms (Ch4 says Required). Written only by FastAPI.
 
 ### `audit_logs`  (Table 4.2.3.15)
 
@@ -266,6 +282,19 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 
 > Captures the status-over-time history that FR-13.4's "real-time tracking" requires medication_orders.deliveryStatus only reflects the current state, not the trail of updates from the Grab API.
 
+
+### `medication_stock`  (D-66, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | Primary key | Auto-generated |
+| name | String | Medicine and strength, e.g. "Amlodipine 5mg" | Required |
+| units | Number | Units on hand | Required; ≥ 0; marking an order ready deducts from it |
+| expiryDate | Timestamp | Earliest expiry among units on hand | Required |
+| lowStockAt | Number | Low-stock warning level | Default 50 |
+| updatedAt | Timestamp | Last change | Required |
+
+> Pharmacist and admin read; written only by FastAPI (pharmacist actions).
 
 ## Relationships (from class diagram)
 
