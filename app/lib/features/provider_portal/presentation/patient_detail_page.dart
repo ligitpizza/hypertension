@@ -24,6 +24,7 @@ import 'medication_effect_card.dart';
 import 'portal_prescription_tile.dart';
 import 'portal_widgets.dart';
 import '../../../core/utils/ic_number.dart';
+import 'delivery_preference_card.dart';
 
 /// Fig 4.3.12.4 Patient Detail (FR-8.2; UC8.3): vitals, risk, BP trend, medications,
 /// prescriptions, care plan and clinical notes for one assigned patient.
@@ -367,7 +368,7 @@ class _HistoryTabs extends ConsumerWidget {
                   _pad(
                     ListView(
                       children: [
-                        _DeliveryPreference(patientId: patientId),
+                        DeliveryPreferenceCard(patientId: patientId),
                         Text(
                           'Patient medication list',
                           style: Theme.of(context).textTheme.titleSmall,
@@ -527,38 +528,4 @@ class _AlertHistory extends StatelessWidget {
       ),
     ],
   );
-}
-
-/// D-72 (M8): self-collection or home delivery, from the patient's latest order.
-class _DeliveryPreference extends ConsumerWidget {
-  const _DeliveryPreference({required this.patientId});
-  final String patientId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final pref = ref.watch(deliveryPreferenceProvider(patientId)).value;
-    if (pref == null) return const SizedBox.shrink();
-    final method = switch (pref['method']) {
-      'home_delivery' => 'Home delivery',
-      'self_collection' => 'Self-collection at the pharmacy',
-      _ => 'Not chosen yet',
-    };
-    final status = pref['latestStatus'] as String?;
-    return Card(
-      key: const Key('delivery-preference'),
-      child: ListTile(
-        dense: true,
-        leading: Icon(
-          pref['method'] == 'home_delivery'
-              ? Icons.local_shipping_outlined
-              : Icons.storefront_outlined,
-        ),
-        title: Text('Medication delivery: $method'),
-        subtitle: Text(
-          '${pref['orders'] ?? 0} order(s)'
-          '${status == null ? '' : ' · latest ${status.replaceAll('_', ' ')}'}',
-        ),
-      ),
-    );
-  }
 }

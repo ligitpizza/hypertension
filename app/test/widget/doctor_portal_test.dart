@@ -636,6 +636,14 @@ void main() {
       expect(find.text('2 order(s) · latest ready for delivery'), findsOneWidget);
     });
 
+    tallTest('D-72 the prescription page shows the delivery preference too', (t) async {
+      repo.delivery = const {'method': 'self_collection', 'latestStatus': 'collected', 'orders': 1};
+      addTearDown(() => repo.delivery = const {'method': null, 'orders': 0});
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1/prescriptions'));
+      await t.pumpAndSettle();
+      expect(find.text('Medication delivery: Self-collection at the pharmacy'), findsOneWidget);
+    });
+
     tallTest('UC13.1 the issuing doctor makes a prescription repeat monthly', (t) async {
       repo.rxList = [rx('a', doctorId: 'u-doctor'), rx('b', doctorId: 'someone-else')];
       addTearDown(() => repo.rxList = const []);

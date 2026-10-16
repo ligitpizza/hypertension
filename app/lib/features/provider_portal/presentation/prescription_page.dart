@@ -11,6 +11,7 @@ import '../domain/portal_models.dart';
 import '../state/portal_providers.dart';
 import 'portal_prescription_tile.dart';
 import 'portal_widgets.dart';
+import 'delivery_preference_card.dart';
 
 /// Fig 4.3.12.7 Prescription Management (FR-8.3; UC8.4 and E1 interaction warning).
 /// D-69: one prescription lists several catalogue medicines with dose, frequency and
@@ -161,6 +162,7 @@ class _PrescriptionPageState extends ConsumerState<PrescriptionPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          DeliveryPreferenceCard(patientId: widget.patientId), // D-72 (M8)
           AsyncSection(
             value: meds,
             isEmpty: (m) => m.isEmpty,
