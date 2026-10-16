@@ -280,10 +280,12 @@ def test_price_change_does_not_alter_an_issued_prescription(
 # ---------------- pharmacist patient view ----------------
 
 
-def test_pharmacist_sees_dispensing_details_only_for_pharmacy_patients(
+def test_pharmacist_sees_dispensing_details_of_any_patient(
     client: TestClient, audit: InMemoryAuditLogger
 ) -> None:
-    assert client.get(f"/api/v1/pharmacy/patients/{P}", headers=PHARM).status_code == 404
+    # D-70: any patient (not only those with an order); staff accounts are not patients.
+    assert client.get(f"/api/v1/pharmacy/patients/{P}", headers=PHARM).status_code == 200
+    assert client.get(f"/api/v1/pharmacy/patients/{D}", headers=PHARM).status_code == 404
     issue(client)
     d = client.get(f"/api/v1/pharmacy/patients/{P}", headers=PHARM).json()
     assert d["name"] == "Siti Aminah" and d["phone"] == "012-345 6789"
@@ -337,10 +339,9 @@ def test_pharmacy_chat_both_ways(
     push: LogPushClient,
     audit: InMemoryAuditLogger,
 ) -> None:
-    # A pharmacist can only start a chat with a pharmacy patient.
-    res = client.post(f"/api/v1/pharmacy-chat/{P}/messages", json={"text": "Hi"}, headers=PHARM)
+    # D-70: a pharmacist can start a chat with any patient, but not with staff.
+    res = client.post(f"/api/v1/pharmacy-chat/{D}/messages", json={"text": "Hi"}, headers=PHARM)
     assert res.status_code == 404
-    issue(client)
     res = client.post(
         f"/api/v1/pharmacy-chat/{P}/messages",
         json={"text": "Your refill is ready for collection."},
@@ -362,3 +363,64 @@ def test_pharmacy_chat_both_ways(
     assert client.get(f"/api/v1/pharmacy-chat/{P}/messages", headers=PATIENT).status_code == 403
     logged = [e for e in audit.entries if e["action"] == "PHARMACY_MESSAGE"]
     assert len(logged) == 2 and all("refill" not in str(e) for e in logged)
+
+
+# ---------------- D-70 ----------------
+
+
+def test_d70_patients_tab_lists_every_patient(client: TestClient) -> None:
+    issue(client)
+    rows = client.get("/api/v1/pharmacy/patients", headers=PHARM).json()["patients"]
+    assert [r["name"] for r in rows] == ["Ali", "Siti Aminah"]
+    siti = rows[1]
+    assert siti["orderCount"] == 1 and siti["activeOrders"] == 1
+    found = client.get("/api/v1/pharmacy/patients?q=ali", headers=PHARM).json()["patients"]
+    assert [r["id"] for r in found] == ["u-other"]
+
+
+def test_d70_order_tracking_overview(
+    client: TestClient, order_repo: InMemoryOrderRepository
+) -> None:
+    first = issue(client)["orderId"]
+    pay(client, first)
+    res = client.get("/api/v1/orders-overview", headers=ADMIN).json()
+    assert res["counts"]["in_pharmacy"] == 1 and [o["id"] for o in res["orders"]] == [first]
+    waiting = client.get("/api/v1/orders-overview?group=awaiting_patient", headers=PHARM).json()[
+        "orders"
+    ]
+    assert waiting == []
+    by_name = client.get("/api/v1/orders-overview?q=siti", headers=PHARM).json()["orders"]
+    assert len(by_name) == 1
+    assert client.get("/api/v1/orders-overview", headers=PATIENT).status_code == 403
+    assert client.get("/api/v1/orders-overview", headers=DOCTOR).status_code == 403
+
+
+def test_d70_catalogue_medicine_can_be_corrected_and_deactivated(
+    client: TestClient, catalog: InMemoryCatalogRepository
+) -> None:
+    res = client.patch(
+        "/api/v1/catalog/amlodipine-5",
+        json={"name": "Amlodipine besylate", "strength": "5 mg", "form": "tablet", "active": False},
+        headers=ADMIN,
+    )
+    assert res.status_code == 200
+    c = catalog.items["amlodipine-5"]
+    assert c["name"] == "Amlodipine besylate" and c["active"] is False
+    bad = {
+        "items": [
+            {"catalogId": "amlodipine-5", "dose": "1", "frequency": "once_daily", "quantity": 1}
+        ]
+    }
+    assert client.post(RX_URL, json=bad, headers=DOCTOR).status_code == 404  # inactive
+
+
+def test_d70_emergency_alert_falls_back_to_the_saved_location(
+    client: TestClient, repo: InMemoryUserRepository, family_repo: Any
+) -> None:
+    repo.users[P].update({"addressLat": 5.4588, "addressLng": 100.2886, "patientId": None})
+    repo.users["u-fam"] = {"role": "family_member", "name": "Mum", "patientId": P}
+    res = client.post("/api/v1/emergency/sos", json={}, headers=PATIENT)
+    assert res.status_code in (200, 201), res.text
+    alert = next(iter(family_repo.alerts.values()))
+    assert alert["locationSource"] == "saved"
+    assert alert["gpsLocation"] == {"lat": 5.4588, "lng": 100.2886}

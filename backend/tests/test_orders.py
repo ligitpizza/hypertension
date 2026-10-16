@@ -534,26 +534,30 @@ def test_stock_management(client: TestClient) -> None:
     res = client.patch(f"/api/v1/pharmacy/stock/{stock}", json={"lowStockAt": 500}, headers=PHARM)
     assert res.json()["low"] is True
     assert client.get("/api/v1/pharmacy/stock", headers=ADMIN).status_code == 200
-    assert (
-        client.post(
-            "/api/v1/pharmacy/stock",
-            json={"name": "X", "units": 1, "expiryDate": "2027-01-01"},
-            headers=ADMIN,
-        ).status_code
-        == 403
+    # D-70: admins also manage stock, and only admins delete it.
+    res = client.post(
+        "/api/v1/pharmacy/stock",
+        json={"name": "Xyz 1mg", "units": 1, "expiryDate": "2027-01-01"},
+        headers=ADMIN,
     )
+    assert res.status_code == 201
+    assert client.delete(f"/api/v1/pharmacy/stock/{stock}", headers=PHARM).status_code == 403
+    assert client.delete(f"/api/v1/pharmacy/stock/{stock}", headers=ADMIN).status_code == 204
     assert client.get("/api/v1/pharmacy/stock", headers=PATIENT).status_code == 403
 
 
-def test_patient_lookup_only_covers_pharmacy_patients(
+def test_patient_lookup_covers_every_patient(
     client: TestClient, repo: InMemoryUserRepository
 ) -> None:
-    repo.users["u-x"] = {"role": "patient", "name": "Not a pharmacy patient"}
+    repo.users["u-x"] = {"role": "patient", "name": "No orders yet"}
     issue(client)
     found = client.get("/api/v1/pharmacy/patients?q=siti", headers=PHARM).json()["patients"]
     assert [p["id"] for p in found] == [P]
     assert len(found[0]["regimen"]) == 1
-    assert client.get("/api/v1/pharmacy/patients?q=not", headers=PHARM).json()["patients"] == []
+    # D-70: patients without an order are listed too; staff never are.
+    other = client.get("/api/v1/pharmacy/patients?q=no orders", headers=PHARM).json()
+    assert [p["id"] for p in other["patients"]] == ["u-x"]
+    assert client.get("/api/v1/pharmacy/patients?q=tan", headers=PHARM).json()["patients"] == []
 
 
 # ---------------- UC13.4 / UC13.5 delivery ----------------

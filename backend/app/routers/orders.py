@@ -57,11 +57,17 @@ from app.schemas.orders import (
 from app.services.catalog import CatalogRepository, catalog_view, get_catalog_repository
 from app.services.medications import MYT
 from app.services.orders import (
+    AWAITING_CONFIRMATION,
     AWAITING_PAYMENT,
+    COLLECTED,
+    DELIVERED,
     FAILED,
     OUT_OF_STOCK,
     PHARMACY_QUEUE,
+    PREPARING,
+    READY_FOR_COLLECTION,
     READY_FOR_DELIVERY,
+    SKIPPED,
     OrderError,
     OrderService,
     get_order_service,
@@ -499,7 +505,7 @@ def list_stock(
 @router.post("/pharmacy/stock", status_code=status.HTTP_201_CREATED)
 def add_stock(
     body: StockRequest,
-    user: CurrentUser = Depends(pharmacist_only),
+    user: CurrentUser = Depends(pharmacy_staff),
     svc: OrderService = Depends(get_order_service),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
@@ -533,7 +539,7 @@ def _stock_or_404(svc: OrderService, stock_id: str) -> dict[str, Any]:
 def edit_stock(
     stock_id: str,
     body: StockEditRequest,
-    user: CurrentUser = Depends(pharmacist_only),
+    user: CurrentUser = Depends(pharmacy_staff),
     svc: OrderService = Depends(get_order_service),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
@@ -559,7 +565,7 @@ def edit_stock(
 def receive_stock(
     stock_id: str,
     body: ReceiveStockRequest,
-    user: CurrentUser = Depends(pharmacist_only),
+    user: CurrentUser = Depends(pharmacy_staff),
     svc: OrderService = Depends(get_order_service),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
@@ -591,38 +597,49 @@ def lookup_patients(
     _: CurrentUser = Depends(pharmacist_only),
     svc: OrderService = Depends(get_order_service),
 ) -> dict[str, Any]:
-    """Patient lookup (Fig 4.3.13.1), limited to patients the pharmacy serves: those with an
-    order or a recurring prescription (D-69). Shows the regimen and recent orders only."""
+    """Patients tab and lookup (Fig 4.3.13.1; D-70: every patient). Lists account details,
+    the recurring regimen and order counts; the dispensing view has the rest."""
     term = q.strip().lower()
-    by_patient: dict[str, list[dict[str, Any]]] = {uid: [] for uid in svc.repo.order_patients()}
+    regimen: dict[str, list[dict[str, Any]]] = {}
     for rx in svc.repo.recurring_prescriptions():
-        by_patient.setdefault(str(rx.get("patientId")), []).append(rx)
+        regimen.setdefault(str(rx.get("patientId")), []).append(rx)
+    orders: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+    for i, o in svc.repo.all_orders():
+        orders.setdefault(str(o.get("patientId")), []).append((i, o))
     out = []
-    for uid, rxs in by_patient.items():
-        u = svc.repo.user(uid) or {}
-        hay = f"{u.get('name') or ''} {u.get('email') or ''} {uid}".lower()
-        if term and term not in hay:
+    for uid, u in svc.repo.patients():
+        hay = f"{u.get('name') or ''} {u.get('email') or ''} {u.get('icNumber') or ''} {uid}"
+        if term and term not in hay.lower():
             continue
-        orders = _newest_first(svc.repo.orders_for_patient(uid))[:5]
+        mine = _newest_first(orders.get(uid, []))
         out.append(
             {
                 "id": uid,
                 "name": u.get("name"),
                 "email": u.get("email"),
                 "phone": u.get("phone"),
+                "gender": u.get("gender"),
+                "age": _age(u.get("dateOfBirth")),
+                "isActive": u.get("isActive", True) is not False,
+                "orderCount": len(mine),
+                "activeOrders": sum(
+                    1
+                    for _, o in mine
+                    if o.get("fulfilmentStatus") not in (DELIVERED, COLLECTED, SKIPPED)
+                ),
                 "regimen": [
                     {
                         "id": r["id"],
                         "medicationDetails": r.get("medicationDetails"),
                         "monthlyPrice": r.get("monthlyPrice"),
                     }
-                    for r in rxs
+                    for r in regimen.get(uid, [])
                 ],
-                "recentOrders": [_view(svc, i, o) for i, o in orders],
+                "recentOrders": [_view(svc, i, o) for i, o in mine[:5]],
             }
         )
     out.sort(key=lambda p: str(p["name"] or "").lower())
-    return {"patients": out[:20]}
+    return {"patients": out[:200]}
 
 
 # ---------------- admin: FR-11.4 delivery oversight ----------------
@@ -801,14 +818,11 @@ def pharmacy_patient(
     svc: OrderService = Depends(get_order_service),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
-    """Dispensing details for a patient the pharmacy serves (D-69): profile, allergies and
+    """Dispensing details for a patient (D-69, D-70: any patient): profile, allergies and
     conditions, medicines, prescriptions and orders. No readings, risk, notes or files."""
     from app.services.settings import parse_profile_field
 
-    served = patient_id in svc.repo.order_patients() or any(
-        rx.get("patientId") == patient_id for rx in svc.repo.recurring_prescriptions()
-    )
-    u = svc.repo.user(patient_id) if served else None
+    u = svc.repo.user(patient_id)  # D-70: any patient
     if u is None or u.get("role") != UserRole.PATIENT.value:
         raise ApiError("PATIENT_NOT_FOUND", "Patient not found.", status.HTTP_404_NOT_FOUND)
     profile = svc.repo.health_profile(patient_id) or {}
@@ -923,6 +937,12 @@ def edit_catalog_item(
         update["unitPrice"] = round(body.unitPrice, 2)
     if body.active is not None:
         update["active"] = body.active
+    for field in ("name", "strength", "drugClass", "form"):  # D-70
+        value = getattr(body, field)
+        if value is not None:
+            update[field] = value
+            if field == "form":
+                update["unitLabel"] = value
     catalog.update(item_id, update)
     audit.log(
         user_id=user.uid,
@@ -935,3 +955,62 @@ def edit_catalog_item(
         target_id=item_id,
     )
     return catalog_view(item_id, {**c, **update})
+
+
+# ---------------- D-70: order tracking and inventory CRUD ----------------
+
+ORDER_GROUPS: dict[str, tuple[str, ...]] = {
+    "awaiting_patient": (AWAITING_CONFIRMATION, AWAITING_PAYMENT, SKIPPED),
+    "in_pharmacy": (PREPARING, OUT_OF_STOCK, READY_FOR_COLLECTION),
+    "out_for_delivery": (READY_FOR_DELIVERY,),
+    "completed": (DELIVERED, COLLECTED),
+    "failed": (FAILED,),
+}
+
+
+@router.get("/orders-overview")
+def orders_overview(
+    group: str = "all",
+    q: str = "",
+    _: CurrentUser = Depends(pharmacy_staff),
+    svc: OrderService = Depends(get_order_service),
+) -> dict[str, Any]:
+    """Every order with its status for pharmacists and admins (D-70 Tracking / Orders tabs),
+    newest first; [group] narrows to one stage, [q] matches patient, medicine or ref."""
+    wanted = ORDER_GROUPS.get(group)
+    term = q.strip().lower()
+    rows = []
+    counts = {g: 0 for g in ORDER_GROUPS}
+    for i, o in _newest_first(svc.repo.all_orders()):
+        o = _fresh(svc, i, o)
+        status_ = o.get("fulfilmentStatus")
+        for g, members in ORDER_GROUPS.items():
+            if status_ in members:
+                counts[g] += 1
+        if wanted is not None and status_ not in wanted:
+            continue
+        view = _view(svc, i, o)
+        hay = f"{view['ref']} {o.get('patientName') or ''} {o.get('medicationDetails') or ''}"
+        if term and term not in hay.lower():
+            continue
+        rows.append(view)
+    return {"orders": rows[:300], "counts": counts}
+
+
+@router.delete("/pharmacy/stock/{stock_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_stock(
+    stock_id: str,
+    user: CurrentUser = Depends(admin_only),
+    svc: OrderService = Depends(get_order_service),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> None:
+    """D-70: only admins delete stock items."""
+    s = _stock_or_404(svc, stock_id)
+    svc.repo.delete_stock(stock_id)
+    audit.log(
+        user_id=user.uid,
+        action="DELETE_STOCK_ITEM",
+        details=f"Stock item deleted: {s.get('name')}.",
+        target_type=Collection.MEDICATION_STOCK.value,
+        target_id=stock_id,
+    )

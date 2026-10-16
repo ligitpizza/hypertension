@@ -192,6 +192,14 @@ class EmergencyAlerts:
     ) -> list[str]:
         patient = self.repo.user(patient_id) or {}
         name = str(patient.get("name") or "Your family member")
+        # D-70: without a live GPS fix, family gets the patient's saved (map-picked) place.
+        source = "gps"
+        if not location and patient.get("addressLat") is not None:
+            location = {
+                "lat": float(patient["addressLat"]),
+                "lng": float(patient["addressLng"]),
+            }
+            source = "saved"
         recent = [
             (i, a)
             for i, a in self.repo.alerts_since(patient_id, now - REPEAT_WINDOW)
@@ -199,10 +207,15 @@ class EmergencyAlerts:
         ]
         if trigger != "sos" and recent:
             # The family was alerted moments ago: only refresh where the patient is.
-            if location:
+            if location and source == "gps":
                 for alert_id, _a in recent:
                     self.repo.update_alert(
-                        alert_id, {"gpsLocation": location, "locationUpdatedAt": now}
+                        alert_id,
+                        {
+                            "gpsLocation": location,
+                            "locationSource": "gps",
+                            "locationUpdatedAt": now,
+                        },
                     )
             return []
         personal = parse_profile_field(
@@ -224,6 +237,7 @@ class EmergencyAlerts:
                 "familyMemberId": member,
                 "trigger": trigger,
                 "gpsLocation": location,
+                "locationSource": source if location else None,
                 "sentAt": now,
             }
             if risk_score_id:
@@ -309,7 +323,8 @@ class EmergencyAlerts:
         for alert_id, a in self.repo.alerts_since(patient_id, now - OPEN_WINDOW):
             if a.get("acknowledgedAt") is None:
                 self.repo.update_alert(
-                    alert_id, {"gpsLocation": location, "locationUpdatedAt": now}
+                    alert_id,
+                    {"gpsLocation": location, "locationSource": "gps", "locationUpdatedAt": now},
                 )
                 updated += 1
         return updated

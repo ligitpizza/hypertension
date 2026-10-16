@@ -217,6 +217,16 @@ class OrderRepository(Protocol):
         """Patients with at least one order: the pharmacy's patients (D-69)."""
         ...
 
+    def patients(self) -> list[tuple[str, dict[str, Any]]]:
+        """Every patient account (D-70 pharmacy Patients tab)."""
+        ...
+
+    def all_orders(self) -> list[tuple[str, dict[str, Any]]]:
+        """Every order (D-70 tracking)."""
+        ...
+
+    def delete_stock(self, stock_id: str) -> None: ...
+
     def staff(self, role: str) -> list[str]:
         """Uids of active staff with [role] (pharmacists to notify, admins to flag)."""
         ...
@@ -303,6 +313,18 @@ class FirestoreOrderRepository:
     def order_patients(self) -> set[str]:
         docs = self._col(Collection.MEDICATION_ORDERS).select(["patientId"]).stream()
         return {str(d.get("patientId")) for d in docs if d.get("patientId")}
+
+    def patients(self) -> list[tuple[str, dict[str, Any]]]:
+        q = self._col(Collection.USERS).where(
+            filter=firestore.FieldFilter("role", "==", UserRole.PATIENT.value)
+        )
+        return _pairs(q)
+
+    def all_orders(self) -> list[tuple[str, dict[str, Any]]]:
+        return _pairs(self._col(Collection.MEDICATION_ORDERS))
+
+    def delete_stock(self, stock_id: str) -> None:
+        self._col(Collection.MEDICATION_STOCK).document(stock_id).delete()
 
     def staff(self, role: str) -> list[str]:
         q = self._col(Collection.USERS).where(filter=firestore.FieldFilter("role", "==", role))

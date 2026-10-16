@@ -80,6 +80,11 @@ class CatalogItemRequest(_Body):
 class CatalogEditRequest(_Body):
     unitPrice: float | None = Field(default=None, ge=0.01, le=1000)
     active: bool | None = None
+    # D-70: admins and pharmacists correct the medicine itself.
+    name: str | None = Field(default=None, min_length=2, max_length=80)
+    strength: str | None = Field(default=None, min_length=1, max_length=30)
+    drugClass: str | None = Field(default=None, max_length=60)
+    form: Literal["tablet", "capsule", "syrup", "injection", "other"] | None = None
 
 
 class GrabWebhook(BaseModel):

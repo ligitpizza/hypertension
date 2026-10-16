@@ -771,6 +771,15 @@ class InMemoryOrderRepository:
     def order_patients(self) -> set[str]:
         return {str(o.get("patientId")) for o in self.orders.values()}
 
+    def patients(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(u, dict(d)) for u, d in self._users.users.items() if d.get("role") == "patient"]
+
+    def all_orders(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(o)) for i, o in self.orders.items()]
+
+    def delete_stock(self, stock_id: str) -> None:
+        self.stock_items.pop(stock_id, None)
+
     def return_stock(self, stock_id: str, units: int) -> None:
         self.stock_items[stock_id]["units"] = int(self.stock_items[stock_id]["units"]) + units
 

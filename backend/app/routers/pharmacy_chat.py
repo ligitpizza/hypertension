@@ -4,8 +4,8 @@ Patient     GET/POST /pharmacy-chat/messages
 Pharmacist  GET      /pharmacy-chat/conversations
             GET/POST /pharmacy-chat/{patientId}/messages
 
-A pharmacist may write only to patients the pharmacy serves (an order or a recurring
-prescription). Message text is never written to the audit log.
+A pharmacist may write to any patient (D-70). Message text is never written to the
+audit log.
 """
 
 from __future__ import annotations
@@ -113,11 +113,9 @@ def pharmacist_conversations(
 
 
 def _served(orders: OrderRepository, patient_id: str) -> dict[str, Any]:
+    """D-70: a pharmacist may message any patient account."""
     patient = orders.user(patient_id)
-    served = patient_id in orders.order_patients() or any(
-        rx.get("patientId") == patient_id for rx in orders.recurring_prescriptions()
-    )
-    if patient is None or patient.get("role") != UserRole.PATIENT.value or not served:
+    if patient is None or patient.get("role") != UserRole.PATIENT.value:
         raise ApiError("PATIENT_NOT_FOUND", "Patient not found.", status.HTTP_404_NOT_FOUND)
     return patient
 
