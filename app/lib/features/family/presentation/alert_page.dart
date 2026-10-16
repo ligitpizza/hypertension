@@ -151,7 +151,9 @@ class _AlertPageState extends ConsumerState<AlertPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Phone location · updated ${agoLabel(a.locationTime, now)}',
+                    a.savedLocation
+                        ? 'Saved home location (their phone shared no live location)'
+                        : 'Phone location · updated ${agoLabel(a.locationTime, now)}',
                     key: const Key('alert-location-time'),
                     style: theme.textTheme.bodySmall,
                   ),

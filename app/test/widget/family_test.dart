@@ -156,6 +156,7 @@ EmergencyAlert alert({
   bool located = true,
   bool acked = false,
   String? phone = '012-3456789',
+  String? source,
 }) => EmergencyAlert(
   id: 'e1',
   patientId: 'p1',
@@ -166,6 +167,7 @@ EmergencyAlert alert({
   lng: located ? 101.6869 : null,
   patientPhone: phone,
   acknowledgedAt: acked ? now : null,
+  locationSource: source,
 );
 
 late FakeFamilyRepository repo;
@@ -326,6 +328,18 @@ void main() {
   });
 
   group('Fig 4.3.16.3 emergency alert (UC15.2, UC15.3)', () {
+    tallTest('D-70 a saved place is labelled as such', (t) async {
+      repo
+        ..linked = 'p1'
+        ..alerts = [alert(source: 'saved')];
+      await t.pumpWidget(app('/family/alert/e1'));
+      await t.pumpAndSettle();
+      expect(
+        find.text('Saved home location (their phone shared no live location)'),
+        findsOneWidget,
+      );
+    });
+
     tallTest('reading, map with update time, call, navigate, acknowledge', (t) async {
       repo
         ..linked = 'p1'

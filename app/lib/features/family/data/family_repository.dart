@@ -49,6 +49,7 @@ class EmergencyAlert {
     this.lng,
     this.patientPhone,
     this.locationUpdatedAt,
+    this.locationSource,
     this.acknowledgedAt,
   });
 
@@ -63,6 +64,11 @@ class EmergencyAlert {
   final double? lng;
   final String? patientPhone;
   final DateTime? locationUpdatedAt;
+
+  /// D-70: 'gps' (live phone location) or 'saved' (the patient's map-picked place).
+  final String? locationSource;
+
+  bool get savedLocation => locationSource == 'saved';
   final DateTime? acknowledgedAt;
 
   bool get hasLocation => lat != null && lng != null;
@@ -89,6 +95,7 @@ class EmergencyAlert {
       lng: geo is GeoPoint ? geo.longitude : null,
       patientPhone: d['patientPhone'] as String?,
       locationUpdatedAt: (d['locationUpdatedAt'] as Timestamp?)?.toDate(),
+      locationSource: d['locationSource'] as String?,
       acknowledgedAt: (d['acknowledgedAt'] as Timestamp?)?.toDate(),
     );
   }
