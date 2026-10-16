@@ -803,6 +803,10 @@ class InMemoryOrderRepository:
     def home_deliveries(self) -> list[tuple[str, dict[str, Any]]]:
         return self._where(lambda o: o.get("method") == "home_delivery")
 
+    def order_by_courier_ref(self, ref: str) -> tuple[str, dict[str, Any]] | None:
+        found = self._where(lambda o: o.get("courierRef") == ref)
+        return found[0] if found else None
+
     def add_transaction(self, tx_id: str, data: dict[str, Any]) -> None:
         self.transactions[tx_id] = dict(data)
 

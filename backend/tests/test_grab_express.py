@@ -117,9 +117,10 @@ def test_grab_statuses_map_to_tracking_stages(status: str, stages: list[str]) ->
 
 def test_simulator_unless_grab_and_pharmacy_are_configured() -> None:
     assert isinstance(build_courier_client(dev_settings()), FakeGrabClient)
-    no_pharmacy = dev_settings(grab_client_id="cid", grab_client_secret="s")
+    no_pharmacy = dev_settings(courier="grab", grab_client_id="cid", grab_client_secret="s")
     assert isinstance(build_courier_client(no_pharmacy), FakeGrabClient)
     ready = dev_settings(
+        courier="grab",
         grab_client_id="cid",
         grab_client_secret="s",
         pharmacy_address="CareFlow Pharmacy",

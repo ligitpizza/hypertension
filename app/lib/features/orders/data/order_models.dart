@@ -70,6 +70,8 @@ class MedicationOrder {
     this.deliveryPhone,
     this.suggestedPhone,
     this.courierRef,
+    this.courierBrand = 'Lalamove',
+    this.trackingUrl,
     this.failureReason,
     this.cycleDate,
     this.paidAt,
@@ -108,6 +110,12 @@ class MedicationOrder {
   /// The patient's profile phone, to prefill the contact number (patient view only).
   final String? suggestedPhone;
   final String? courierRef;
+
+  /// D-68: the configured courier, for "delivered by Lalamove".
+  final String courierBrand;
+
+  /// The courier's live tracking page, when it gives one (Lalamove share link).
+  final String? trackingUrl;
   final String? failureReason;
   final DateTime? cycleDate;
   final DateTime? paidAt;
@@ -154,6 +162,8 @@ class MedicationOrder {
     deliveryPhone: d['deliveryPhone'] as String?,
     suggestedPhone: d['suggestedPhone'] as String?,
     courierRef: d['courierRef'] as String?,
+    courierBrand: d['courierBrand'] as String? ?? 'Lalamove',
+    trackingUrl: d['trackingUrl'] as String?,
     failureReason: d['failureReason'] as String?,
     cycleDate: _time(d['cycleDate']),
     paidAt: _time(d['paidAt']),

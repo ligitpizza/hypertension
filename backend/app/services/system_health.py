@@ -164,15 +164,15 @@ def check(probe: Probe, reader: AuditReader, settings: Settings, now: datetime) 
         "operational" if live_stripe else "simulated",
         note="Stripe test mode" if live_stripe else "Simulated card form (no Stripe keys).",
     )
-    # D-67: GrabExpress sandbox once a partner project's credentials are set; else D-11.
+    # D-68: Lalamove (or Grab) sandbox once keys and the pharmacy location are set; else D-11.
     from app.integrations.delivery import build_courier_client
 
-    grab = not build_courier_client(settings).simulated
+    courier = build_courier_client(settings)
     add(
         "grab",
-        "Grab delivery API",
-        "operational" if grab else "simulated",
-        note="GrabExpress sandbox" if grab else "Simulated courier (about 1 min per stage).",
+        f"{courier.brand} delivery API",
+        "simulated" if courier.simulated else "operational",
+        note="Simulated courier (about 1 min per stage)." if courier.simulated else courier.name,
     )
 
     statuses = {s["status"] for s in services}

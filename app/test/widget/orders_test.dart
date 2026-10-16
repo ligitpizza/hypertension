@@ -311,6 +311,46 @@ void main() {
       expect(find.textContaining('GRB-8492'), findsWidgets);
     });
 
+    tallTest('D-68 courier name and its tracking page', (t) async {
+      final opened = <Uri>[];
+      repo.orders = {
+        id: MedicationOrder.fromJson({
+          'id': id,
+          'ref': 'CF-ABC123',
+          'patientId': 'u-patient',
+          'prescriptionId': 'rx1',
+          'medicationDetails': 'Amlodipine 5mg',
+          'fulfilmentStatus': 'ready_for_delivery',
+          'paymentStatus': 'paid',
+          'method': 'home_delivery',
+          'deliveryStatus': 'dispatched',
+          'courierRef': '3607496166784815293',
+          'courierBrand': 'Lalamove',
+          'trackingUrl': 'https://share.sandbox.lalamove.com?MY100',
+          'amount': 15,
+          'deliveryFee': 5,
+          'total': 20,
+        }),
+      };
+      await t.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ordersRepositoryProvider.overrideWithValue(repo),
+            openUrlProvider.overrideWithValue((u) async {
+              opened.add(u);
+              return true;
+            }),
+          ],
+          child: MaterialApp(home: OrderTrackPage(orderId: id)),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('Lalamove booking 3607496166784815293'), findsOneWidget);
+      await t.tap(find.byKey(const Key('courier-tracking')));
+      await t.pumpAndSettle();
+      expect(opened.single.host, 'share.sandbox.lalamove.com');
+    });
+
     tallTest('self-collection shows the collection slip', (t) async {
       repo.orders = {
         id: anOrder(

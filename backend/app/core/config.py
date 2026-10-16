@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_publishable_key: str = ""
     stripe_webhook_secret: str = ""
+    # D-68 courier: "lalamove" or "grab"; the simulator stands in when its keys are missing.
+    courier: Literal["lalamove", "grab"] = "lalamove"
+    # Lalamove API v3 SANDBOX keys (pk_test_/sk_test_); live keys are refused.
+    lalamove_api_key: str = ""
+    lalamove_api_secret: str = ""
     # D-67 GrabExpress sandbox: OAuth client from the Grab partner project; empty = simulator.
     grab_client_id: str = ""
     grab_client_secret: str = ""

@@ -284,7 +284,7 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
           key: const Key('method-delivery'),
           icon: Icons.local_shipping_outlined,
           title: 'Home delivery',
-          subtitle: '+${rm(deliveryFeeRm)} · delivered by Grab',
+          subtitle: '+${rm(deliveryFeeRm)} · delivered by ${o.courierBrand}',
           selected: _method == homeDelivery,
           onTap: open ? () => setState(() => _method = homeDelivery) : null,
         ),
@@ -347,9 +347,9 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
             controller: _phone,
             keyboardType: TextInputType.phone,
             maxLength: 20,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Contact number for the courier',
-              helperText: 'Grab only gets your first name and this number.',
+              helperText: '${o.courierBrand} only gets your first name and this number.',
               border: OutlineInputBorder(),
             ),
           ),

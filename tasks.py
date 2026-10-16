@@ -35,6 +35,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
                           secret, if set) from backend/.env in Secret Manager
   set-grab-secrets        One-time (D-67): store the GrabExpress sandbox client secret (and
                           webhook token, if set) from backend/.env in Secret Manager
+  set-lalamove-secrets    One-time (D-68): store the Lalamove sandbox API secret from
+                          backend/.env in Secret Manager
   build-apk               Release APKs for the patient and family flavors
   phone-live              Build release apps and install the live-cloud patient app on
                           the phone (or double-click phone-live.cmd)
@@ -79,6 +81,8 @@ STRIPE_WEBHOOK_SECRET = "stripe-webhook-secret"
 # GrabExpress sandbox OAuth secret and webhook token (D-67); created by set-grab-secrets.
 GRAB_SECRET = "grab-client-secret"
 GRAB_WEBHOOK_SECRET = "grab-webhook-secret"
+# Lalamove sandbox API secret (D-68); created by set-lalamove-secrets.
+LALAMOVE_SECRET = "lalamove-api-secret"
 # demo- prefix: emulator-only project, can never reach the cloud (rules tests).
 RULES_TEST_PROJECT = "demo-careflow-rules"
 
@@ -388,6 +392,14 @@ def task_set_grab_secrets() -> None:
         print("No GRAB_WEBHOOK_SECRET yet; delivery status is read from Grab instead.")
 
 
+def task_set_lalamove_secrets() -> None:
+    """Store LALAMOVE_API_SECRET for Cloud Run (D-68). Sandbox keys only."""
+    secret = _local_env("LALAMOVE_API_SECRET")
+    if secret and not secret.startswith("sk_test"):
+        sys.exit("LALAMOVE_API_SECRET must be a sandbox key (sk_test_...).")
+    _store_secret(LALAMOVE_SECRET, "LALAMOVE_API_SECRET", "Lalamove sandbox API secret")
+
+
 def task_deploy_backend() -> None:
     brevo = _secret_exists(BREVO_SECRET)
     stripe = _secret_exists(STRIPE_SECRET)
@@ -413,6 +425,9 @@ def task_deploy_backend() -> None:
             f"STRIPE_PUBLISHABLE_KEY={_local_env('STRIPE_PUBLISHABLE_KEY')}",
             # D-66 testing aid; set DEV_ORDER_TOOLS=false in backend/.env for real use.
             f"DEV_ORDER_TOOLS={_local_env('DEV_ORDER_TOOLS') or 'false'}",
+            # D-68 courier choice; the Lalamove API key (pk_test_) identifies, the secret signs.
+            f"COURIER={_local_env('COURIER') or 'lalamove'}",
+            f"LALAMOVE_API_KEY={_local_env('LALAMOVE_API_KEY')}",
             # D-67 GrabExpress sandbox: client id and pickup point are not secret.
             f"GRAB_CLIENT_ID={_local_env('GRAB_CLIENT_ID')}",
             f"PHARMACY_ADDRESS={_local_env('PHARMACY_ADDRESS')}",
@@ -471,12 +486,16 @@ def task_deploy_backend() -> None:
             "Note: no Stripe secret yet, so payments use the simulated card form. "
             "Run: python tasks.py set-stripe-secrets --yes"
         )
+    if _secret_exists(LALAMOVE_SECRET):
+        secrets.append(f"LALAMOVE_API_SECRET={LALAMOVE_SECRET}:latest")
+    else:
+        print("Note: no Lalamove secret yet. Run: python tasks.py set-lalamove-secrets --yes")
     if _secret_exists(GRAB_SECRET):
         secrets.append(f"GRAB_CLIENT_SECRET={GRAB_SECRET}:latest")
         if _secret_exists(GRAB_WEBHOOK_SECRET):
             secrets.append(f"GRAB_WEBHOOK_SECRET={GRAB_WEBHOOK_SECRET}:latest")
     else:
-        print("Note: no Grab secret yet, so deliveries use the simulated courier (D-11).")
+        print("Note: no Grab secret (only needed with COURIER=grab).")
     if secrets:
         cmd += ["--set-secrets", ",".join(secrets)]
     confirm_cloud(
@@ -1020,6 +1039,7 @@ TASKS = {
     "set-brevo-secret": task_set_brevo_secret,
     "set-stripe-secrets": task_set_stripe_secrets,
     "set-grab-secrets": task_set_grab_secrets,
+    "set-lalamove-secrets": task_set_lalamove_secrets,
     "seed-catalog-live": task_seed_catalog_live,
     "build-apk": task_build_apk,
     "backend-url": task_backend_url,

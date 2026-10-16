@@ -313,7 +313,7 @@ class _ReadyDialogState extends State<_ReadyDialog> {
           if (widget.order.isDelivery)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('A Grab courier is booked as soon as you confirm.'),
+              child: Text('A courier is booked as soon as you confirm.'),
             ),
         ],
       ),

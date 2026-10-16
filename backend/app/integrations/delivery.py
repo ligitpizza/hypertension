@@ -1,18 +1,23 @@
-"""Courier adapter (FR-13.4, UC13.4, UC13.5; D-11, D-66, D-67).
+"""Courier adapter (FR-13.4, UC13.4, UC13.5; D-11, D-66, D-67, D-68).
 
-Two implementations of one interface:
-- `GrabExpressClient`: GrabExpress sandbox (`partner-api.grab.com/grab-express-sandbox`),
-  used when Grab credentials and the pharmacy location are configured. Access needs a
-  Grab partner project (requested 2026-10-16).
-- `FakeGrabClient`: simulator; the parcel moves dispatched -> picked_up -> in_transit ->
-  delivered about one minute per stage.
+Implementations of one interface, picked by `COURIER` (D-68):
+- `LalamoveClient` (lalamove): Lalamove API v3 sandbox. Real bookings; the sandbox has no
+  drivers, so the stages after booking follow the simulator clock unless Lalamove reports
+  something further along.
+- `GrabExpressClient` (grab): GrabExpress sandbox; access needs a Grab partner project
+  (requested 2026-10-16).
+- `FakeGrabClient`: simulator (D-11) when the chosen courier has no keys; the parcel moves
+  dispatched -> picked_up -> in_transit -> delivered about one minute per stage.
 
-Grab only receives a generic "Pharmacy parcel" and the patient's first name and contact
-number; the medicine never leaves CareFlow (D-67).
+Couriers only receive a generic parcel and the patient's first name and contact number;
+the medicine never leaves CareFlow (D-67).
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
 import threading
 import time
@@ -79,11 +84,19 @@ class DispatchError(Exception):
 
 class CourierClient(Protocol):
     name: str
+    # Shown to patients ("delivered by Lalamove").
+    brand: str
     simulated: bool
     # Whether polling is cheap enough to run for every order in a list.
     poll_in_lists: bool
+    # The admin may fail a delivery on purpose (FR-13.5 demo): simulator or sandbox driver.
+    demo_failures: bool
 
     def dispatch(self, order_id: str, dest: Destination, now: datetime) -> Dispatch: ...
+
+    def cancel(self, delivery_id: str) -> None:
+        """Best effort; never raises."""
+        ...
 
     def poll(self, delivery_id: str, dispatched_at: datetime, now: datetime) -> list[CourierUpdate]:
         """Statuses the courier has reached so far, oldest first."""
@@ -94,9 +107,18 @@ class CourierClient(Protocol):
 
 
 class FakeGrabClient:
-    name = "Grab (simulated)"
+    """The simulated courier (D-11); [brand] follows the configured courier."""
+
     simulated = True
     poll_in_lists = True
+    demo_failures = True
+
+    def __init__(self, brand: str = "Lalamove") -> None:
+        self.brand = brand
+        self.name = f"{brand} (simulated)"
+
+    def cancel(self, delivery_id: str) -> None:
+        return None
 
     def dispatch(self, order_id: str, dest: Destination, now: datetime) -> Dispatch:
         if not dest.address.strip():
@@ -168,8 +190,10 @@ def _time(v: Any) -> datetime | None:
 
 class GrabExpressClient:
     name = "GrabExpress (sandbox)"
+    brand = "Grab"
     simulated = False
     poll_in_lists = False  # one API call per order: only on the order screen and the sweep
+    demo_failures = False
 
     def __init__(
         self,
@@ -284,6 +308,12 @@ class GrabExpressClient:
         log.info("Grab delivery %s created", delivery_id)
         return Dispatch(str(delivery_id), eta, body.get("trackingURL") or None)
 
+    def cancel(self, delivery_id: str) -> None:
+        try:
+            self._call("DELETE", f"/v1/deliveries/{delivery_id}")
+        except DispatchError:
+            log.info("Grab delivery %s not cancelled", delivery_id)
+
     def poll(self, delivery_id: str, dispatched_at: datetime, now: datetime) -> list[CourierUpdate]:
         try:
             body = self._call("GET", f"/v1/deliveries/{delivery_id}")
@@ -294,22 +324,198 @@ class GrabExpressClient:
         return grab_updates(str(body.get("status") or ""), now, reason)
 
 
-def build_courier_client(settings: Settings) -> CourierClient:
-    ready = (
-        settings.grab_client_id
-        and settings.grab_client_secret
-        and settings.pharmacy_address
-        and settings.pharmacy_lat is not None
-        and settings.pharmacy_lng is not None
-    )
-    if ready:
-        return GrabExpressClient(
-            settings.grab_client_id,
-            settings.grab_client_secret,
-            Place(settings.pharmacy_address, settings.pharmacy_lat, settings.pharmacy_lng),  # type: ignore[arg-type]
-            settings.pharmacy_phone,
+# ---------------- Lalamove (D-68) ----------------
+
+LALAMOVE_SANDBOX_URL = "https://rest.sandbox.lalamove.com"
+
+# Lalamove status -> CareFlow stages reached (in order).
+_LALAMOVE_REACHED = {"ASSIGNING_DRIVER": 1, "ON_GOING": 1, "PICKED_UP": 3, "COMPLETED": 4}
+LALAMOVE_FAILED = {"CANCELED", "CANCELLED", "REJECTED", "EXPIRED"}
+
+
+def e164(phone: str) -> str:
+    """Lalamove wants E.164 with '+'; Malaysian local numbers get +60."""
+    return "+" + grab_phone(phone)
+
+
+def lalamove_signature(secret: str, stamp: str, method: str, path: str, body: str) -> str:
+    """API v3: lowercase hex HMAC-SHA256 of "<ms>\r\n<METHOD>\r\n<path>\r\n\r\n<body>"."""
+    message = f"{stamp}\r\n{method}\r\n{path}\r\n\r\n{body}"
+    return hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+
+
+class LalamoveClient:
+    brand = "Lalamove"
+    simulated = False
+    poll_in_lists = False
+    # The sandbox has no drivers: stages after booking follow the simulator clock.
+    driver_simulated = True
+    demo_failures = True
+
+    def __init__(
+        self,
+        api_key: str,
+        api_secret: str,
+        pharmacy: Place,
+        pharmacy_phone: str,
+        market: str = "MY",
+        service_type: str = "MOTORCYCLE",
+        base_url: str = LALAMOVE_SANDBOX_URL,
+    ) -> None:
+        if not api_key.startswith("pk_test") or not api_secret.startswith("sk_test"):
+            raise DispatchError("Only Lalamove sandbox keys are allowed (D-68).")
+        self._key = api_key
+        self._secret = api_secret
+        self._pharmacy = pharmacy
+        self._pharmacy_phone = pharmacy_phone
+        self._market = market
+        self._service = service_type
+        self._base = base_url
+        self.name = "Lalamove (sandbox, driver simulated)"
+        self._clock = FakeGrabClient("Lalamove")
+
+    def _call(self, method: str, path: str, data: dict[str, Any] | None = None) -> Any:
+        body = json.dumps({"data": data}, separators=(",", ":")) if data is not None else ""
+        stamp = str(int(time.time() * 1000))
+        signature = lalamove_signature(self._secret, stamp, method, path, body)
+        try:
+            res = httpx.request(
+                method,
+                f"{self._base}{path}",
+                content=body or None,
+                headers={
+                    "Authorization": f"hmac {self._key}:{stamp}:{signature}",
+                    "Market": self._market,
+                    "Request-ID": str(uuid.uuid4()),
+                    "Content-Type": "application/json",
+                },
+                timeout=20.0,
+            )
+        except httpx.HTTPError as exc:
+            raise DispatchError(f"Lalamove request failed: {exc}") from exc
+        if res.status_code >= 300:
+            raise DispatchError(f"Lalamove refused the request (HTTP {res.status_code}).")
+        return res.json().get("data", {}) if res.content else {}
+
+    def dispatch(self, order_id: str, dest: Destination, now: datetime) -> Dispatch:
+        if dest.lat is None or dest.lng is None:
+            raise DispatchError("The delivery location is missing. Ask the patient to reschedule.")
+        if not dest.phone:
+            raise DispatchError("The patient's contact number is missing.")
+        # Quotes expire within about 30 s, so the order is placed straight after.
+        quote = self._call(
+            "POST",
+            "/v3/quotations",
+            {
+                "serviceType": self._service,
+                "language": "en_MY",
+                "stops": [
+                    {
+                        "coordinates": {
+                            "lat": f"{self._pharmacy.lat:.7f}",
+                            "lng": f"{self._pharmacy.lng:.7f}",
+                        },
+                        "address": self._pharmacy.address,
+                    },
+                    {
+                        "coordinates": {"lat": f"{dest.lat:.7f}", "lng": f"{dest.lng:.7f}"},
+                        "address": dest.address,
+                    },
+                ],
+                "item": {
+                    "quantity": "1",
+                    "weight": "LESS_THAN_3KG",
+                    "categories": ["OTHERS"],
+                    "handlingInstructions": [],
+                },
+            },
         )
-    return FakeGrabClient()
+        stops = quote.get("stops") or []
+        if not quote.get("quotationId") or len(stops) < 2:
+            raise DispatchError("Lalamove did not return a quotation.")
+        order = self._call(
+            "POST",
+            "/v3/orders",
+            {
+                "quotationId": quote["quotationId"],
+                "sender": {
+                    "stopId": stops[0]["stopId"],
+                    "name": "CareFlow pharmacy",
+                    "phone": e164(self._pharmacy_phone),
+                },
+                "recipients": [
+                    {
+                        "stopId": stops[1]["stopId"],
+                        "name": dest.first_name or "Patient",
+                        "phone": e164(dest.phone),
+                        "remarks": "Sealed pharmacy parcel",
+                    }
+                ],
+                "isPODEnabled": False,
+                "metadata": {"careflowOrder": order_id},
+            },
+        )
+        lalamove_id = order.get("orderId")
+        if not lalamove_id:
+            raise DispatchError("Lalamove did not return an order.")
+        log.info("Lalamove order %s placed", lalamove_id)
+        return Dispatch(
+            str(lalamove_id), now + STAGE * (len(STAGES) - 1), order.get("shareLink") or None
+        )
+
+    def cancel(self, delivery_id: str) -> None:
+        try:
+            self._call("DELETE", f"/v3/orders/{delivery_id}")
+        except DispatchError:
+            log.info("Lalamove order %s not cancelled", delivery_id)
+
+    def poll(self, delivery_id: str, dispatched_at: datetime, now: datetime) -> list[CourierUpdate]:
+        try:
+            status = str(self._call("GET", f"/v3/orders/{delivery_id}").get("status") or "")
+        except DispatchError:
+            log.warning("Lalamove status check for %s failed", delivery_id)
+            status = ""
+        status = status.upper()
+        # Sandbox orders can expire for lack of drivers; that isn't a delivery failure.
+        if status in LALAMOVE_FAILED and not (status == "EXPIRED" and self.driver_simulated):
+            reason = f"Lalamove reported the order as {status.lower()}."
+            return [CourierUpdate("dispatched", now), CourierUpdate("failed", now, reason)]
+        real = [CourierUpdate(s, now) for s in STAGES[: _LALAMOVE_REACHED.get(status, 0)]]
+        simulated = (
+            self._clock.poll(delivery_id, dispatched_at, now) if self.driver_simulated else []
+        )
+        # The real status wins when it is further along than the sandbox clock.
+        return real if len(real) >= len(simulated) else simulated
+
+
+def build_courier_client(settings: Settings) -> CourierClient:
+    """COURIER=lalamove (default) or grab (D-68); the simulator when that courier's keys or
+    the pharmacy location are missing."""
+    choice = settings.courier
+    brand = "Grab" if choice == "grab" else "Lalamove"
+    if (
+        not settings.pharmacy_address
+        or settings.pharmacy_lat is None
+        or settings.pharmacy_lng is None
+    ):
+        return FakeGrabClient(brand)
+    pharmacy = Place(settings.pharmacy_address, settings.pharmacy_lat, settings.pharmacy_lng)
+    if choice == "lalamove" and settings.lalamove_api_key and settings.lalamove_api_secret:
+        try:
+            return LalamoveClient(
+                settings.lalamove_api_key,
+                settings.lalamove_api_secret,
+                pharmacy,
+                settings.pharmacy_phone,
+            )
+        except DispatchError:
+            log.error("Lalamove keys are not sandbox keys; using the simulator.")
+            return FakeGrabClient(brand)
+    if choice == "grab" and settings.grab_client_id and settings.grab_client_secret:
+        return GrabExpressClient(
+            settings.grab_client_id, settings.grab_client_secret, pharmacy, settings.pharmacy_phone
+        )
+    return FakeGrabClient(brand)
 
 
 _cached: tuple[Settings, CourierClient] | None = None

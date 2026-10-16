@@ -195,7 +195,8 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | deliveryLat, deliveryLng | Number | Drop-off point from the phone's GPS at confirmation (D-67) | Required for home delivery |
 | deliveryPhone | String | Contact number for the courier, typed at confirmation (D-67) | Required for home delivery |
 | paymentIntentId | String | Stripe PaymentIntent (or simulated) id (D-66) | Optional |
-| courierRef | String | Courier booking id, e.g. GRB-1A2B3C (D-66) | Optional |
+| courierRef | String | Courier booking id: Lalamove order id, Grab delivery id or simulator GRB-… (D-66, D-68) | Optional |
+| trackingUrl | String | Courier's live tracking page (Lalamove share link) (D-68) | Optional |
 | stockItemId | Reference (medication_stock) | Stock the units were taken from (D-66) | Optional |
 | receiptRecordId | Reference (health_records) | Receipt PDF saved for the patient (D-66) | Optional |
 | failureReason | String | Out-of-stock note or delivery failure reason (D-66) | Optional |

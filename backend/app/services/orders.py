@@ -138,6 +138,7 @@ def order_view(
         "deliveryLng": o.get("deliveryLng"),
         "deliveryPhone": o.get("deliveryPhone"),
         "courierRef": o.get("courierRef"),
+        "trackingUrl": o.get("trackingUrl"),
         "failureReason": o.get("failureReason"),
         "stockItemId": o.get("stockItemId"),
         "cycleDate": _iso(o.get("cycleDate")),
@@ -216,6 +217,8 @@ class OrderRepository(Protocol):
     def orders_with_status(self, statuses: tuple[str, ...]) -> list[tuple[str, dict[str, Any]]]: ...
 
     def home_deliveries(self) -> list[tuple[str, dict[str, Any]]]: ...
+
+    def order_by_courier_ref(self, ref: str) -> tuple[str, dict[str, Any]] | None: ...
 
     def add_transaction(self, tx_id: str, data: dict[str, Any]) -> None: ...
 
@@ -317,6 +320,13 @@ class FirestoreOrderRepository:
                 filter=firestore.FieldFilter("method", "==", HOME_DELIVERY)
             )
         )
+
+    def order_by_courier_ref(self, ref: str) -> tuple[str, dict[str, Any]] | None:
+        q = self._col(Collection.MEDICATION_ORDERS).where(
+            filter=firestore.FieldFilter("courierRef", "==", ref)
+        )
+        found = _pairs(q.limit(1))
+        return found[0] if found else None
 
     def add_transaction(self, tx_id: str, data: dict[str, Any]) -> None:
         self._col(Collection.PAYMENT_TRANSACTIONS).document(tx_id).set(data)
@@ -741,6 +751,7 @@ class OrderService:
                 "fulfilmentStatus": READY_FOR_DELIVERY,
                 "deliveryStatus": "dispatched",
                 "courierRef": d.delivery_id,
+                "trackingUrl": d.tracking_url,
                 "dispatchedAt": now,
                 "etaAt": d.eta,
                 "failureReason": None,
@@ -770,6 +781,9 @@ class OrderService:
     ) -> dict[str, Any]:
         """FR-13.5: record the failure and ask the patient to reschedule or switch."""
         now = now or datetime.now(UTC)
+        if actor != "courier" and o.get("courierRef"):
+            # Failed on our side (e.g. the admin demo): release the courier booking (D-68).
+            self.courier.cancel(str(o["courierRef"]))
         update = {"fulfilmentStatus": FAILED, "deliveryStatus": "failed", "failureReason": reason}
         self.repo.update_order(order_id, update)
         self.repo.add_event(

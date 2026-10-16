@@ -60,10 +60,10 @@ from app.services.orders import (
     OrderError,
     OrderService,
     get_order_service,
-    order_view,
     stock_view,
     total_of,
 )
+from app.services.orders import order_view as _order_view
 
 router = APIRouter(tags=["orders"])
 
@@ -84,6 +84,16 @@ def _api(e: OrderError) -> ApiError:
     else:
         code = status.HTTP_409_CONFLICT
     return ApiError(e.code, e.message, code)
+
+
+def _view(
+    svc: OrderService,
+    order_id: str,
+    o: dict[str, Any],
+    events: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """The order plus the courier's name for the app ("delivered by Lalamove", D-68)."""
+    return {**_order_view(order_id, o, events), "courierBrand": svc.courier.brand}
 
 
 def _not_found() -> ApiError:
@@ -128,7 +138,7 @@ def list_orders(
 ) -> dict[str, Any]:
     out = []
     for order_id, o in _newest_first(svc.repo.orders_for_patient(user.uid)):
-        out.append(order_view(order_id, _fresh(svc, order_id, o)))
+        out.append(_view(svc, order_id, _fresh(svc, order_id, o)))
     return {"orders": out}
 
 
@@ -144,7 +154,7 @@ def get_order(
     if o is None or (user.role == UserRole.PATIENT and o.get("patientId") != user.uid):
         raise _not_found()
     o = _fresh(svc, order_id, o, single=True)
-    view = order_view(order_id, o, svc.repo.events(order_id))
+    view = _view(svc, order_id, o, svc.repo.events(order_id))
     if user.role == UserRole.PATIENT:  # D-67: prefill the courier contact number
         view["suggestedPhone"] = o.get("deliveryPhone") or svc.repo.profile_phone(user.uid)
     return view
@@ -170,7 +180,7 @@ def confirm_order(
         )
     except OrderError as e:
         raise _api(e) from e
-    return order_view(order_id, o)
+    return _view(svc, order_id, o)
 
 
 @router.post("/orders/{order_id}/skip", status_code=status.HTTP_204_NO_CONTENT)
@@ -248,7 +258,7 @@ def _settle(svc: OrderService, order_id: str, gateway: PaymentGateway) -> dict[s
     return {
         "result": result,
         "message": intent.decline_message if result == "failed" else None,
-        "order": order_view(order_id, svc.repo.order(order_id) or o),
+        "order": _view(svc, order_id, svc.repo.order(order_id) or o),
     }
 
 
@@ -293,7 +303,7 @@ def reschedule_delivery(
 ) -> dict[str, Any]:
     _own_order(svc, order_id, user.uid)
     try:
-        return order_view(order_id, svc.reschedule(order_id, user.uid))
+        return _view(svc, order_id, svc.reschedule(order_id, user.uid))
     except OrderError as e:
         raise _api(e) from e
 
@@ -376,7 +386,7 @@ def pharmacy_queue(
     svc: OrderService = Depends(get_order_service),
 ) -> dict[str, Any]:
     orders = [
-        order_view(i, _fresh(svc, i, o))
+        _view(svc, i, _fresh(svc, i, o))
         for i, o in _newest_first(svc.repo.orders_with_status(PHARMACY_QUEUE))
     ]
     needs_price = []
@@ -416,8 +426,8 @@ def mark_ready(
     svc: OrderService = Depends(get_order_service),
 ) -> dict[str, Any]:
     try:
-        return order_view(
-            order_id, svc.mark_ready(order_id, user.uid, body.stockItemId, body.units)
+        return _view(
+            svc, order_id, svc.mark_ready(order_id, user.uid, body.stockItemId, body.units)
         )
     except OrderError as e:
         raise _api(e) from e
@@ -583,7 +593,7 @@ def lookup_patients(
                     }
                     for r in rxs
                 ],
-                "recentOrders": [order_view(i, o) for i, o in orders],
+                "recentOrders": [_view(svc, i, o) for i, o in orders],
             }
         )
     out.sort(key=lambda p: str(p["name"] or "").lower())
@@ -604,8 +614,9 @@ def admin_deliveries(
             seen[i] = o
     for i, o in svc.repo.orders_with_status((OUT_OF_STOCK,)):
         seen[i] = o
-    rows = [order_view(i, _fresh(svc, i, o)) for i, o in _newest_first(list(seen.items()))]
-    return {"orders": rows, "courier": svc.courier.name, "simulated": svc.courier.simulated}
+    rows = [_view(svc, i, _fresh(svc, i, o)) for i, o in _newest_first(list(seen.items()))]
+    # "simulated": the admin may fail a delivery on purpose (simulator or sandbox driver).
+    return {"orders": rows, "courier": svc.courier.name, "simulated": svc.courier.demo_failures}
 
 
 @router.post("/admin/deliveries/{order_id}/dispatch")
@@ -625,8 +636,10 @@ def admin_dispatch(
             "Only failed or undispatched deliveries can be dispatched manually.",
             status.HTTP_409_CONFLICT,
         )
-    return order_view(
-        order_id, svc.dispatch(order_id, {**o, "fulfilmentStatus": READY_FOR_DELIVERY}, user.uid)
+    return _view(
+        svc,
+        order_id,
+        svc.dispatch(order_id, {**o, "fulfilmentStatus": READY_FOR_DELIVERY}, user.uid),
     )
 
 
@@ -637,15 +650,15 @@ def admin_simulate_failure(
     user: CurrentUser = Depends(admin_only),
     svc: OrderService = Depends(get_order_service),
 ) -> dict[str, Any]:
-    """Demo of FR-13.5 with the simulated courier only."""
-    if not svc.courier.simulated:
+    """Demo of FR-13.5 with the simulator or a sandbox courier without drivers (D-68)."""
+    if not svc.courier.demo_failures:
         raise ApiError("NOT_FOUND", "Not available.", status.HTTP_404_NOT_FOUND)
     o = svc.repo.order(order_id)
     if o is None or o.get("fulfilmentStatus") != READY_FOR_DELIVERY or not o.get("dispatchedAt"):
         raise ApiError(
             "ORDER_NOT_IN_DELIVERY", "This order isn't out for delivery.", status.HTTP_409_CONFLICT
         )
-    return order_view(order_id, svc.fail_delivery(order_id, o, body.reason, user.uid))
+    return _view(svc, order_id, svc.fail_delivery(order_id, o, body.reason, user.uid))
 
 
 # ---------------- webhooks ----------------
@@ -699,3 +712,26 @@ def grab_webhook(
         if svc.courier_update(order_id, o, u.status, u.at, u.location):
             changed += 1
     return {"received": True, "changed": changed}
+
+
+@router.post("/webhooks/lalamove")
+async def lalamove_webhook(
+    request: Request,
+    svc: OrderService = Depends(get_order_service),
+) -> dict[str, Any]:
+    """Lalamove order webhook (UC13.5; D-68). Only the Lalamove order id is taken from the
+    payload; the status is then read from Lalamove with a signed request, so a forged call
+    can't change an order. Lalamove needs a 200 reply, also for its set-up test call."""
+    try:
+        payload = await request.json()
+    except ValueError:
+        return {"received": True, "changed": 0}
+    data = payload.get("data") if isinstance(payload, dict) else None
+    order = data.get("order") if isinstance(data, dict) else None
+    ref = (order or {}).get("orderId") if isinstance(order, dict) else None
+    ref = ref or (data or {}).get("orderId") if isinstance(data, dict) else ref
+    found = svc.repo.order_by_courier_ref(str(ref)) if ref else None
+    if found is None:
+        return {"received": True, "changed": 0}
+    order_id, o = found
+    return {"received": True, "changed": svc.advance(order_id, o)}

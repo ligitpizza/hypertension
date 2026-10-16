@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/services/api/api_client.dart';
 import '../../appointments/domain/appointment_text.dart';
 import '../data/order_models.dart';
+import '../../family/state/family_providers.dart';
 import '../state/orders_providers.dart';
 import 'order_widgets.dart';
 
@@ -103,7 +104,9 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
       Fulfilment.readyForDelivery => (
         Icons.local_shipping_outlined,
         o.deliveryStatus == 'in_transit' ? 'Out for delivery' : 'Courier booked',
-        o.courierRef == null ? 'Your medication is on its way.' : 'Grab booking ${o.courierRef}',
+        o.courierRef == null
+            ? 'Your medication is on its way.'
+            : '${o.courierBrand} booking ${o.courierRef}',
       ),
       Fulfilment.readyForCollection => (
         Icons.storefront_outlined,
@@ -134,7 +137,7 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
             ),
             TimelineStep(
               'Out for delivery',
-              subtitle: o.courierRef == null ? null : 'Grab ${o.courierRef}',
+              subtitle: o.courierRef == null ? null : '${o.courierBrand} ${o.courierRef}',
               icon: Icons.local_shipping_outlined,
             ),
             const TimelineStep('Delivered', icon: Icons.home_outlined),
@@ -211,6 +214,14 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
           const SizedBox(height: 16),
         ],
         if (o.status == Fulfilment.readyForCollection) _CollectionSlip(order: o),
+        // D-68: the courier's own tracking page (Lalamove share link).
+        if (o.trackingUrl != null && o.status == Fulfilment.readyForDelivery)
+          TextButton.icon(
+            key: const Key('courier-tracking'),
+            onPressed: () => ref.read(openUrlProvider)(Uri.parse(o.trackingUrl!)),
+            icon: const Icon(Icons.open_in_new),
+            label: Text('Open ${o.courierBrand} tracking page'),
+          ),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),

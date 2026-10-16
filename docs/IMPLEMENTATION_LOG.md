@@ -1184,3 +1184,20 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   the environment (e.g. `PHARMACY_LAT=`) is treated as unset instead of failing start-up.
   Tests: backend 17 new (`test_grab_express.py`, D-67 order tests; 622 total);
   Flutter 539 (location and contact-number tests).
+- **D-68 Lalamove courier (sandbox):** Grab access stayed blocked ("check with your Grab
+  PIC"), so Ping registered with Lalamove's Partner Portal and put sandbox keys in
+  `backend/.env`. Verified live on 2026-10-16: signed calls work, Kuala Lumpur offers
+  MOTORCYCLE, a KLCC → Ampang quote was RM9 for 11.6 km and expired in about 30 s, a placed
+  sandbox order stayed ASSIGNING_DRIVER for 2 minutes (no sandbox drivers), and cancelling
+  worked (test orders cancelled). `LalamoveClient` books each home delivery for real
+  (quotation, then order straight away), keeps the order id and share link
+  (`trackingUrl`), reads the status with signed GETs, and lets the simulator clock move
+  the stages after booking because the sandbox never assigns a driver (a real status
+  further along wins; REJECTED/CANCELED fail; sandbox EXPIRED is ignored). Failing a
+  delivery from the admin page cancels the Lalamove order. `/api/v1/webhooks/lalamove`
+  only takes the order id and re-reads the status. `COURIER=lalamove` is the default; the
+  GrabExpress client stays (`COURIER=grab`). The app names the configured courier
+  ("delivered by Lalamove") and links to its tracking page; System Health shows the
+  courier. `set-lalamove-secrets` and deploy-backend pass the keys. Tests: backend 12
+  (`test_lalamove.py`; 634 total), Flutter 1 (540 total). Live sandbox check of the
+  client: booked, status read, cancelled.
