@@ -309,3 +309,63 @@ def test_pharmacy_queue_polls_a_real_courier_but_throttled(
     assert queue == []  # delivered orders leave the queue
     c.get("/api/v1/admin/deliveries", headers=bearer("admin-token"))
     assert courier.polls == 1  # already final, no more calls
+
+
+# ---------------- D-71: delivery fee from the courier's quote ----------------
+
+
+def test_lalamove_quote_is_the_quotation_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    http = FakeLalamoveHttp(monkeypatch)
+    assert client().quote(DEST) == 9.0
+    assert http.calls[-1][1] == "/v3/quotations"  # a quote books nothing
+    assert client().quote(Destination("x", None, None, "Siti", "0123")) is None
+    http.fail_quote = True
+    assert client().quote(DEST) is None
+
+
+class QuotingCourier(FakeGrabClient):
+    def __init__(self, fee: float | None) -> None:
+        super().__init__("Lalamove")
+        self.fee = fee
+        self.asked: list[tuple[float | None, float | None]] = []
+
+    def quote(self, dest: Destination) -> float | None:
+        self.asked.append((dest.lat, dest.lng))
+        return self.fee
+
+
+def _confirm_home(c: TestClient, order_repo: InMemoryOrderRepository) -> dict[str, Any]:
+    from tests.test_orders import HOME, PATIENT, priced_order
+
+    oid = priced_order(c, order_repo)
+    preview = c.post(
+        f"/api/v1/orders/{oid}/delivery-quote",
+        json={"deliveryAddress": HOME["deliveryAddress"], "lat": 3.1579, "lng": 101.7123},
+        headers=PATIENT,
+    ).json()
+    res = c.post(
+        f"/api/v1/orders/{oid}/confirm", json={"method": "home_delivery", **HOME}, headers=PATIENT
+    )
+    return {"preview": preview, "order": res.json()}
+
+
+def test_d71_checkout_charges_the_courier_quote(
+    make_client: Any, order_repo: InMemoryOrderRepository
+) -> None:
+    courier = QuotingCourier(13.2)
+    c = make_client()
+    c.app.dependency_overrides[get_courier_client] = lambda: courier
+    out = _confirm_home(c, order_repo)
+    assert out["preview"] == {"deliveryFee": 13.2, "courier": "Lalamove"}
+    assert out["order"]["deliveryFee"] == 13.2
+    assert out["order"]["total"] == 28.2  # RM15 medicine + RM13.20 courier
+    assert courier.asked[-1] == (3.1579, 101.7123)  # re-quoted on confirm, not trusted
+
+
+def test_d71_flat_fee_when_the_courier_cannot_quote(
+    make_client: Any, order_repo: InMemoryOrderRepository
+) -> None:
+    c = make_client()
+    c.app.dependency_overrides[get_courier_client] = lambda: QuotingCourier(None)
+    out = _confirm_home(c, order_repo)
+    assert out["preview"]["deliveryFee"] == 5.0 and out["order"]["deliveryFee"] == 5.0

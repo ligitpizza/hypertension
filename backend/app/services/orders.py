@@ -625,9 +625,15 @@ class OrderService:
             raise OrderError("LOCATION_REQUIRED", "Share your current location for the courier.")
         if home and sum(c.isdigit() for c in phone) < 8:
             raise OrderError("PHONE_REQUIRED", "Enter a contact number for the courier.")
+        fee = 0.0
+        if home:
+            # D-71: the courier's real price for this trip; flat RM5 if it can't quote.
+            fee = self.delivery_quote(
+                {**o, "deliveryAddress": address, "deliveryLat": lat, "deliveryLng": lng}
+            )
         update = {
             "method": method,
-            "deliveryFee": DELIVERY_FEE if home else 0.0,
+            "deliveryFee": fee,
             "deliveryAddress": address if home else None,
             "deliveryLat": lat if home else None,
             "deliveryLng": lng if home else None,
@@ -644,6 +650,11 @@ class OrderService:
             target_id=order_id,
         )
         return {**o, **update}
+
+    def delivery_quote(self, o: dict[str, Any]) -> float:
+        """D-71: the courier's quote for this order's drop-off, else the flat fee."""
+        quoted = self.courier.quote(_destination(o))
+        return quoted if quoted is not None and quoted > 0 else DELIVERY_FEE
 
     # ----- UC13.3 payment -----
 

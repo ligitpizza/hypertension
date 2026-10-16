@@ -94,6 +94,10 @@ class CourierClient(Protocol):
 
     def dispatch(self, order_id: str, dest: Destination, now: datetime) -> Dispatch: ...
 
+    def quote(self, dest: Destination) -> float | None:
+        """D-71: the courier's price in RM for pharmacy -> [dest]; None if unavailable."""
+        ...
+
     def cancel(self, delivery_id: str) -> None:
         """Best effort; never raises."""
         ...
@@ -119,6 +123,9 @@ class FakeGrabClient:
 
     def cancel(self, delivery_id: str) -> None:
         return None
+
+    def quote(self, dest: Destination) -> float | None:
+        return None  # the order uses the flat fee (D-66)
 
     def dispatch(self, order_id: str, dest: Destination, now: datetime) -> Dispatch:
         if not dest.address.strip():
@@ -308,6 +315,42 @@ class GrabExpressClient:
         log.info("Grab delivery %s created", delivery_id)
         return Dispatch(str(delivery_id), eta, body.get("trackingURL") or None)
 
+    def quote(self, dest: Destination) -> float | None:
+        if dest.lat is None or dest.lng is None:
+            return None
+        try:
+            body = self._call(
+                "POST",
+                "/v1/deliveries/quotes",
+                {
+                    "serviceType": "INSTANT",
+                    "vehicleType": "BIKE",
+                    "packages": [
+                        {
+                            "name": "Pharmacy parcel",
+                            "description": "Sealed pharmacy parcel",
+                            "quantity": 1,
+                            "dimensions": {"height": 0, "width": 0, "depth": 0, "weight": 0},
+                        }
+                    ],
+                    "origin": {
+                        "address": self._pharmacy.address,
+                        "coordinates": {
+                            "latitude": self._pharmacy.lat,
+                            "longitude": self._pharmacy.lng,
+                        },
+                    },
+                    "destination": {
+                        "address": dest.address,
+                        "coordinates": {"latitude": dest.lat, "longitude": dest.lng},
+                    },
+                },
+            )
+            quotes = body.get("quotes") or []
+            return float(quotes[0]["amount"]) if quotes else None
+        except (DispatchError, KeyError, TypeError, ValueError):
+            return None
+
     def cancel(self, delivery_id: str) -> None:
         try:
             self._call("DELETE", f"/v1/deliveries/{delivery_id}")
@@ -403,33 +446,7 @@ class LalamoveClient:
         if not dest.phone:
             raise DispatchError("The patient's contact number is missing.")
         # Quotes expire within about 30 s, so the order is placed straight after.
-        quote = self._call(
-            "POST",
-            "/v3/quotations",
-            {
-                "serviceType": self._service,
-                "language": "en_MY",
-                "stops": [
-                    {
-                        "coordinates": {
-                            "lat": f"{self._pharmacy.lat:.7f}",
-                            "lng": f"{self._pharmacy.lng:.7f}",
-                        },
-                        "address": self._pharmacy.address,
-                    },
-                    {
-                        "coordinates": {"lat": f"{dest.lat:.7f}", "lng": f"{dest.lng:.7f}"},
-                        "address": dest.address,
-                    },
-                ],
-                "item": {
-                    "quantity": "1",
-                    "weight": "LESS_THAN_3KG",
-                    "categories": ["OTHERS"],
-                    "handlingInstructions": [],
-                },
-            },
-        )
+        quote = self._quotation(dest)
         stops = quote.get("stops") or []
         if not quote.get("quotationId") or len(stops) < 2:
             raise DispatchError("Lalamove did not return a quotation.")
@@ -462,6 +479,45 @@ class LalamoveClient:
         return Dispatch(
             str(lalamove_id), now + STAGE * (len(STAGES) - 1), order.get("shareLink") or None
         )
+
+    def _quotation(self, dest: Destination) -> Any:
+        return self._call(
+            "POST",
+            "/v3/quotations",
+            {
+                "serviceType": self._service,
+                "language": "en_MY",
+                "stops": [
+                    {
+                        "coordinates": {
+                            "lat": f"{self._pharmacy.lat:.7f}",
+                            "lng": f"{self._pharmacy.lng:.7f}",
+                        },
+                        "address": self._pharmacy.address,
+                    },
+                    {
+                        "coordinates": {"lat": f"{dest.lat:.7f}", "lng": f"{dest.lng:.7f}"},
+                        "address": dest.address,
+                    },
+                ],
+                "item": {
+                    "quantity": "1",
+                    "weight": "LESS_THAN_3KG",
+                    "categories": ["OTHERS"],
+                    "handlingInstructions": [],
+                },
+            },
+        )
+
+    def quote(self, dest: Destination) -> float | None:
+        """D-71: the motorcycle price Lalamove quotes for this trip (RM)."""
+        if dest.lat is None or dest.lng is None:
+            return None
+        try:
+            total = (self._quotation(dest).get("priceBreakdown") or {}).get("total")
+            return round(float(total), 2) if total is not None else None
+        except (DispatchError, TypeError, ValueError):
+            return None
 
     def cancel(self, delivery_id: str) -> None:
         try:

@@ -43,6 +43,7 @@ from app.schemas.orders import (
     CatalogEditRequest,
     CatalogItemRequest,
     ConfirmOrderRequest,
+    DeliveryQuoteRequest,
     FailDeliveryRequest,
     FakePaymentRequest,
     GrabWebhook,
@@ -208,6 +209,27 @@ def confirm_order(
     except OrderError as e:
         raise _api(e) from e
     return _view(svc, order_id, o)
+
+
+@router.post("/orders/{order_id}/delivery-quote")
+def delivery_quote(
+    order_id: str,
+    body: DeliveryQuoteRequest,
+    user: CurrentUser = Depends(patient_only),
+    svc: OrderService = Depends(get_order_service),
+) -> dict[str, Any]:
+    """D-71: the courier's fee for this drop-off, shown before the patient confirms (the
+    backend quotes again on confirmation)."""
+    o = _own_order(svc, order_id, user.uid)
+    fee = svc.delivery_quote(
+        {
+            **o,
+            "deliveryAddress": body.deliveryAddress,
+            "deliveryLat": body.lat,
+            "deliveryLng": body.lng,
+        }
+    )
+    return {"deliveryFee": fee, "courier": svc.courier.brand}
 
 
 @router.post("/orders/{order_id}/skip", status_code=status.HTTP_204_NO_CONTENT)

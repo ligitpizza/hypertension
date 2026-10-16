@@ -62,6 +62,20 @@ class FakeOrdersRepository implements OrdersRepository {
   @override
   Future<void> skip(String id) async => calls.add('skip:$id');
 
+  /// D-71: the courier's quote returned to checkout.
+  double quotedFee = 13.8;
+
+  @override
+  Future<double> deliveryQuote(
+    String id, {
+    required String address,
+    required double lat,
+    required double lng,
+  }) async {
+    calls.add('quote:$id:$lat,$lng');
+    return quotedFee;
+  }
+
   @override
   Future<PaymentStart> startPayment(String id) async {
     calls.add('pay:$id');

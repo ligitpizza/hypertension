@@ -15,6 +15,14 @@ abstract interface class OrdersRepository {
     String? phone,
   });
   Future<void> skip(String id);
+
+  /// D-71: the courier's fee in RM for this drop-off.
+  Future<double> deliveryQuote(
+    String id, {
+    required String address,
+    required double lat,
+    required double lng,
+  });
   Future<PaymentStart> startPayment(String id);
   Future<PaymentResult> payFake(String id, String cardNumber);
   Future<PaymentResult> refreshPayment(String id);
@@ -109,6 +117,16 @@ class ApiOrdersRepository implements OrdersRepository {
 
   @override
   Future<void> skip(String id) => _api.skipOrder(id);
+
+  @override
+  Future<double> deliveryQuote(
+    String id, {
+    required String address,
+    required double lat,
+    required double lng,
+  }) async =>
+      ((await _api.deliveryQuote(id, address: address, lat: lat, lng: lng))['deliveryFee'] as num)
+          .toDouble();
 
   @override
   Future<PaymentStart> startPayment(String id) async =>

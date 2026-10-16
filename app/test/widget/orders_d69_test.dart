@@ -188,7 +188,11 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('77 Lorong Lembah Permai 3'), findsOneWidget);
     expect(find.text('Location shared for the courier'), findsOneWidget);
-    expect(t.widget<Text>(find.byKey(const Key('order-total'))).data, 'RM68.00');
+    // D-71: the saved drop-off is quoted straight away (RM63 + RM13.80 courier).
+    expect(repo.calls, contains('quote:$id:5.4588,100.2886'));
+    expect(t.widget<Text>(find.byKey(const Key('delivery-fee'))).data, 'RM13.80');
+    expect(find.text('Delivery (Lalamove quote)'), findsOneWidget);
+    expect(t.widget<Text>(find.byKey(const Key('order-total'))).data, 'RM76.80');
   });
 
   tallTest('pick the drop-off on the map at checkout', (t) async {

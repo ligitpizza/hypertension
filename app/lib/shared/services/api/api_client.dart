@@ -537,6 +537,14 @@ class ApiClient {
     'deliveryPhone': ?phone,
   });
 
+  /// D-71: the courier's fee for this drop-off (preview before confirming).
+  Future<Map<String, dynamic>> deliveryQuote(
+    String id, {
+    required String address,
+    required double lat,
+    required double lng,
+  }) => _post('/orders/$id/delivery-quote', {'deliveryAddress': address, 'lat': lat, 'lng': lng});
+
   /// UC13.2 A1.
   Future<void> skipOrder(String id) => _send('POST', '/orders/$id/skip', null);
 

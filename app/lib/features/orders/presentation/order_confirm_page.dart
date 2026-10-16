@@ -32,6 +32,11 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
   String? _locationNote;
   LocationAccess? _locationFix;
   bool _busy = false;
+
+  /// D-71: the courier's fee for the current drop-off (null until quoted).
+  double? _quotedFee;
+  bool _quoting = false;
+  String? _quotedFor;
   String? _error;
   bool _seeded = false;
 
@@ -54,6 +59,8 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
         all.map((x) => x.deliveryAddress).whereType<String>().firstOrNull ??
         '';
     _phone.text = o.deliveryPhone ?? o.suggestedPhone ?? '';
+    // D-71: an order confirmed earlier keeps the fee it was quoted.
+    if (o.method == homeDelivery && o.deliveryFee > 0) _quotedFee = o.deliveryFee;
     if (o.deliveryLat != null && o.deliveryLng != null) {
       _location = {'lat': o.deliveryLat!, 'lng': o.deliveryLng!};
     } else if (o.suggestedLat != null && o.suggestedLng != null) {
@@ -81,6 +88,34 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
       _locationNote = null;
       _locationFix = null;
     });
+    _requote();
+  }
+
+  /// D-71: ask the courier for this drop-off's fee (once per point).
+  Future<void> _requote() async {
+    final loc = _location;
+    if (_method != homeDelivery || loc == null) return;
+    final key = '${loc['lat']},${loc['lng']}';
+    if (_quotedFor == key) return;
+    setState(() {
+      _quoting = true;
+      _quotedFor = key;
+    });
+    try {
+      final fee = await ref
+          .read(ordersRepositoryProvider)
+          .deliveryQuote(
+            widget.orderId,
+            address: _address.text.trim(),
+            lat: loc['lat']!,
+            lng: loc['lng']!,
+          );
+      if (mounted) setState(() => _quotedFee = fee);
+    } catch (_) {
+      if (mounted) setState(() => _quotedFor = null); // shown as an estimate; retried later
+    } finally {
+      if (mounted) setState(() => _quoting = false);
+    }
   }
 
   Future<void> _locate() async {
@@ -104,6 +139,7 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
         _locationFix = action == null ? null : access;
       }
     });
+    _requote();
   }
 
   Future<void> _confirm() async {
@@ -215,7 +251,8 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
         o.status == Fulfilment.awaitingConfirmation ||
         o.status == Fulfilment.skipped ||
         o.status == Fulfilment.awaitingPayment;
-    final fee = _method == homeDelivery ? deliveryFeeRm : 0.0;
+    // D-71: the courier's quote once the drop-off is known; the flat fee until then.
+    final fee = _method == homeDelivery ? (_quotedFee ?? deliveryFeeRm) : 0.0;
     final amount = o.amount;
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -304,7 +341,14 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
                     child: Column(
                       children: [
                         _row('Subtotal', rm(amount)),
-                        if (fee > 0) _row('Home delivery', rm(fee)),
+                        if (fee > 0)
+                          _row(
+                            _quotedFee == null
+                                ? 'Delivery (estimate until your drop-off is set)'
+                                : 'Delivery (${o.courierBrand} quote)',
+                            _quoting ? '…' : rm(fee),
+                            key: const Key('delivery-fee'),
+                          ),
                         const Divider(),
                         _row(
                           'Estimated total',
@@ -336,9 +380,16 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
           key: const Key('method-delivery'),
           icon: Icons.local_shipping_outlined,
           title: 'Home delivery',
-          subtitle: '+${rm(deliveryFeeRm)} · delivered by ${o.courierBrand}',
+          subtitle: _quotedFee == null
+              ? 'Courier fee from ${o.courierBrand} · quoted for your address'
+              : '+${rm(_quotedFee!)} · delivered by ${o.courierBrand}',
           selected: _method == homeDelivery,
-          onTap: open ? () => setState(() => _method = homeDelivery) : null,
+          onTap: open
+              ? () {
+                  setState(() => _method = homeDelivery);
+                  _requote();
+                }
+              : null,
         ),
         if (_method == homeDelivery) ...[
           const SizedBox(height: 8),

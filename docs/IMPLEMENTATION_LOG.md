@@ -1266,3 +1266,11 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - **Admin:** new Orders (tracking, rows open the user detail) and Inventory tabs; admins
   can also delete stock items. `GET /orders-overview`, `DELETE /pharmacy/stock/{id}`.
 - Tests: backend 657; Flutter 558. Staff web and patient APK build.
+- **D-71 courier quote as the delivery fee (Ping saw Lalamove charge RM13.20 while the
+  patient paid the flat RM5):** checkout asks the courier for a quote as soon as the
+  drop-off is set (`POST /orders/{id}/delivery-quote`) and shows "Delivery (Lalamove
+  quote)"; on confirmation the backend quotes again and stores that `deliveryFee`, so the
+  payment includes it. Lalamove uses `/v3/quotations` (live sandbox check: RM13.80 for
+  the Penang branch → Sungai Ara); Grab uses its quotes endpoint; the simulator or a
+  failed quote keeps the flat RM5. Real SMS dropped (simulated). Tests: backend 4 new
+  (661 total); Flutter updated (558).

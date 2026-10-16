@@ -19,6 +19,14 @@ class ConfirmOrderRequest(_Body):
     deliveryPhone: str | None = Field(default=None, max_length=20, pattern=r"^[0-9+\- ]*$")
 
 
+class DeliveryQuoteRequest(_Body):
+    """D-71: where the courier would deliver, for a fee preview."""
+
+    deliveryAddress: str = Field(default="", max_length=300)
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
 class FakePaymentRequest(_Body):
     """Simulated card form (fake mode only): Stripe's test numbers, never real cards."""
 
