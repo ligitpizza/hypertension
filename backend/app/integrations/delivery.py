@@ -497,6 +497,7 @@ def build_courier_client(settings: Settings) -> CourierClient:
         not settings.pharmacy_address
         or settings.pharmacy_lat is None
         or settings.pharmacy_lng is None
+        or not settings.pharmacy_phone  # couriers reject a pickup without a phone
     ):
         return FakeGrabClient(brand)
     pharmacy = Place(settings.pharmacy_address, settings.pharmacy_lat, settings.pharmacy_lng)

@@ -403,7 +403,8 @@ def task_set_lalamove_secrets() -> None:
 def task_deploy_backend() -> None:
     brevo = _secret_exists(BREVO_SECRET)
     stripe = _secret_exists(STRIPE_SECRET)
-    env_vars = ",".join(
+    # gcloud's "^##^" prefix switches the separator, so values may contain commas (addresses).
+    env_vars = "^##^" + "##".join(
         [
             "APP_ENV=prod",
             # D-64/D-66: real adapters once a key is in Secret Manager (each adapter still
