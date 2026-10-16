@@ -31,6 +31,7 @@ class Collection(StrEnum):
     DELIVERY_TRACKING_EVENTS = "delivery_tracking_events"
     FAMILY_LINK_REQUESTS = "family_link_requests"  # D-06
     CLINICAL_ALERTS = "clinical_alerts"  # D-32
+    MEDICATION_STOCK = "medication_stock"  # D-66
 
 
 class UserRole(StrEnum):

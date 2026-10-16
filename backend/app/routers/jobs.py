@@ -18,6 +18,7 @@ from app.services.account_purge import AccountPurgeJob, get_account_purge_job
 from app.services.appointment_extras import AppointmentJob, get_appointment_job
 from app.services.deterioration import DeteriorationJob, get_deterioration_job
 from app.services.medication_job import MedicationJob, get_medication_job
+from app.services.orders import OrderService, get_order_service
 from app.services.unanswered import UnansweredAlertJob, get_unanswered_alert_job
 
 router = APIRouter(prefix="/internal/jobs", tags=["jobs"])
@@ -95,6 +96,7 @@ def run_escalation(
     job: UnansweredAlertJob = Depends(get_unanswered_alert_job),
     meds: MedicationJob = Depends(get_medication_job),
     appointments: AppointmentJob = Depends(get_appointment_job),
+    orders: OrderService = Depends(get_order_service),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
     """Every 15 minutes: D-37 unanswered-alert escalation, and D-43 medication sweep
@@ -110,6 +112,11 @@ def run_escalation(
     except Exception:
         log.exception("Appointment sweep failed")
         result["appointmentSweep"] = "failed"
+    try:  # D-66 monthly order cycles, 48 h reminders, simulated courier
+        result.update(orders.run())
+    except Exception:
+        log.exception("Order sweep failed")
+        result["orderSweep"] = "failed"
     # D-59: one heartbeat per run; System Health counts them for uptime.
     audit.log(
         user_id=SYSTEM_SCHEDULER_USER,

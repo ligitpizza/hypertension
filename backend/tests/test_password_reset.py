@@ -3,9 +3,9 @@
 from fastapi.testclient import TestClient
 
 from app.core.rate_limit import RateLimiter
+from app.integrations.email import ConsoleEmailClient
 from app.routers.auth import get_reset_limiter
 from tests.conftest import (
-    ConsoleEmailClient,
     FakeIdentityProvider,
     InMemoryAuditLogger,
     MakeClient,

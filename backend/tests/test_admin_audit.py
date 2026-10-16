@@ -1,6 +1,7 @@
 """Module 11 audit log viewer (FR-1.5, FR-11.3, UC11.3; D-59)."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -51,7 +52,9 @@ def test_uc11_3_last_7_days_with_summary_and_names(client: TestClient) -> None:
 
 
 def test_filter_by_action_user_text_and_dates(client: TestClient) -> None:
-    get = lambda **p: client.get("/api/v1/admin/audit-logs", params=p, headers=ADMIN).json()  # noqa: E731
+    def get(**p: str) -> Any:
+        return client.get("/api/v1/admin/audit-logs", params=p, headers=ADMIN).json()
+
     assert get(action="LOGIN_FAILED")["total"] == 2
     assert get(userId="u-doctor")["total"] == 2
     assert get(q="wrong_password")["total"] == 2

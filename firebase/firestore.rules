@@ -10,6 +10,7 @@ rules_version = '2';
 // bypasses these rules: audit_logs, risk_scores, payment_transactions,
 // delivery_tracking_events, emergency_alerts, symptom_catalog, health_profiles,
 // clinical_alerts (D-32) and users/{uid}/fcmTokens (D-33).
+// medication_orders and medication_stock (D-66) are read-only to clients.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -159,6 +160,19 @@ service cloud.firestore {
 
     match /prescriptions/{prescriptionId} {
       allow read: if canReadPatientData(resource.data.patientId) || hasRole('pharmacist');
+      allow write: if false;
+    }
+
+    // ---- Module 13 orders and pharmacy stock (FR-13.x, D-66) ----
+    // Every write goes through FastAPI (payment, courier and stock rules). The app reads
+    // orders through the API too; these reads are for the owner and pharmacy staff.
+    match /medication_orders/{orderId} {
+      allow read: if isSelf(resource.data.patientId) || hasRole('pharmacist') || isAdmin();
+      allow write: if false;
+    }
+
+    match /medication_stock/{stockId} {
+      allow read: if hasRole('pharmacist') || isAdmin();
       allow write: if false;
     }
 

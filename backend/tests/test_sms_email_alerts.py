@@ -6,6 +6,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.integrations.email import ConsoleEmailClient
 from app.integrations.sms import (
     BREVO_SMS_URL,
     BrevoSmsClient,
@@ -14,7 +15,6 @@ from app.integrations.sms import (
     international,
 )
 from tests.conftest import (
-    ConsoleEmailClient,
     InMemoryUserRepository,
     bearer,
     dev_settings,

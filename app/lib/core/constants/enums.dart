@@ -27,6 +27,7 @@ abstract final class Collections {
   static const deliveryTrackingEvents = 'delivery_tracking_events';
   static const familyLinkRequests = 'family_link_requests';
   static const clinicalAlerts = 'clinical_alerts'; // D-32
+  static const medicationStock = 'medication_stock'; // D-66
 
   static const all = [
     users,

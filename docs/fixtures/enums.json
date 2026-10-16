@@ -23,7 +23,8 @@
     "payment_transactions",
     "delivery_tracking_events",
     "family_link_requests",
-    "clinical_alerts"
+    "clinical_alerts",
+    "medication_stock"
   ],
   "user_role": [
     "patient",

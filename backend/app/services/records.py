@@ -45,6 +45,10 @@ class FileStore(Protocol):
 
     def read(self, path: str) -> bytes: ...
 
+    def write(self, path: str, data: bytes, content_type: str) -> None:
+        """Server-generated files, e.g. payment receipts (D-66)."""
+        ...
+
     def delete(self, path: str) -> None: ...
 
     def delete_prefix(self, prefix: str) -> int:
@@ -107,6 +111,9 @@ class StorageFileStore:
 
     def read(self, path: str) -> bytes:
         return bytes(self._bucket.blob(path).download_as_bytes())
+
+    def write(self, path: str, data: bytes, content_type: str) -> None:
+        self._bucket.blob(path).upload_from_string(data, content_type=content_type)
 
     def delete(self, path: str) -> None:
         blob = self._bucket.get_blob(path)

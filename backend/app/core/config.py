@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     jobs_oidc_audience: str = ""
     jobs_service_account: str = ""
 
+    # D-66 Stripe, test mode only (sk_test_/pk_test_); empty = simulated payments.
+    stripe_secret_key: str = ""
+    stripe_publishable_key: str = ""
+    stripe_webhook_secret: str = ""
+    # D-66 Grab: shared secret for /webhooks/grab (real courier only; the fake needs none).
+    grab_webhook_secret: str = ""
+    # D-66 testing aid: patients may start next month's order cycle now.
+    dev_order_tools: bool = False
     # Testing aid (D-57): patients may book any time, even a past one, so the doctor's
     # Complete / No-show and the reminders can be tried without waiting. Off for real use.
     dev_appointment_times: bool = False

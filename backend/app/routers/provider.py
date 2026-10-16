@@ -9,6 +9,7 @@ GET  /provider/patients/{id}/medication-effect  risk before vs after medication 
 Only the patient's assigned doctor may write (FR-8.1, NFR-2.2); every write is audited.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
@@ -21,6 +22,7 @@ from app.ml.risk_model import RiskModel, get_risk_model
 from app.schemas.provider import CarePlanRequest, NoteRequest, PrescriptionRequest
 from app.services.interactions import check
 from app.services.medication_effect import medication_effect
+from app.services.orders import OrderService, get_order_service
 from app.services.provider import (
     ProviderRepository,
     get_provider_repository,
@@ -98,6 +100,7 @@ def issue_prescription(
     doctor: CurrentUser = Depends(doctor_only),
     repo: ProviderRepository = Depends(get_provider_repository),
     audit: AuditLogger = Depends(get_audit_logger),
+    orders: OrderService = Depends(get_order_service),
 ) -> dict[str, Any]:
     _assigned_patient(patient_id, doctor, repo)
     interactions = check(body.medicationName, repo.current_medicines(patient_id))
@@ -118,6 +121,10 @@ def issue_prescription(
             "source": PrescriptionSource.DOCTOR.value,  # D-50
         }
     )
+    if body.isRecurring:  # UC13.1: the first monthly order starts now (D-66)
+        rx = repo.prescription(rx_id)
+        if rx is not None:
+            orders.start_cycle(rx_id, rx, datetime.now(UTC), doctor.uid)
     audit.log(
         user_id=doctor.uid,
         action="ISSUE_PRESCRIPTION",

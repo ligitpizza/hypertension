@@ -19,7 +19,7 @@ class PrescriptionRequest(BaseModel):
     dosage: str = Field(min_length=1, max_length=50)
     frequency: str = Field(min_length=1, max_length=100)
     duration: str | None = Field(default=None, max_length=50)
-    isRecurring: bool = False  # UC13.1; monthly orders arrive with Module 13
+    isRecurring: bool = False  # UC13.1: starts the monthly order cycle (D-66)
     # UC8.4 E1: the doctor saw the interaction warning and chose to continue.
     acknowledgeInteractions: bool = False
 

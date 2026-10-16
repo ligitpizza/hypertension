@@ -31,8 +31,10 @@ from app.core.auth import get_token_verifier
 from app.core.config import Settings, get_settings
 from app.core.enums import ClinicalAlertType, RiskLevel, UserRole
 from app.core.rate_limit import RateLimiter
+from app.integrations.delivery import FakeGrabClient, get_courier_client
 from app.integrations.email import ConsoleEmailClient, EmailMessage, get_email_client
 from app.integrations.gemini import FakeLlmClient, Turn, get_llm_client
+from app.integrations.payments import FakeGateway, get_payment_gateway
 from app.integrations.push import LogPushClient
 from app.integrations.sms import LogSmsClient, get_sms_client
 from app.main import create_app
@@ -51,6 +53,7 @@ from app.services.family import get_family_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
 from app.services.medications import MedicationDoc, get_medication_repository
 from app.services.notifications import Notifier, get_notifier, get_token_repository
+from app.services.orders import get_order_repository
 from app.services.provider import get_provider_repository
 from app.services.records import get_file_store, get_record_repository
 from app.services.risk import get_risk_data_repository
@@ -564,6 +567,9 @@ class InMemoryFileStore:
     def read(self, path: str) -> bytes:
         return self.files[path][0]
 
+    def write(self, path: str, data: bytes, content_type: str) -> None:
+        self.files[path] = (data, content_type)
+
     def delete(self, path: str) -> None:
         self.files.pop(path, None)
 
@@ -732,6 +738,97 @@ class InMemoryProviderRepository:
         rx_id = f"rx{len(self.prescriptions) + 1}"
         self.prescriptions.append({**data, "id": rx_id})
         return rx_id
+
+
+class InMemoryOrderRepository:
+    """Module 13 (D-66). Prescriptions are shared with the provider fake."""
+
+    def __init__(self, users: "InMemoryUserRepository", provider: InMemoryProviderRepository):
+        self._users = users
+        self._provider = provider
+        self.orders: dict[str, dict[str, Any]] = {}
+        self.transactions: dict[str, dict[str, Any]] = {}
+        self.tracking: list[dict[str, Any]] = []
+        self.stock_items: dict[str, dict[str, Any]] = {}
+
+    def user(self, uid: str) -> dict[str, Any] | None:
+        return self._users.users.get(uid)
+
+    def staff(self, role: str) -> list[str]:
+        return [
+            uid
+            for uid, u in self._users.users.items()
+            if u.get("role") == role and u.get("isActive", True) is not False
+        ]
+
+    def prescription(self, rx_id: str) -> dict[str, Any] | None:
+        rx = self._provider.prescription(rx_id)
+        return dict(rx) if rx else None
+
+    def update_prescription(self, rx_id: str, data: dict[str, Any]) -> None:
+        self._provider.update_prescription(rx_id, data)
+
+    def recurring_prescriptions(self) -> list[dict[str, Any]]:
+        return [dict(p) for p in self._provider.prescriptions if p.get("isRecurring")]
+
+    def order(self, order_id: str) -> dict[str, Any] | None:
+        o = self.orders.get(order_id)
+        return dict(o) if o else None
+
+    def create_order(self, order_id: str, data: dict[str, Any]) -> bool:
+        if order_id in self.orders:
+            return False
+        self.orders[order_id] = dict(data)
+        return True
+
+    def update_order(self, order_id: str, data: dict[str, Any]) -> None:
+        self.orders[order_id].update(data)
+
+    def _where(self, test: Callable[[dict[str, Any]], bool]) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(o)) for i, o in self.orders.items() if test(o)]
+
+    def orders_for_patient(self, uid: str) -> list[tuple[str, dict[str, Any]]]:
+        return self._where(lambda o: o.get("patientId") == uid)
+
+    def orders_for_prescription(self, rx_id: str) -> list[tuple[str, dict[str, Any]]]:
+        return self._where(lambda o: o.get("prescriptionId") == rx_id)
+
+    def orders_with_status(self, statuses: tuple[str, ...]) -> list[tuple[str, dict[str, Any]]]:
+        return self._where(lambda o: o.get("fulfilmentStatus") in statuses)
+
+    def home_deliveries(self) -> list[tuple[str, dict[str, Any]]]:
+        return self._where(lambda o: o.get("method") == "home_delivery")
+
+    def add_transaction(self, tx_id: str, data: dict[str, Any]) -> None:
+        self.transactions[tx_id] = dict(data)
+
+    def events(self, order_id: str) -> list[dict[str, Any]]:
+        return [dict(e) for e in self.tracking if e["orderId"] == order_id]
+
+    def add_event(self, data: dict[str, Any]) -> None:
+        self.tracking.append(dict(data))
+
+    def stock(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(s)) for i, s in self.stock_items.items()]
+
+    def stock_item(self, stock_id: str) -> dict[str, Any] | None:
+        s = self.stock_items.get(stock_id)
+        return dict(s) if s else None
+
+    def add_stock(self, data: dict[str, Any]) -> str:
+        stock_id = f"stock{len(self.stock_items) + 1}"
+        self.stock_items[stock_id] = dict(data)
+        return stock_id
+
+    def update_stock(self, stock_id: str, data: dict[str, Any]) -> None:
+        self.stock_items[stock_id].update(data)
+
+    def take_stock(self, stock_id: str, units: int) -> bool:
+        s = self.stock_items.get(stock_id)
+        if s is None or int(s.get("units") or 0) < units:
+            return False
+        s["units"] = int(s["units"]) - units
+        return True
 
 
 class InMemoryAgentDataRepository:
@@ -1089,6 +1186,23 @@ def settings_repo(
 
 
 @pytest.fixture
+def order_repo(
+    repo: InMemoryUserRepository, provider_repo: InMemoryProviderRepository
+) -> InMemoryOrderRepository:
+    return InMemoryOrderRepository(repo, provider_repo)
+
+
+@pytest.fixture
+def gateway() -> FakeGateway:
+    return FakeGateway()
+
+
+@pytest.fixture
+def courier() -> FakeGrabClient:
+    return FakeGrabClient()
+
+
+@pytest.fixture
 def make_client(
     audit: InMemoryAuditLogger,
     identity: FakeIdentityProvider,
@@ -1118,6 +1232,9 @@ def make_client(
     analytics: InMemoryAnalyticsSource,
     family_repo: InMemoryFamilyRepository,
     sms: LogSmsClient,
+    order_repo: InMemoryOrderRepository,
+    gateway: FakeGateway,
+    courier: FakeGrabClient,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -1154,6 +1271,9 @@ def make_client(
         reset_limiter = RateLimiter(5)  # D-65: fresh per client, not shared across tests
         app.dependency_overrides[get_reset_limiter] = lambda: reset_limiter
         app.dependency_overrides[get_sms_client] = lambda: sms
+        app.dependency_overrides[get_order_repository] = lambda: order_repo
+        app.dependency_overrides[get_payment_gateway] = lambda: gateway
+        app.dependency_overrides[get_courier_client] = lambda: courier
         return TestClient(app)
 
     return _make
