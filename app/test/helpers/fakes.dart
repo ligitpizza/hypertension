@@ -61,8 +61,13 @@ class FakeAuthRepository implements AuthRepository {
     if (registerError != null) throw registerError!;
   }
 
+  Object? resetError;
+
   @override
-  Future<void> sendPasswordReset(String email) async => calls.add('reset');
+  Future<void> sendPasswordReset(String email) async {
+    calls.add('reset');
+    if (resetError != null) throw resetError!;
+  }
 
   @override
   Future<void> completeOnboarding(Map<String, dynamic> body) async {

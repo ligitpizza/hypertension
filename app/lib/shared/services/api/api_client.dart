@@ -162,6 +162,10 @@ class ApiClient {
     if (specialty != null && specialty.isNotEmpty) 'specialty': specialty,
   });
 
+  /// D-65: forgot password (works signed out; same answer whether or not the email exists).
+  Future<Map<String, dynamic>> requestPasswordReset(String email) =>
+      _post('/auth/password-reset', {'email': email});
+
   // ---- Module 3 (FR-3.1, FR-3.2) ----
 
   /// UC3.1: log a BP reading with optional PPG heart rate (UC3.3) and note (UC3.2).

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     email_from_name: str = "CareFlow"
     # D-64: Brevo SMS sender name (registered for Malaysia); empty = SMS only logged.
     sms_sender: str = ""
+    # D-65: where the password-reset page sends people afterwards (static page on Hosting).
+    public_base_url: str = "https://hypertension-dd85f.web.app"
 
     # Push notifications (D-33): false logs pushes instead of sending them through FCM.
     fcm_enabled: bool = False

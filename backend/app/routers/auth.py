@@ -5,7 +5,9 @@ Sign-up and sign-in themselves happen on the device with Firebase Authentication
 role claim, store onboarding data and write audit_logs.
 """
 
+import html
 import json
+import logging
 from datetime import UTC, datetime, time
 from functools import lru_cache
 from typing import Any
@@ -14,7 +16,7 @@ from fastapi import APIRouter, Depends, Request, status
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, get_current_user, require_roles
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.enums import (
     APP_ROLES,
     AssignmentRequestKind,
@@ -25,9 +27,11 @@ from app.core.enums import (
 )
 from app.core.errors import ApiError
 from app.core.rate_limit import RateLimiter
+from app.integrations.email import EmailClient, EmailMessage, get_email_client
 from app.schemas.auth import (
     LoginFailedRequest,
     OnboardingRequest,
+    PasswordResetRequest,
     RegisterProfileRequest,
     RegisterProfileResponse,
     SessionEventRequest,
@@ -37,6 +41,7 @@ from app.services.ic import IcError, parse_ic
 from app.services.identity import IdentityProvider, get_identity_provider
 from app.services.users import UserRepository, get_user_repository, new_link_code
 
+log = logging.getLogger("careflow.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 ANONYMOUS_USER = "anonymous"
@@ -275,3 +280,76 @@ def login_failed(
         details=f"app={body.app}; reason={body.reason}; emailDomain={body.email_domain()}",
     )
     return {"status": "recorded"}
+
+
+# ---------------- D-65: password reset email through Brevo ----------------
+
+
+@lru_cache
+def _reset_limiter() -> RateLimiter:
+    return RateLimiter(5)
+
+
+def get_reset_limiter() -> RateLimiter:
+    return _reset_limiter()
+
+
+def password_reset_email(name: str, email: str, link: str) -> EmailMessage:
+    greeting = f"Hello {name}," if name else "Hello,"
+    text = (
+        f"{greeting}\n\nWe received a request to reset your CareFlow password.\n"
+        f"Choose a new password here (the link works for 1 hour):\n{link}\n\n"
+        "Afterwards, return to the CareFlow app (or the staff portal) and sign in.\n"
+        "If you did not ask for this, ignore this email; your password stays the same.\n"
+    )
+    safe_link = html.escape(link, quote=True)
+    body = (
+        f"<p>{html.escape(greeting)}</p>"
+        "<p>We received a request to reset your <b>CareFlow</b> password.</p>"
+        f'<p><a href="{safe_link}" style="background:#2D6A8E;color:#fff;padding:10px 18px;'
+        'border-radius:20px;text-decoration:none">Reset password</a></p>'
+        "<p>The link works for 1 hour. Afterwards, return to the CareFlow app (or the staff "
+        "portal) and sign in.</p>"
+        "<p>If you did not ask for this, ignore this email; your password stays the same.</p>"
+    )
+    return EmailMessage(
+        to_email=email,
+        to_name=name or email,
+        subject="Reset your CareFlow password",
+        text=text,
+        html=body,
+    )
+
+
+@router.post("/password-reset", status_code=status.HTTP_202_ACCEPTED)
+def request_password_reset(
+    body: PasswordResetRequest,
+    request: Request,
+    limiter: RateLimiter = Depends(get_reset_limiter),
+    identity: IdentityProvider = Depends(get_identity_provider),
+    email_client: EmailClient = Depends(get_email_client),
+    settings: Settings = Depends(get_settings),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, str]:
+    """UC1.2 forgot password (D-65): Brevo email with Firebase's reset link. The answer is
+    the same whether or not the account exists, so emails can't be probed."""
+    if not limiter.allow(_client_ip(request)):
+        raise ApiError(
+            "RATE_LIMITED", "Too many attempts. Try again later.", status.HTTP_429_TOO_MANY_REQUESTS
+        )
+    email = body.email.strip().lower()
+    found = identity.password_reset_link(
+        email, f"{settings.public_base_url.rstrip('/')}/reset-done.html"
+    )
+    if found is not None:
+        link, name = found
+        try:
+            email_client.send(password_reset_email(name, email, link))
+        except Exception:  # never reveal provider problems to an anonymous caller
+            log.exception("Password reset email failed")
+        audit.log(
+            user_id=ANONYMOUS_USER,
+            action="PASSWORD_RESET_REQUESTED",
+            details=f"Reset email sent; emailDomain={email.rsplit('@', 1)[-1]}.",
+        )
+    return {"status": "sent_if_exists"}

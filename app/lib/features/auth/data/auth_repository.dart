@@ -190,7 +190,8 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> sendPasswordReset(String email) => _auth.sendPasswordResetEmail(email: email.trim());
+  // D-65: the backend emails Firebase's reset link through Brevo (branded, from CareFlow).
+  Future<void> sendPasswordReset(String email) => _api.requestPasswordReset(email.trim());
 
   @override
   Future<void> completeOnboarding(Map<String, dynamic> body) async {

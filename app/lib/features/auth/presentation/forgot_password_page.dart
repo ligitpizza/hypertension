@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/services/api/api_client.dart';
 import '../../../core/utils/validators.dart';
 import '../state/auth_providers.dart';
 
@@ -18,6 +19,7 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
   final _email = TextEditingController();
   bool _sending = false;
   bool _sent = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -27,12 +29,24 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
 
   Future<void> _send() async {
     if (!_form.currentState!.validate()) return;
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
     try {
       await ref.read(authRepositoryProvider).sendPasswordReset(_email.text);
-    } catch (_) {
-      // Same message whether or not the email exists (no account enumeration).
-    }
+    } on ApiException catch (e) {
+      if (e.code == 'RATE_LIMITED') {
+        if (mounted) {
+          setState(() {
+            _sending = false;
+            _error = 'Too many requests. Please wait a minute and try again.';
+          });
+        }
+        return;
+      }
+      // Anything else: same message whether or not the email exists (no enumeration).
+    } catch (_) {}
     if (mounted) {
       setState(() {
         _sending = false;
@@ -62,8 +76,9 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
                       const Icon(Icons.mark_email_read_outlined, size: 56),
                       const SizedBox(height: 16),
                       const Text(
-                        'If an account exists for that email, a reset link is on its way. '
-                        'Check your inbox, then sign in with your new password.',
+                        'If an account exists for that email, a reset link from CareFlow is on '
+                        'its way (check spam too). The link works for 1 hour. Choose a new '
+                        'password there, then come back and sign in.',
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
@@ -87,6 +102,15 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
                           decoration: const InputDecoration(labelText: 'Email address'),
                           validator: Validators.email,
                         ),
+                        if (_error != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              _error!,
+                              key: const Key('reset-error'),
+                              style: TextStyle(color: Theme.of(context).colorScheme.error),
+                            ),
+                          ),
                         const SizedBox(height: 20),
                         FilledButton(
                           key: const Key('reset-submit'),

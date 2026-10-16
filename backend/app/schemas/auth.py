@@ -196,3 +196,11 @@ class CreatePatientRequest(_Strict):
     icNumber: str = Field(min_length=12, max_length=14)
 
     _email = field_validator("email")(_check_email)
+
+
+class PasswordResetRequest(_Strict):
+    """D-65: forgot password."""
+
+    email: str = Field(max_length=254)
+
+    _email = field_validator("email")(_check_email)

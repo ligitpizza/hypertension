@@ -38,7 +38,7 @@ from app.integrations.sms import LogSmsClient, get_sms_client
 from app.main import create_app
 from app.ml.risk_model import get_risk_model
 from app.routers.agent import get_agent_limiter
-from app.routers.auth import get_failed_login_limiter
+from app.routers.auth import get_failed_login_limiter, get_reset_limiter
 from app.routers.messages import get_message_repository
 from app.services.agent_context import get_agent_data_repository
 from app.services.analytics import get_analytics_source
@@ -112,6 +112,11 @@ class FakeIdentityProvider:
 
     def password_setup_link(self, email: str) -> str:
         return f"https://example.test/reset?email={email}&oob=abc"
+
+    def password_reset_link(self, email: str, continue_url: str) -> tuple[str, str] | None:
+        if email not in self.emails:
+            return None
+        return f"https://example.test/reset?email={email}&continue={continue_url}", "Ali"
 
     def revoke_sessions(self, uid: str) -> None:
         self.revoked.append(uid)
@@ -1146,6 +1151,8 @@ def make_client(
         app.dependency_overrides[get_audit_reader] = lambda: audit_reader
         app.dependency_overrides[get_analytics_source] = lambda: analytics
         app.dependency_overrides[get_family_repository] = lambda: family_repo
+        reset_limiter = RateLimiter(5)  # D-65: fresh per client, not shared across tests
+        app.dependency_overrides[get_reset_limiter] = lambda: reset_limiter
         app.dependency_overrides[get_sms_client] = lambda: sms
         return TestClient(app)
 

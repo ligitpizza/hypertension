@@ -1097,3 +1097,9 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   link. Found that the live backend had never sent real email (INTEGRATIONS_MODE=fake, no
   key on Cloud Run): new `set-brevo-secret` task stores the key in Secret Manager and
   deploy-backend switches to real Brevo when that secret exists. Tests: backend 9 new.
+- **D-65 password reset through Brevo:** `POST /auth/password-reset` emails Firebase's
+  reset link from CareFlow's Brevo sender (neutral answer for unknown emails, rate limited,
+  audited by domain); after the new password is saved, Firebase's page continues to
+  `reset-done.html` (in `app/web/`, deployed with the portal) with "Open the CareFlow app"
+  and "Go to the staff portal". The app's Forgot-password screen calls the backend and
+  explains the 1-hour link and spam folder. Tests: backend 4, Flutter 2 (514 total).

@@ -22,6 +22,10 @@ class IdentityProvider(Protocol):
 
     def password_setup_link(self, email: str) -> str: ...
 
+    def password_reset_link(self, email: str, continue_url: str) -> tuple[str, str] | None:
+        """D-65: (reset link, display name) for an existing login, or None (no such user)."""
+        ...
+
     def revoke_sessions(self, uid: str) -> None:
         """Sign the user out everywhere (refresh tokens revoked; UC12.4)."""
         ...
@@ -53,6 +57,18 @@ class FirebaseIdentityProvider:
     def password_setup_link(self, email: str) -> str:
         link: str = fb_auth.generate_password_reset_link(email, app=get_firebase_app())
         return link
+
+    def password_reset_link(self, email: str, continue_url: str) -> tuple[str, str] | None:
+        try:
+            user = fb_auth.get_user_by_email(email, app=get_firebase_app())
+        except fb_auth.UserNotFoundError:
+            return None
+        link: str = fb_auth.generate_password_reset_link(
+            email,
+            action_code_settings=fb_auth.ActionCodeSettings(url=continue_url),
+            app=get_firebase_app(),
+        )
+        return link, str(user.display_name or "")
 
     def revoke_sessions(self, uid: str) -> None:
         fb_auth.revoke_refresh_tokens(uid, app=get_firebase_app())

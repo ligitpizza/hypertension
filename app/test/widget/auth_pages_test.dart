@@ -15,6 +15,7 @@ import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/staff_shell/staff_shell.dart';
 import 'package:hypertension/shared/widgets/home_placeholder.dart';
 import 'package:hypertension/shared/providers/api_providers.dart';
+import 'package:hypertension/shared/services/api/api_client.dart';
 
 import '../helpers/fakes.dart';
 
@@ -208,6 +209,26 @@ void main() {
       await t.pumpAndSettle();
       expect(repo.calls, ['reset']);
       expect(find.byKey(const Key('reset-sent')), findsOneWidget);
+      expect(find.textContaining('The link works for 1 hour'), findsOneWidget);
+    });
+
+    tallTest('D-65 an unknown email still gets the neutral confirmation', (t) async {
+      final repo = FakeAuthRepository()..resetError = ApiException('NETWORK_ERROR', 'x');
+      await t.pumpWidget(harness(const ForgotPasswordPage(), repo: repo));
+      await fill(t, 'reset-email', 'p@x.my');
+      await t.tap(find.byKey(const Key('reset-submit')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('reset-sent')), findsOneWidget);
+    });
+
+    tallTest('D-65 too many requests asks to wait', (t) async {
+      final repo = FakeAuthRepository()..resetError = ApiException('RATE_LIMITED', 'Too many');
+      await t.pumpWidget(harness(const ForgotPasswordPage(), repo: repo));
+      await fill(t, 'reset-email', 'p@x.my');
+      await t.tap(find.byKey(const Key('reset-submit')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('reset-error')), findsOneWidget);
+      expect(find.byKey(const Key('reset-sent')), findsNothing);
     });
   });
 
