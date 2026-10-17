@@ -124,6 +124,33 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  group('D-78 home', () {
+    tallTest('crisis BP tints the card and warns; appointment tomorrow is called out', (t) async {
+      final repo = FakeDashboardRepository()
+        ..readings = Stream.value([reading(200, 150, now.subtract(const Duration(hours: 1)))])
+        ..appts = Stream.value([
+          Appointment(
+            id: 'a',
+            patientId: 'p1',
+            dateTime: DateTime(2026, 10, 13, 10, 30),
+            status: AppointmentStatus.booked,
+          ),
+        ]);
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('latest-bp-crisis')), findsOneWidget);
+      expect(find.byKey(const Key('callout-appointment')), findsOneWidget);
+      expect(find.textContaining("Don't forget"), findsOneWidget);
+    });
+
+    tallTest('no callouts when nothing needs attention', (t) async {
+      await t.pumpWidget(app(FakeDashboardRepository()));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('callout-appointment')), findsNothing);
+      expect(find.byKey(const Key('callout-order')), findsNothing);
+    });
+  });
+
   group('D-77 home', () {
     tallTest('the bell shows unread notifications and opens them', (t) async {
       await t.pumpWidget(app(FakeDashboardRepository()));

@@ -42,6 +42,7 @@ from app.ml.risk_model import get_risk_model
 from app.routers.agent import get_agent_limiter
 from app.routers.auth import get_failed_login_limiter, get_reset_limiter
 from app.routers.messages import get_message_repository
+from app.routers.staff_requests import get_staff_request_repository
 from app.services.agent_context import get_agent_data_repository
 from app.services.analytics import get_analytics_source
 from app.services.appointments import get_appointment_repository
@@ -181,11 +182,31 @@ class InMemoryUserRepository:
 class InMemoryVitalsRepository:
     def __init__(self) -> None:
         self.readings: dict[str, dict[str, Any]] = {}
+        # Set by the risk_repo fixture so D-78 deletes can clear saved scores.
+        self.risk_saved: list[dict[str, Any]] | None = None
 
     def add_reading(self, data: dict[str, Any]) -> str:
         rid = f"r{len(self.readings) + 1}"
         self.readings[rid] = dict(data)
         return rid
+
+    def reading(self, reading_id: str) -> dict[str, Any] | None:
+        r = self.readings.get(reading_id)
+        return dict(r) if r else None
+
+    def reading_ids(self, uid: str) -> list[str]:
+        return [i for i, r in self.readings.items() if r["patientId"] == uid]
+
+    def delete_readings(self, ids: list[str]) -> None:
+        for i in ids:
+            self.readings.pop(i, None)
+
+    def delete_risk_scores(self, uid: str) -> int:
+        if self.risk_saved is None:
+            return 0
+        before = len(self.risk_saved)
+        self.risk_saved[:] = [d for d in self.risk_saved if d["patientId"] != uid]
+        return before - len(self.risk_saved)
 
 
 class DeliveringEmailClient(ConsoleEmailClient):
@@ -743,6 +764,9 @@ class InMemoryProviderRepository:
         self.prescriptions.append({**data, "id": rx_id})
         return rx_id
 
+    def prescriptions_by_doctor(self, doctor_id: str) -> list[tuple[str, dict[str, Any]]]:
+        return [(p["id"], dict(p)) for p in self.prescriptions if p.get("doctorId") == doctor_id]
+
 
 class InMemoryOrderRepository:
     """Module 13 (D-66). Prescriptions are shared with the provider fake."""
@@ -935,6 +959,31 @@ class InMemoryPharmacyChatRepository:
 
     def recent(self, limit: int) -> list[tuple[str, dict[str, Any]]]:
         return [(i, dict(m)) for i, m in reversed(self.messages)][:limit]
+
+
+class InMemoryStaffRequestRepository:
+    """D-78 admin center."""
+
+    def __init__(self) -> None:
+        self.items: dict[str, dict[str, Any]] = {}
+
+    def add(self, data: dict[str, Any]) -> str:
+        rid = f"sr{len(self.items) + 1}"
+        self.items[rid] = dict(data)
+        return rid
+
+    def get(self, request_id: str) -> dict[str, Any] | None:
+        r = self.items.get(request_id)
+        return dict(r) if r else None
+
+    def update(self, request_id: str, data: dict[str, Any]) -> None:
+        self.items[request_id].update(data)
+
+    def all(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(r)) for i, r in self.items.items()]
+
+    def by_requester(self, uid: str) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(r)) for i, r in self.items.items() if r["requesterId"] == uid]
 
 
 class InMemoryInboxRepository:
@@ -1273,7 +1322,9 @@ def vitals_repo() -> InMemoryVitalsRepository:
 def risk_repo(
     repo: InMemoryUserRepository, vitals_repo: InMemoryVitalsRepository
 ) -> InMemoryRiskRepository:
-    return InMemoryRiskRepository(repo, vitals_repo)
+    risk = InMemoryRiskRepository(repo, vitals_repo)
+    vitals_repo.risk_saved = risk.saved
+    return risk
 
 
 @pytest.fixture
@@ -1416,6 +1467,11 @@ def pharmacy_chat() -> InMemoryPharmacyChatRepository:
 
 
 @pytest.fixture
+def staff_requests() -> InMemoryStaffRequestRepository:
+    return InMemoryStaffRequestRepository()
+
+
+@pytest.fixture
 def inbox(repo: InMemoryUserRepository) -> InMemoryInboxRepository:
     return InMemoryInboxRepository(repo)
 
@@ -1472,6 +1528,7 @@ def make_client(
     pharmacy_chat: InMemoryPharmacyChatRepository,
     conversations: InMemoryConversationRepository,
     inbox: InMemoryInboxRepository,
+    staff_requests: InMemoryStaffRequestRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -1515,6 +1572,7 @@ def make_client(
         app.dependency_overrides[get_pharmacy_chat_repository] = lambda: pharmacy_chat
         app.dependency_overrides[get_conversation_repository] = lambda: conversations
         app.dependency_overrides[get_inbox_repository] = lambda: inbox
+        app.dependency_overrides[get_staff_request_repository] = lambda: staff_requests
         return TestClient(app)
 
     return _make

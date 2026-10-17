@@ -1368,3 +1368,18 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Deviations / additions: `notifications` collection, `users.phone` (staff), `users.bellPrefs`.
 - Tests: backend 690 (+3 skipped); Flutter 588; rules 208.
 
+### 2026-10-17 — Admin center, prescription management, dev BP tools, UI refresh (D-78)
+
+- Backend: `routers/staff_requests.py` (create, list, admin update; bell notifications),
+  `routers/doctor_prescriptions.py` (`GET /provider/prescriptions`), dev-only
+  `DELETE /vitals/{id}` and `DELETE /vitals` behind `DEV_VITALS_TOOLS` (risk scores
+  removed and recomputed), `ProviderRepository.prescriptions_by_doctor`.
+- Rules: `staff_requests` server-only (+ test).
+- App: `staff_shell/admin_center.dart` (Admin center for doctors and pharmacists, Staff
+  requests for the admin, dashboard tile), `prescriptions_overview_page.dart`, gradient top
+  bar; Vitals tab rewritten (category colours, crisis strip, day groups, risk colour, dev
+  delete/clear), Records header and category colours, Home Today's plan with dose progress,
+  tinted Latest BP with crisis strip, attention callouts.
+- Deviations / additions: `staff_requests` collection, `DEV_VITALS_TOOLS` setting.
+- Tests: backend 696 (+3 skipped); Flutter 595; rules 209.
+

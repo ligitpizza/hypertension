@@ -112,5 +112,15 @@ class _CategoryDialogState extends State<_CategoryDialog> {
 
 IconData recordIcon(HealthRecord r) => r.isPdf ? Icons.picture_as_pdf : Icons.image_outlined;
 
+/// D-78: one colour and icon per category, so documents are easy to tell apart.
+(IconData, Color) categoryStyle(RecordCategory c) => switch (c) {
+  RecordCategory.labResult => (Icons.science_outlined, Colors.purple.shade400),
+  RecordCategory.prescription => (Icons.medication_outlined, Colors.teal.shade600),
+  RecordCategory.imaging => (Icons.monitor_heart_outlined, Colors.indigo.shade400),
+  RecordCategory.dischargeSummary => (Icons.local_hospital_outlined, Colors.red.shade400),
+  RecordCategory.referralLetter => (Icons.mail_outline, Colors.orange.shade700),
+  RecordCategory.other => (Icons.description_outlined, Colors.blueGrey),
+};
+
 String recordSubtitle(HealthRecord r) =>
     '${r.category.label} · ${fileSizeLabel(r.sizeBytes)} · ${formatDate(r.uploadedAt)}';

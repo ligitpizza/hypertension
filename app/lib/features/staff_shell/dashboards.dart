@@ -14,6 +14,7 @@ import '../notifications/state/notification_providers.dart';
 import '../orders/data/order_models.dart';
 import '../orders/state/orders_providers.dart';
 import '../provider_portal/state/portal_providers.dart';
+import 'admin_center.dart';
 
 /// D-77: a live dashboard as each portal role's home page. Cards summarise what needs
 /// attention today and link to the page that handles it.
@@ -639,6 +640,15 @@ class AdminDashboardPage extends ConsumerWidget {
               label: 'Appointment change requests',
               value: '${changeRequests.length}',
               onTap: () => context.go('/admin/appointments'),
+            ),
+            StatTile(
+              key: const Key('stat-staff-requests'),
+              icon: Icons.support_agent,
+              color: Colors.deepOrange.shade400,
+              label: 'Open staff requests',
+              value:
+                  '${(ref.watch(staffRequestsProvider).value ?? const <StaffRequest>[]).where((r) => r.status != 'done').length}',
+              onTap: () => context.go('/admin/requests'),
             ),
             StatTile(
               icon: Icons.event,

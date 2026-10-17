@@ -29,7 +29,8 @@
     "pharmacy_messages",
     "conversations",
     "conversation_messages",
-    "notifications"
+    "notifications",
+    "staff_requests"
   ],
   "user_role": [
     "patient",

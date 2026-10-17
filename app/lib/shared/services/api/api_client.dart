@@ -642,6 +642,26 @@ class ApiClient {
   Future<Map<String, dynamic>> sendPharmacyMessage(String patientId, String text) =>
       _post('/pharmacy-chat/$patientId/messages', {'text': text});
 
+  // D-78 admin center, prescription management and dev BP tools.
+  Future<Map<String, dynamic>> staffRequests() => _get('/staff-requests');
+
+  Future<Map<String, dynamic>> createStaffRequest(
+    String category,
+    String subject,
+    String details,
+  ) => _post('/staff-requests', {'category': category, 'subject': subject, 'details': details});
+
+  Future<Map<String, dynamic>> updateStaffRequest(String id, {String? status, String? reply}) =>
+      _send('PATCH', '/staff-requests/$id', {'status': ?status, 'reply': ?reply});
+
+  Future<Map<String, dynamic>> doctorPrescriptions() => _get('/provider/prescriptions');
+
+  Future<Map<String, dynamic>> vitalsDevTools() => _get('/vitals/dev-tools');
+
+  Future<Map<String, dynamic>> deleteReading(String id) => _send('DELETE', '/vitals/$id', null);
+
+  Future<Map<String, dynamic>> clearReadings() => _send('DELETE', '/vitals', null);
+
   // D-77 notification bell and staff settings.
   Future<Map<String, dynamic>> notifications() => _get('/notifications');
 

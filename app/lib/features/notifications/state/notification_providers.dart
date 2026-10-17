@@ -62,6 +62,7 @@ String? notificationRoute(String? type, Map<String, String> data, UserRole? role
     'appointment' when role == UserRole.doctor => '/doctor/calendar',
     'appointment' when role == UserRole.admin => '/admin/appointments',
     'assignment' when role == UserRole.admin => '/admin/assignments',
+    'staff_request' => role == UserRole.admin ? '/admin/requests' : '$staffBase/admin-center',
     _ => null,
   };
 }

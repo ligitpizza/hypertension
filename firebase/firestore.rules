@@ -204,6 +204,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // D-78 admin center: staff requests go through FastAPI (who may read, notifications).
+    match /staff_requests/{requestId} {
+      allow read, write: if false;
+    }
+
     // ---- agent_messages (FR-14.1, Table 4.2.3.16) ----
     // Written only by FastAPI (it calls Gemini). Read by the patient for the chat screen,
     // and by the assigned doctor / admin like other patient-owned data (docs/04).

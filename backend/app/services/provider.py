@@ -35,6 +35,10 @@ class ProviderRepository(Protocol):
 
     def delete_prescription(self, rx_id: str) -> None: ...
 
+    def prescriptions_by_doctor(self, doctor_id: str) -> list[tuple[str, dict[str, Any]]]:
+        """D-78: every prescription this doctor issued."""
+        ...
+
 
 class FirestoreProviderRepository:
     def __init__(self, db: Any) -> None:
@@ -92,6 +96,12 @@ class FirestoreProviderRepository:
 
     def delete_prescription(self, rx_id: str) -> None:
         self._db.collection(Collection.PRESCRIPTIONS.value).document(rx_id).delete()
+
+    def prescriptions_by_doctor(self, doctor_id: str) -> list[tuple[str, dict[str, Any]]]:
+        q = self._db.collection(Collection.PRESCRIPTIONS.value).where(
+            filter=firestore.FieldFilter("doctorId", "==", doctor_id)
+        )
+        return [(d.id, dict(d.to_dict())) for d in q.stream()]
 
 
 def get_provider_repository() -> ProviderRepository:

@@ -360,6 +360,22 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 
 > Written by the backend Notifier for every push; read only through FastAPI.
 
+### `staff_requests`  (D-78, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | Primary key | Auto-generated |
+| requesterId | Reference (users) | Doctor or pharmacist | Required |
+| requesterName, requesterRole | String | Shown to the admin | Required |
+| category | String | account / leave / stock / it / other | Required |
+| subject | String | Short title | Required; 3-120 |
+| details | String | Request text | Required; ≤ 2000 |
+| status | String | open / in_progress / done | Default open |
+| reply, repliedBy | String | Admin's answer and name | Optional |
+| createdAt, updatedAt | Timestamp | | Required |
+
+> Read and written only through FastAPI.
+
 ### `medication_stock`  (D-66, not in Ch4)
 
 | Field | Type | Description | Constraints / Notes |

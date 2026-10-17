@@ -9,6 +9,10 @@ import '../../../shared/models/health_models.dart';
 import '../../../core/constants/enums.dart';
 import '../../../shared/widgets/care_plan_history.dart';
 import '../../auth/state/auth_providers.dart';
+import '../../medications/state/medication_providers.dart';
+import '../../messaging/state/messaging_providers.dart';
+import '../../orders/data/order_models.dart';
+import '../../orders/state/orders_providers.dart';
 import '../../notifications/presentation/notification_bell.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../symptom_checker/state/symptom_providers.dart';
@@ -57,6 +61,7 @@ class DashboardPage extends ConsumerWidget {
             const SizedBox(height: 16),
             const _EmergencyCallCard(),
             const _MorningBpCard(),
+            const _AttentionCallouts(),
             const _TodaysPlanCard(),
             const SizedBox(height: 16),
             const _LatestBpCard(),
@@ -106,18 +111,23 @@ class _Section<T> extends StatelessWidget {
 }
 
 class _CardShell extends StatelessWidget {
-  const _CardShell({super.key, required this.child, this.accent, this.onTap});
+  const _CardShell({super.key, required this.child, this.accent, this.onTap, this.tint});
 
   final Widget child;
   final Color? accent;
   final VoidCallback? onTap;
+
+  /// D-78: a light wash of this colour behind the card (e.g. the BP category).
+  final Color? tint;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     // D-77: raised cards with a coloured edge so each section stands out.
     return Material(
-      color: scheme.surfaceContainerLow,
+      color: tint == null
+          ? scheme.surfaceContainerLow
+          : Color.alphaBlend(tint!.withValues(alpha: 0.08), scheme.surfaceContainerLow),
       elevation: 2,
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(18),
@@ -324,18 +334,39 @@ class _TodaysPlanCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final meds = ref.watch(medicationsProvider);
     final appts = ref.watch(upcomingAppointmentsProvider);
+    final doses = ref.watch(todaysDosesProvider).value ?? const <ScheduledDose>[];
     final now = ref.watch(nowProvider)();
+    final taken = doses.where((d) => d.state == DoseState.taken).length;
+    final theme = Theme.of(context);
     return _CardShell(
       key: const Key('card-todays-plan'),
+      accent: theme.colorScheme.primary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Expanded(child: Text("Today's Plan", style: Theme.of(context).textTheme.titleMedium)),
-              const Icon(Icons.calendar_today_outlined, size: 20),
+              Icon(Icons.today, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Text("Today's Plan", style: theme.textTheme.titleMedium)),
+              if (doses.isNotEmpty)
+                Text(
+                  '$taken of ${doses.length} doses taken',
+                  key: const Key('plan-progress-text'),
+                  style: theme.textTheme.labelLarge,
+                ),
             ],
           ),
+          if (doses.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              key: const Key('plan-progress'),
+              value: taken / doses.length,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+              color: Colors.green.shade600,
+            ),
+          ],
           const SizedBox(height: 12),
           _Section<List<Medication>>(
             value: meds,
@@ -348,6 +379,22 @@ class _TodaysPlanCard extends ConsumerWidget {
                     text: 'No medications yet.',
                     action: 'Add one',
                     onTap: () => context.go('/medications'),
+                  )
+                : doses.isNotEmpty
+                ? Column(
+                    children: [
+                      // Still to take first, then what is done.
+                      for (final d in [
+                        ...doses.where((d) => d.state != DoseState.taken),
+                        ...doses.where((d) => d.state == DoseState.taken),
+                      ].take(4))
+                        _DoseRow(dose: d),
+                      if (doses.length > 4)
+                        TextButton(
+                          onPressed: () => context.go('/medications'),
+                          child: Text('See all ${doses.length} doses'),
+                        ),
+                    ],
                   )
                 : Column(
                     children: [
@@ -375,9 +422,11 @@ class _TodaysPlanCard extends ConsumerWidget {
                   )
                 : _PlanTile(
                     key: const Key('next-appointment'),
-                    icon: Icons.medical_services_outlined,
+                    icon: Icons.event,
                     title: 'Appointment',
                     subtitle: appointmentLabel(list.first.dateTime, now),
+                    color: Colors.purple.shade400,
+                    onTap: () => context.push('/appointments'),
                   ),
           ),
         ],
@@ -386,20 +435,260 @@ class _TodaysPlanCard extends ConsumerWidget {
   }
 }
 
+/// D-78: one of today's doses, coloured by time of day, with its state.
+class _DoseRow extends StatelessWidget {
+  const _DoseRow({required this.dose});
+  final ScheduledDose dose;
+
+  static Color periodColour(DosePeriod p) => switch (p) {
+    DosePeriod.morning => Colors.amber.shade700,
+    DosePeriod.afternoon => Colors.deepOrange.shade400,
+    DosePeriod.evening => Colors.indigo.shade400,
+    DosePeriod.asNeeded => Colors.teal.shade500,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final color = periodColour(dose.period);
+    final (label, chip) = switch (dose.state) {
+      DoseState.taken => ('Taken', Colors.green.shade600),
+      DoseState.missed => ('Missed', Colors.red.shade600),
+      DoseState.due => ('Take now', Theme.of(context).colorScheme.primary),
+      DoseState.upcoming => (dose.time.label, Colors.blueGrey),
+    };
+    final m = dose.medication;
+    return _TintedTile(
+      key: Key('plan-dose-${m.id}-${dose.time.hhmm}'),
+      color: color,
+      child: ListTile(
+        dense: true,
+        onTap: () => GoRouter.of(context).go('/medications'),
+        leading: CircleAvatar(
+          backgroundColor: color.withValues(alpha: 0.18),
+          foregroundColor: color,
+          child: Icon(dose.state == DoseState.taken ? Icons.check : Icons.medication),
+        ),
+        title: Text(
+          '${m.name} ${m.dosage}'.trim(),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            decoration: dose.state == DoseState.taken ? TextDecoration.lineThrough : null,
+          ),
+        ),
+        subtitle: Text('${dose.period.label} · ${dose.time.label}'),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: chip.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(color: chip, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// D-78: easy-to-miss things as coloured callouts (unpaid order, appointment soon, missed
+/// dose, unread doctor message). Each source may fail on its own without hiding the rest.
+class _AttentionCallouts extends ConsumerWidget {
+  const _AttentionCallouts();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(nowProvider)();
+    final user = ref.watch(currentUserProvider).value;
+    final items = <Widget>[];
+
+    final orders = ref.watch(myOrdersProvider).value ?? const <MedicationOrder>[];
+    final waiting = orders
+        .where(
+          (o) =>
+              o.status == Fulfilment.awaitingPayment || o.status == Fulfilment.awaitingConfirmation,
+        )
+        .length;
+    if (waiting > 0) {
+      items.add(
+        _Callout(
+          key: const Key('callout-order'),
+          icon: Icons.local_pharmacy_outlined,
+          color: Colors.orange.shade700,
+          text: waiting == 1
+              ? 'Your medicine order is waiting for you to confirm and pay.'
+              : '$waiting medicine orders are waiting for you.',
+          onTap: () => context.push('/orders'),
+        ),
+      );
+    }
+
+    final appts = ref.watch(upcomingAppointmentsProvider).value ?? const <Appointment>[];
+    final next = appts.firstOrNull;
+    if (next != null) {
+      final today = DateTime(now.year, now.month, now.day);
+      final day = DateTime(next.dateTime.year, next.dateTime.month, next.dateTime.day);
+      final diff = day.difference(today).inDays;
+      if (diff == 0 || diff == 1) {
+        items.add(
+          _Callout(
+            key: const Key('callout-appointment'),
+            icon: Icons.event,
+            color: Colors.purple.shade400,
+            text: 'Appointment ${appointmentLabel(next.dateTime, now)}. Don\'t forget!',
+            onTap: () => context.push('/appointments'),
+          ),
+        );
+      }
+    }
+
+    final doses = ref.watch(todaysDosesProvider).value ?? const <ScheduledDose>[];
+    final missed = doses.where((d) => d.state == DoseState.missed).length;
+    if (missed > 0) {
+      items.add(
+        _Callout(
+          key: const Key('callout-missed'),
+          icon: Icons.medication_outlined,
+          color: Colors.red.shade600,
+          text:
+              '$missed missed ${missed == 1 ? 'dose' : 'doses'} today. You can still record '
+              'it if you took it late.',
+          onTap: () => context.go('/medications'),
+        ),
+      );
+    }
+
+    final doctor = user?.assignedDoctorId;
+    if (user != null && doctor != null) {
+      final unread = ref.watch(unreadCountProvider((user.uid, doctor))).value ?? 0;
+      if (unread > 0) {
+        items.add(
+          _Callout(
+            key: const Key('callout-message'),
+            icon: Icons.chat_bubble_outline,
+            color: Colors.blue.shade600,
+            text: 'Your doctor sent you $unread new ${unread == 1 ? 'message' : 'messages'}.',
+            onTap: () => context.push('/chat/$doctor'),
+          ),
+        );
+      }
+    }
+
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(children: items),
+    );
+  }
+}
+
+class _Callout extends StatelessWidget {
+  const _Callout({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.text,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Material(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: 0.6)),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                child: Icon(icon, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              Icon(Icons.chevron_right, color: color),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class _PlanTile extends StatelessWidget {
-  const _PlanTile({super.key, required this.icon, required this.title, required this.subtitle});
+  const _PlanTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.color,
+    this.onTap,
+  });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final Color? color;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      leading: CircleAvatar(child: Icon(icon)),
-      title: Text(title),
-      subtitle: Text(subtitle),
+  Widget build(BuildContext context) {
+    final c = color ?? Theme.of(context).colorScheme.primary;
+    return _TintedTile(
+      color: c,
+      child: ListTile(
+        dense: true,
+        onTap: onTap,
+        leading: CircleAvatar(
+          backgroundColor: c.withValues(alpha: 0.18),
+          foregroundColor: c,
+          child: Icon(icon),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(subtitle),
+      ),
+    );
+  }
+}
+
+/// D-78: a lightly tinted row with a coloured left edge (its own Material, so the
+/// ListTile's ink still shows).
+class _TintedTile extends StatelessWidget {
+  const _TintedTile({super.key, required this.color, required this.child});
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Material(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: color, width: 4)),
+        ),
+        child: child,
+      ),
     ),
   );
 }
@@ -439,9 +728,14 @@ class _LatestBpCard extends ConsumerWidget {
     final readings = ref.watch(recentReadingsProvider);
     final now = ref.watch(nowProvider)();
     final scheme = Theme.of(context).colorScheme;
+    final first = readings.value?.firstOrNull;
+    final category = first == null ? null : BpClassifier.classify(first.systolic, first.diastolic);
+    // D-78: the whole card takes the BP category colour.
+    final color = category == null ? scheme.primary : BpClassifier.color(category);
     return _CardShell(
       key: const Key('card-latest-bp'),
-      accent: scheme.primary,
+      accent: color,
+      tint: category == null ? null : color,
       child: _Section<List<VitalReading>>(
         value: readings,
         label: 'your latest reading',
@@ -473,10 +767,17 @@ class _LatestBpCard extends ConsumerWidget {
               Builder(
                 builder: (context) {
                   final c = BpClassifier.classify(latest.systolic, latest.diastolic);
-                  return Chip(
+                  return Container(
                     key: const Key('latest-bp-category'),
-                    avatar: CircleAvatar(backgroundColor: BpClassifier.color(c), radius: 5),
-                    label: Text(BpClassifier.label(c)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: BpClassifier.color(c),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      BpClassifier.label(c),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
                   );
                 },
               ),
@@ -487,7 +788,10 @@ class _LatestBpCard extends ConsumerWidget {
                   children: [
                     TextSpan(
                       text: '${latest.systolic} / ${latest.diastolic}',
-                      style: Theme.of(context).textTheme.headlineMedium,
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
                     ),
                     const TextSpan(text: '  mmHg'),
                   ],
@@ -502,6 +806,26 @@ class _LatestBpCard extends ConsumerWidget {
                   label: Text('${change > 0 ? '+' : ''}$change from yesterday'),
                 ),
               ],
+              if (category == BpCategory.crisis)
+                Container(
+                  key: const Key('latest-bp-crisis'),
+                  margin: const EdgeInsets.only(top: 10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.white),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Crisis range: re-check after 5 minutes of rest. Call 999 if you have '
+                          'chest pain, breathlessness, weakness or confusion.',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           );
         },

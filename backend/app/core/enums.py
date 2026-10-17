@@ -37,6 +37,7 @@ class Collection(StrEnum):
     CONVERSATIONS = "conversations"  # D-76
     CONVERSATION_MESSAGES = "conversation_messages"  # D-76
     NOTIFICATIONS = "notifications"  # D-77
+    STAFF_REQUESTS = "staff_requests"  # D-78
 
 
 class UserRole(StrEnum):

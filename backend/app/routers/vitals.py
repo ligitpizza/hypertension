@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, status
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
+from app.core.config import Settings, get_settings
 from app.core.enums import AlertLevel, Collection, RiskLevel, UserRole
 from app.core.errors import ApiError
 from app.ml.risk_inputs import MIN_READINGS, existing_conditions
@@ -203,3 +204,80 @@ def log_reading(
         recommendations=recommendations(category, prediction, diagnosed),
         bookAppointmentPrompt=plan.book_appointment_prompt,
     )
+
+
+# ---------------- D-78 testing aid: delete readings ----------------
+
+
+@router.get("/dev-tools")
+def dev_tools(
+    _: CurrentUser = Depends(require_roles(UserRole.PATIENT)),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, bool]:
+    return {"enabled": settings.dev_vitals_tools}
+
+
+def _rescore_after_delete(
+    uid: str, vitals: VitalsRepository, risk_repo: RiskDataRepository, model: RiskModel | None
+) -> bool:
+    """Old scores go; a new one is made if three readings remain."""
+    vitals.delete_risk_scores(uid)
+    if model is None:
+        return False
+    try:
+        generate_risk_score(uid, risk_repo, model)
+    except NotEnoughReadingsError:
+        return False
+    return True
+
+
+def _dev_enabled(settings: Settings) -> None:
+    if not settings.dev_vitals_tools:
+        raise ApiError("NOT_FOUND", "Not available.", status.HTTP_404_NOT_FOUND)
+
+
+@router.delete("/{reading_id}")
+def delete_reading(
+    reading_id: str,
+    user: CurrentUser = Depends(require_roles(UserRole.PATIENT)),
+    settings: Settings = Depends(get_settings),
+    vitals: VitalsRepository = Depends(get_vitals_repository),
+    risk_repo: RiskDataRepository = Depends(get_risk_data_repository),
+    model: RiskModel | None = Depends(get_risk_model),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, bool]:
+    _dev_enabled(settings)
+    r = vitals.reading(reading_id)
+    if r is None or r.get("patientId") != user.uid:
+        raise ApiError("READING_NOT_FOUND", "Reading not found.", status.HTTP_404_NOT_FOUND)
+    vitals.delete_readings([reading_id])
+    rescored = _rescore_after_delete(user.uid, vitals, risk_repo, model)
+    audit.log(
+        user_id=user.uid,
+        action="DEV_DELETE_READING",
+        details="Reading deleted (testing aid).",
+        target_type=Collection.VITAL_READINGS.value,
+        target_id=reading_id,
+    )
+    return {"rescored": rescored}
+
+
+@router.delete("")
+def clear_readings(
+    user: CurrentUser = Depends(require_roles(UserRole.PATIENT)),
+    settings: Settings = Depends(get_settings),
+    vitals: VitalsRepository = Depends(get_vitals_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, int]:
+    _dev_enabled(settings)
+    ids = vitals.reading_ids(user.uid)
+    vitals.delete_readings(ids)
+    vitals.delete_risk_scores(user.uid)
+    audit.log(
+        user_id=user.uid,
+        action="DEV_CLEAR_READINGS",
+        details=f"All {len(ids)} readings cleared (testing aid).",
+        target_type=Collection.VITAL_READINGS.value,
+        target_id=user.uid,
+    )
+    return {"deleted": len(ids)}

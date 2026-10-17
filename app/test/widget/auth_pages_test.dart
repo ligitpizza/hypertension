@@ -353,6 +353,7 @@ void main() {
         '/admin/appointments', // D-55
         '/admin/assignments', // D-54
         '/admin/messages', // D-76
+        '/admin/requests', // D-78
         '/admin/audit-logs', // UC11.3
         '/admin/orders', // D-70 order tracking
         '/admin/deliveries', // UC11.4 (Module 13)
@@ -368,6 +369,7 @@ void main() {
         '/pharmacy/inventory', // D-70
         '/pharmacy/patients', // D-70
         '/pharmacy/messages', // D-69
+        '/pharmacy/admin-center', // D-78
       ]);
       expect(staffDestinations(UserRole.patient), isEmpty);
     });

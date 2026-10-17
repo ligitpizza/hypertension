@@ -22,8 +22,10 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
   UserRole.doctor => const [
     StaffDestination('/doctor/dashboard', 'Dashboard', Icons.dashboard_outlined), // D-77
     StaffDestination('/doctor', 'Patients', Icons.people_outline),
+    StaffDestination('/doctor/prescriptions', 'Prescriptions', Icons.medication_outlined), // D-78
     StaffDestination('/doctor/calendar', 'Calendar', Icons.calendar_month_outlined),
     StaffDestination('/doctor/messages', 'Messages', Icons.chat_bubble_outline),
+    StaffDestination('/doctor/admin-center', 'Admin center', Icons.support_agent), // D-78
   ],
   UserRole.pharmacist => const [
     StaffDestination('/pharmacy/dashboard', 'Dashboard', Icons.dashboard_outlined), // D-77
@@ -33,6 +35,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     StaffDestination('/pharmacy/inventory', 'Inventory', Icons.inventory_2_outlined),
     StaffDestination('/pharmacy/patients', 'Patients', Icons.people_outline),
     StaffDestination('/pharmacy/messages', 'Messages', Icons.chat_bubble_outline), // D-69
+    StaffDestination('/pharmacy/admin-center', 'Admin center', Icons.support_agent), // D-78
   ],
   UserRole.admin => const [
     StaffDestination('/admin/dashboard', 'Dashboard', Icons.dashboard_outlined), // D-77
@@ -41,6 +44,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     StaffDestination('/admin/appointments', 'Appointments', Icons.event_note_outlined),
     StaffDestination('/admin/assignments', 'Assignments', Icons.assignment_ind_outlined),
     StaffDestination('/admin/messages', 'Messages', Icons.chat_bubble_outline), // D-76
+    StaffDestination('/admin/requests', 'Staff requests', Icons.support_agent), // D-78
     StaffDestination('/admin/audit-logs', 'Audit logs', Icons.policy_outlined),
     StaffDestination('/admin/orders', 'Orders', Icons.receipt_long_outlined), // D-70
     StaffDestination('/admin/deliveries', 'Deliveries', Icons.local_shipping_outlined),
@@ -98,21 +102,52 @@ class StaffShell extends ConsumerWidget {
 
     final settingsPath = staffSettingsPath(role);
     final onSettings = location.startsWith(settingsPath);
-    final light = Theme.of(context).brightness == Brightness.light;
 
     // D-77 top bar: logo, who is signed in, the bell, theme and sign out.
+    final light = Theme.of(context).brightness == Brightness.light;
+
+    // D-78: Harvey blue gradient (navy in dark mode), white text and icons.
     final header = AppBar(
-      title: const Row(
+      key: const Key('staff-top-bar'),
+      foregroundColor: Colors.white,
+      iconTheme: const IconThemeData(color: Colors.white),
+      actionsIconTheme: const IconThemeData(color: Colors.white),
+      flexibleSpace: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: light
+                ? const [Color(0xFF0D47A1), Color(0xFF1E88E5)]
+                : const [Color(0xFF0A1931), Color(0xFF15305C)],
+          ),
+        ),
+      ),
+      title: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [HarveyLogo.mark(size: 28), SizedBox(width: 10), Text('Harvey Pro')],
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+            child: const HarveyLogo.mark(size: 26),
+          ),
+          const SizedBox(width: 10),
+          const Text(
+            'Harvey Pro',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
       actions: [
         if (user != null && wide)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Center(child: Text('${user.name} · ${RoleToggle.label(user.role)}')),
+            child: Center(
+              child: Text(
+                '${user.name} · ${RoleToggle.label(user.role)}',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
           ),
-        const NotificationBell(panel: true),
+        const NotificationBell(panel: true, color: Colors.white),
         const ThemeModeMenuButton(),
         if (!wide)
           IconButton(

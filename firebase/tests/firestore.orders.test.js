@@ -131,3 +131,14 @@ describe('D-77 notifications', () => {
   });
 });
 
+describe('D-78 staff_requests', () => {
+  test('requests are read and written only through the API', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'staff_requests/s1'), { requesterId: 'u-pharm', subject: 'x' });
+    });
+    await assertFails(getDoc(doc(pharmacist(), 'staff_requests/s1')));
+    await assertFails(getDoc(doc(admin(), 'staff_requests/s1')));
+    await assertFails(setDoc(doc(pharmacist(), 'staff_requests/s2'), { subject: 'y' }));
+  });
+});
+

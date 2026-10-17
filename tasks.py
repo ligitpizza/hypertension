@@ -426,6 +426,8 @@ def task_deploy_backend() -> None:
             f"STRIPE_PUBLISHABLE_KEY={_local_env('STRIPE_PUBLISHABLE_KEY')}",
             # D-66 testing aid; set DEV_ORDER_TOOLS=false in backend/.env for real use.
             f"DEV_ORDER_TOOLS={_local_env('DEV_ORDER_TOOLS') or 'false'}",
+            # D-78 testing aid; set DEV_VITALS_TOOLS=false in backend/.env for real use.
+            f"DEV_VITALS_TOOLS={_local_env('DEV_VITALS_TOOLS') or 'false'}",
             # D-68 courier choice; the Lalamove API key (pk_test_) identifies, the secret signs.
             f"COURIER={_local_env('COURIER') or 'lalamove'}",
             f"LALAMOVE_API_KEY={_local_env('LALAMOVE_API_KEY')}",

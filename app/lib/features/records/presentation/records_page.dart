@@ -205,10 +205,7 @@ class _RecordsPageState extends ConsumerState<RecordsPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: [
-          const Text(
-            'Keep lab results, scans and letters in one place. '
-            'Your doctor sees a document only after you share it.',
-          ),
+          _RecordsHeader(records: records.value ?? const []),
           const SizedBox(height: 12),
           if (uploading != null)
             Card(
@@ -265,6 +262,7 @@ class _RecordsPageState extends ConsumerState<RecordsPage> {
                         if (present.contains(c))
                           ChoiceChip(
                             key: Key('filter-${c.value}'),
+                            avatar: Icon(categoryStyle(c).$1, color: categoryStyle(c).$2),
                             label: Text(c.label),
                             selected: _filter == c,
                             onSelected: (_) => setState(() => _filter = c),
@@ -292,38 +290,128 @@ class _RecordCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final r = record;
+    final (icon, color) = categoryStyle(r.category);
     return Card(
       key: Key('record-${r.id}'),
-      child: ListTile(
-        leading: CircleAvatar(child: Icon(recordIcon(r))),
-        title: Text(r.fileName, maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(recordSubtitle(r)),
-            if (r.sharedWithDoctor)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  'Shared with your doctor',
-                  key: Key('shared-${r.id}'),
-                  style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.w600),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: color, width: 5)),
+        ),
+        child: ListTile(
+          leading: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              CircleAvatar(
+                backgroundColor: color.withValues(alpha: 0.15),
+                foregroundColor: color,
+                child: Icon(icon),
+              ),
+              Positioned(
+                right: -6,
+                bottom: -4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: r.isPdf ? Colors.red.shade600 : Colors.blue.shade600,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    r.isPdf ? 'PDF' : 'IMG',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-          ],
+            ],
+          ),
+          title: Text(
+            r.fileName,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(recordSubtitle(r)),
+              if (r.sharedWithDoctor)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    'Shared with your doctor',
+                    key: Key('shared-${r.id}'),
+                    style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ],
+          ),
+          onTap: () => openRecord(context, ref, r),
+          trailing: PopupMenuButton<String>(
+            key: Key('record-menu-${r.id}'),
+            onSelected: (a) => onAction(r, a),
+            itemBuilder: (_) => [
+              r.sharedWithDoctor
+                  ? const PopupMenuItem(value: 'unshare', child: Text('Stop sharing'))
+                  : const PopupMenuItem(value: 'share', child: Text('Share with doctor')),
+              const PopupMenuItem(value: 'category', child: Text('Change category')),
+              const PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
+          ),
         ),
-        onTap: () => openRecord(context, ref, r),
-        trailing: PopupMenuButton<String>(
-          key: Key('record-menu-${r.id}'),
-          onSelected: (a) => onAction(r, a),
-          itemBuilder: (_) => [
-            r.sharedWithDoctor
-                ? const PopupMenuItem(value: 'unshare', child: Text('Stop sharing'))
-                : const PopupMenuItem(value: 'share', child: Text('Share with doctor')),
-            const PopupMenuItem(value: 'category', child: Text('Change category')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
+      ),
+    );
+  }
+}
+
+/// D-78: tinted summary at the top of Records.
+class _RecordsHeader extends StatelessWidget {
+  const _RecordsHeader({required this.records});
+  final List<HealthRecord> records;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final shared = records.where((r) => r.sharedWithDoctor).length;
+    return Container(
+      key: const Key('records-header'),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          colors: [scheme.primary, Color.lerp(scheme.primary, Colors.teal, 0.5)!],
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.folder_shared, color: Colors.white, size: 32),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${records.length} document${records.length == 1 ? '' : 's'} · '
+                  '$shared shared with your doctor',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Keep lab results, scans and letters in one place. '
+            'Your doctor sees a document only after you share it.',
+            style: TextStyle(color: Colors.white),
+          ),
+        ],
       ),
     );
   }

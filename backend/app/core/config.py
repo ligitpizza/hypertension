@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     pharmacy_phone: str = ""
     # D-66 testing aid: patients may start next month's order cycle now.
     dev_order_tools: bool = False
+    # D-78 testing aid: patients may delete readings (one or all). Off for real use.
+    dev_vitals_tools: bool = False
     # Testing aid (D-57): patients may book any time, even a past one, so the doctor's
     # Complete / No-show and the reminders can be tried without waiting. Off for real use.
     dev_appointment_times: bool = False

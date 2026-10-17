@@ -33,6 +33,7 @@ abstract final class Collections {
   static const conversations = 'conversations'; // D-76
   static const conversationMessages = 'conversation_messages'; // D-76
   static const notifications = 'notifications'; // D-77
+  static const staffRequests = 'staff_requests'; // D-78
 
   static const all = [
     users,
@@ -64,6 +65,7 @@ abstract final class Collections {
     conversations,
     conversationMessages,
     notifications,
+    staffRequests,
   ];
 }
 
