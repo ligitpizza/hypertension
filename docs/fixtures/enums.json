@@ -28,7 +28,8 @@
     "medication_catalog",
     "pharmacy_messages",
     "conversations",
-    "conversation_messages"
+    "conversation_messages",
+    "notifications"
   ],
   "user_role": [
     "patient",

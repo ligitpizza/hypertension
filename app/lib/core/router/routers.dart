@@ -29,6 +29,8 @@ import '../../features/auth/state/auth_providers.dart';
 import '../../features/auth/state/auth_redirect.dart';
 import '../../features/messaging/presentation/chat_thread_page.dart';
 import '../../features/messaging/presentation/conversation_pages.dart';
+import '../../features/staff_shell/dashboards.dart';
+import '../../features/staff_shell/staff_settings_page.dart';
 import '../../features/messaging/presentation/inbox_pages.dart';
 import '../../features/provider_portal/presentation/care_plan_page.dart';
 import '../../features/provider_portal/presentation/clinical_note_page.dart';
@@ -197,6 +199,9 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             path: '/doctor',
             builder: (_, _) => const DoctorDashboardPage(),
             routes: [
+              // D-77: the doctor's home dashboard and Settings.
+              GoRoute(path: 'dashboard', builder: (_, _) => const DoctorHomeDashboard()),
+              GoRoute(path: 'settings', builder: (_, _) => const StaffSettingsPage()),
               GoRoute(path: 'calendar', builder: (_, _) => const DoctorCalendarPage()),
               // Module 10 (Fig 4.3.15.1 / 4.3.15.2 in the portal).
               GoRoute(
@@ -245,6 +250,8 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             path: '/pharmacy',
             builder: (_, _) => const PharmacyPage(),
             routes: [
+              GoRoute(path: 'dashboard', builder: (_, _) => const PharmacyDashboardPage()),
+              GoRoute(path: 'settings', builder: (_, _) => const StaffSettingsPage()),
               // D-69/D-70: patients, dispensing details, tracking, inventory, chat.
               GoRoute(
                 path: 'patients',
@@ -306,6 +313,8 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/admin/appointments', builder: (_, _) => const AdminAppointmentsPage()),
+          GoRoute(path: '/admin/dashboard', builder: (_, _) => const AdminDashboardPage()),
+          GoRoute(path: '/admin/settings', builder: (_, _) => const StaffSettingsPage()),
           // D-76: admin chats with anyone and opens chats between two people.
           GoRoute(
             path: '/admin/messages',

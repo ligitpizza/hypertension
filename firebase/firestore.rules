@@ -199,6 +199,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // D-77 notification bell: read and marked read only through FastAPI.
+    match /notifications/{notificationId} {
+      allow read, write: if false;
+    }
+
     // ---- agent_messages (FR-14.1, Table 4.2.3.16) ----
     // Written only by FastAPI (it calls Gemini). Read by the patient for the chat screen,
     // and by the assigned doctor / admin like other patient-owned data (docs/04).

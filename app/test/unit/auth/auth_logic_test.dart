@@ -172,9 +172,10 @@ void main() {
 
   group('FR-1.3 staff role guard', () {
     test('staff can only open their own section', () {
-      expect(staffRoleGuard('/admin/users', UserRole.doctor), '/doctor');
-      expect(staffRoleGuard('/doctor', UserRole.pharmacist), '/pharmacy');
-      expect(staffRoleGuard('/pharmacy', UserRole.admin), '/admin/users');
+      // D-77: each role lands on its dashboard.
+      expect(staffRoleGuard('/admin/users', UserRole.doctor), '/doctor/dashboard');
+      expect(staffRoleGuard('/doctor', UserRole.pharmacist), '/pharmacy/dashboard');
+      expect(staffRoleGuard('/pharmacy', UserRole.admin), '/admin/dashboard');
       expect(staffRoleGuard('/admin/users', UserRole.admin), isNull);
       expect(staffRoleGuard('/doctor', UserRole.doctor), isNull);
       expect(staffRoleGuard('/login', UserRole.doctor), isNull);

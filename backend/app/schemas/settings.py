@@ -28,6 +28,20 @@ class PersonalInfoUpdate(_Strict):
     _dob = field_validator("dateOfBirth")(check_dob)
 
 
+class StaffProfileUpdate(_Strict):
+    """D-77 portal Settings: a doctor, pharmacist or admin edits their own details."""
+
+    name: str = Field(min_length=2, max_length=100)
+    phone: str | None = None
+    # Doctors only; ignored for other roles.
+    specialty: str | None = Field(default=None, max_length=80)
+
+    @field_validator("phone")
+    @classmethod
+    def _phone_ok(cls, v: str | None) -> str | None:
+        return _check_phone(v) if v else None
+
+
 class ContactUpdate(_Strict):
     """UC12.1 'Contact details' (D-25 personalInfo.phone / emergencyContact)."""
 

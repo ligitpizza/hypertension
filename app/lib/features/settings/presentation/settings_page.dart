@@ -7,7 +7,6 @@ import '../../../shared/widgets/confirm_sign_out.dart';
 import '../../auth/domain/app_user.dart';
 import '../../auth/state/auth_providers.dart';
 import '../state/settings_providers.dart';
-import 'data_privacy_page.dart';
 
 /// Fig 4.3.11.1 Settings (FR-12.1, FR-12.2; UC12.1-UC12.4; D-45).
 class SettingsPage extends ConsumerStatefulWidget {
@@ -156,22 +155,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           ),
           const SizedBox(height: 24),
+          // D-77: light blue like the rest of the app; deleting the account stays under
+          // Data & privacy (FR-12.2), not next to Sign out.
           FilledButton.tonalIcon(
             key: const Key('settings-sign-out'),
             style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.errorContainer,
-              foregroundColor: theme.colorScheme.onErrorContainer,
+              backgroundColor: theme.colorScheme.primaryContainer,
+              foregroundColor: theme.colorScheme.onPrimaryContainer,
             ),
             onPressed: () => confirmAndSignOut(context, ref),
             icon: const Icon(Icons.logout),
             label: const Text('Sign out'),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            key: const Key('settings-delete'),
-            style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
-            onPressed: () => startAccountDeletion(context, ref),
-            child: const Text('Delete account'),
           ),
         ],
       ),

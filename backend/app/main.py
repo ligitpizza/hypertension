@@ -22,6 +22,7 @@ from app.routers import (
     jobs,
     medications,
     messages,
+    notifications,
     orders,
     pharmacy_chat,
     prescriptions,
@@ -86,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(conversations.router, prefix=API_PREFIX)
     app.include_router(triage.router, prefix=API_PREFIX)
     app.include_router(messages.router, prefix=API_PREFIX)
+    app.include_router(notifications.router, prefix=API_PREFIX)
     app.include_router(medications.router, prefix=API_PREFIX)
     app.include_router(appointments.router, prefix=API_PREFIX)
     app.include_router(appointments.admin_router, prefix=API_PREFIX)

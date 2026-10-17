@@ -6,6 +6,8 @@ PUT    /settings/health-profile   health profile; re-scores if risk inputs chang
 PUT    /settings/notifications    D-45 preferences
 GET    /settings/export           ?format=pdf|json (UC12.3)
 DELETE /settings/account          deactivate now, purge after 7 days (UC12.4, D-46)
+GET    /settings/staff-profile    D-77: portal Settings for doctors, pharmacists, admins
+PUT    /settings/staff-profile
 """
 
 import json
@@ -26,6 +28,7 @@ from app.schemas.settings import (
     HealthProfileUpdate,
     NotificationPrefs,
     PersonalInfoUpdate,
+    StaffProfileUpdate,
 )
 from app.services.ic import IcError, parse_ic
 from app.services.identity import IdentityProvider, get_identity_provider
@@ -113,6 +116,46 @@ def update_profile(
         target_id=user.uid,
     )
     return {"status": "ok", "rescored": rescored}
+
+
+staff_only = require_roles(UserRole.DOCTOR, UserRole.PHARMACIST, UserRole.ADMIN)
+
+
+@router.get("/staff-profile")
+def staff_profile(
+    user: CurrentUser = Depends(staff_only),
+    users: UserRepository = Depends(get_user_repository),
+) -> dict[str, Any]:
+    u = users.get_user(user.uid) or {}
+    return {
+        "name": u.get("name"),
+        "email": u.get("email"),
+        "role": u.get("role"),
+        "phone": u.get("phone"),
+        "specialty": u.get("specialty"),
+    }
+
+
+@router.put("/staff-profile")
+def update_staff_profile(
+    body: StaffProfileUpdate,
+    user: CurrentUser = Depends(staff_only),
+    users: UserRepository = Depends(get_user_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-77: name and phone (users.phone); doctors also their specialty."""
+    updates: dict[str, Any] = {"name": body.name, "phone": body.phone}
+    if user.role is UserRole.DOCTOR and body.specialty:
+        updates["specialty"] = body.specialty.strip()
+    users.update_user(user.uid, updates)
+    audit.log(
+        user_id=user.uid,
+        action="UPDATE_PROFILE",
+        details="Staff profile updated.",
+        target_type=Collection.USERS.value,
+        target_id=user.uid,
+    )
+    return {"status": "ok"}
 
 
 @router.put("/contact")

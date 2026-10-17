@@ -32,6 +32,7 @@ abstract final class Collections {
   static const pharmacyMessages = 'pharmacy_messages'; // D-69
   static const conversations = 'conversations'; // D-76
   static const conversationMessages = 'conversation_messages'; // D-76
+  static const notifications = 'notifications'; // D-77
 
   static const all = [
     users,
@@ -62,6 +63,7 @@ abstract final class Collections {
     pharmacyMessages,
     conversations,
     conversationMessages,
+    notifications,
   ];
 }
 

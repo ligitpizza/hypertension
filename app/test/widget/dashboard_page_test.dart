@@ -15,9 +15,14 @@ import 'package:hypertension/features/dashboard/presentation/patient_shell.dart'
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
 import 'package:hypertension/shared/models/health_models.dart';
 
+import 'package:hypertension/features/notifications/data/notifications_repository.dart';
+import 'package:hypertension/features/notifications/state/notification_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../helpers/fakes.dart';
 
-final now = DateTime(2026, 10, 12, 9, 30);
+var now = DateTime(2026, 10, 12, 9, 30);
+String? doctorId;
 
 class FakeDashboardRepository implements DashboardRepository {
   Stream<List<VitalReading>> readings = Stream.value(const []);
@@ -62,8 +67,16 @@ Widget app(FakeDashboardRepository repo) {
         '/ai-agent',
         '/medications',
         '/appointments',
+        '/notifications',
       ])
-        GoRoute(path: p, builder: (_, _) => Text('ROUTE $p')),
+        GoRoute(
+          path: p,
+          builder: (_, s) => Text('ROUTE $p${s.extra == null ? '' : ' ${s.extra}'}'),
+        ),
+      GoRoute(
+        path: '/chat/:id',
+        builder: (_, s) => Text('ROUTE /chat/${s.pathParameters['id']} ${s.extra}'),
+      ),
     ],
   );
   return ProviderScope(
@@ -75,16 +88,18 @@ Widget app(FakeDashboardRepository repo) {
         return true;
       }),
       nowProvider.overrideWithValue(() => now),
+      notificationInboxProvider.overrideWith((ref) async => const NotificationInbox([], 3)),
       authUidProvider.overrideWith((ref) => Stream.value('p1')),
       currentUserProvider.overrideWith(
         (ref) => Stream.value(
-          const AppUser(
+          AppUser(
             uid: 'p1',
             email: 's@x.my',
             name: 'Sarah Lim',
             role: UserRole.patient,
             isActive: true,
             onboardingComplete: true,
+            assignedDoctorId: doctorId,
           ),
         ),
       ),
@@ -103,6 +118,93 @@ VitalReading reading(int sys, int dia, DateTime t, {int? hr}) => VitalReading(
 );
 
 void main() {
+  setUp(() {
+    now = DateTime(2026, 10, 12, 9, 30);
+    doctorId = null;
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  group('D-77 home', () {
+    tallTest('the bell shows unread notifications and opens them', (t) async {
+      await t.pumpWidget(app(FakeDashboardRepository()));
+      await t.pumpAndSettle();
+      expect(
+        find.descendant(of: find.byKey(const Key('bell-badge')), matching: find.text('3')),
+        findsOneWidget,
+      );
+      await t.tap(find.byKey(const Key('notification-bell')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('ROUTE /notifications'), findsOneWidget);
+    });
+
+    tallTest('greeting and line follow the time of day', (t) async {
+      now = DateTime(2026, 10, 12, 22, 30);
+      await t.pumpWidget(app(FakeDashboardRepository()));
+      await t.pumpAndSettle();
+      expect(find.text('Good Night, Sarah'), findsOneWidget);
+      expect(find.textContaining('Rest well'), findsOneWidget);
+      expect(find.byKey(const Key('bp-nudge')), findsNothing); // only before noon
+    });
+
+    tallTest('morning nudge to log BP; Not now hides it for the day', (t) async {
+      await t.pumpWidget(app(FakeDashboardRepository()));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('bp-nudge')), findsOneWidget);
+      await t.tap(find.byKey(const Key('bp-nudge-later')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('bp-nudge')), findsNothing);
+      // Still hidden after a restart the same day.
+      await t.pumpWidget(const SizedBox());
+      await t.pumpWidget(app(FakeDashboardRepository()));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('bp-nudge')), findsNothing);
+    });
+
+    tallTest('no nudge once today is logged', (t) async {
+      final repo = FakeDashboardRepository()
+        ..readings = Stream.value([reading(128, 82, now.subtract(const Duration(hours: 1)))]);
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('bp-nudge')), findsNothing);
+    });
+
+    tallTest('tapping the risk card asks the AI Health Agent', (t) async {
+      final repo = FakeDashboardRepository()
+        ..risk = Stream.value(
+          RiskScore(
+            id: 'r1',
+            patientId: 'p1',
+            generatedAt: now,
+            modelUsed: 'rf',
+            scores: const {
+              Complication.stroke: ComplicationScore(value: 0.4, level: RiskLevel.high),
+            },
+          ),
+        );
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(const Key('risk-ask-agent')));
+      await t.tap(find.byKey(const Key('risk-ask-agent')));
+      await t.pumpAndSettle();
+      expect(
+        find.textContaining('ROUTE /ai-agent [Explain my highest complication risk'),
+        findsOneWidget,
+      );
+    });
+
+    tallTest('care plan: Ask my doctor opens the doctor chat with a draft', (t) async {
+      doctorId = 'd1';
+      final repo = FakeDashboardRepository()
+        ..plan = Stream.value(CarePlan(content: 'Walk 30 minutes daily', updatedAt: now));
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(const Key('care-plan-ask-doctor')));
+      await t.tap(find.byKey(const Key('care-plan-ask-doctor')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('ROUTE /chat/d1 About my care plan'), findsOneWidget);
+    });
+  });
+
   tallTest('FR-2.1 UC2.2-2.4 empty states for a brand-new patient', (t) async {
     await t.pumpWidget(app(FakeDashboardRepository()));
     await t.pumpAndSettle();

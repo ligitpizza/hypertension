@@ -223,7 +223,7 @@ void main() {
     expect(find.text('1/3'), findsOneWidget);
     expect(find.text('MORNING'), findsOneWidget);
     expect(find.text('AFTERNOON'), findsOneWidget);
-    expect(find.text('EVENING'), findsOneWidget);
+    expect(find.text('NIGHT'), findsOneWidget);
     expect(find.text('Taken at 8:15 AM'), findsOneWidget);
     expect(find.text('Upcoming'), findsOneWidget); // 20:00
 

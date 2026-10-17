@@ -395,6 +395,7 @@ def test_fr_9_6_job_alerts_doctor_once_per_week(
     body = res.json()
     # D-76 weekly summaries share the daily call; they post only on Mondays.
     assert body.pop("weeklySummaries") in (0, 2)
+    assert body.pop("notificationsPurged") == 0  # D-77
     assert body == {
         "job": "deterioration",
         "status": "ok",

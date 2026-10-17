@@ -385,6 +385,49 @@ def _latin1(text: object) -> str:
     return str(text).encode("latin-1", "replace").decode("latin-1")
 
 
+# D-77: chart colours (RGB) for the PDF report.
+_RISK_RGB = {
+    "low": (46, 125, 50),
+    "moderate": (249, 168, 37),
+    "high": (239, 108, 0),
+    "critical": (198, 40, 40),
+}
+_BLUE = (25, 118, 210)
+_GREY = (120, 120, 120)
+
+
+def bar_chart(pdf: Any, title: str, bars: list[tuple[str, float, tuple[int, int, int]]]) -> None:
+    """D-77: a horizontal bar chart drawn with PDF shapes (no image library needed)."""
+    if not bars or all(v <= 0 for _, v, _ in bars):
+        return
+    label_w, row_h, gap = 45.0, 6.0, 2.0
+    height = 8 + len(bars) * (row_h + gap) + 4
+    if pdf.get_y() + height > pdf.h - pdf.b_margin:
+        pdf.add_page()
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 7, _latin1(title), new_x="LMARGIN", new_y="NEXT")
+    top = pdf.get_y()
+    left = pdf.l_margin
+    plot_w = pdf.epw - label_w - 18
+    biggest = max(v for _, v, _ in bars) or 1
+    pdf.set_font("Helvetica", "", 9)
+    for i, (label, value, rgb) in enumerate(bars):
+        y = top + i * (row_h + gap)
+        pdf.set_xy(left, y)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(label_w, row_h, _latin1(label))
+        w = max(plot_w * value / biggest, 0.6 if value > 0 else 0)
+        pdf.set_fill_color(*rgb)
+        if w:
+            pdf.rect(left + label_w, y + 0.5, w, row_h - 1, style="F")
+        pdf.set_xy(left + label_w + w + 2, y)
+        pdf.cell(16, row_h, f"{value:g}")
+    pdf.set_draw_color(*_GREY)
+    bottom = top + len(bars) * (row_h + gap)
+    pdf.line(left + label_w, top - 1, left + label_w, bottom)
+    pdf.set_xy(left, bottom + 2)
+
+
 def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
     from fpdf import FPDF
 
@@ -416,12 +459,27 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
         "Risk distribution (latest in period): "
         + ", ".join(f"{lvl.title()} {risk.get(lvl, 0)}" for lvl in LEVELS)
     )
+    bar_chart(
+        pdf,
+        "Patients by overall risk level",
+        [(lvl.title(), float(risk.get(lvl, 0)), _RISK_RGB.get(lvl, _BLUE)) for lvl in LEVELS],
+    )
 
     pdf.ln(2)
     line("2. Appointments", 13, "B")
     line(
         f"Total {a['total']}: completed {a['completed']}, no-show {a['noShow']}, "
         f"cancelled {a['cancelled']}, still upcoming {a['upcoming']}"
+    )
+    bar_chart(
+        pdf,
+        "Appointment outcomes",
+        [
+            ("Completed", float(a["completed"]), (46, 125, 50)),
+            ("Upcoming", float(a["upcoming"]), _BLUE),
+            ("No-show", float(a["noShow"]), (239, 108, 0)),
+            ("Cancelled", float(a["cancelled"]), _GREY),
+        ],
     )
     reasons = a["topCancellationReasons"]
     line(
@@ -437,6 +495,11 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
         f"Clinical alerts raised: {c['alertsRaised']} ("
         + ", ".join(f"{k} {v}" for k, v in sorted(sev.items()))
         + f"); resolved: {c['alertsResolved']}"
+    )
+    bar_chart(
+        pdf,
+        "Clinical alerts by severity",
+        [(str(k).title(), float(v), _RISK_RGB.get(str(k), _BLUE)) for k, v in sorted(sev.items())],
     )
     tri = c["triage"]
     line(
@@ -456,6 +519,17 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
             f"Delivered {d['delivered']}, collected {d['collected']}, in progress "
             f"{d['inProgress']}, failed {d['failed']}, out of stock {d['outOfStock']}"
         )
+        bar_chart(
+            pdf,
+            "Order outcomes",
+            [
+                ("Delivered", float(d["delivered"]), (46, 125, 50)),
+                ("Collected", float(d["collected"]), (56, 142, 60)),
+                ("In progress", float(d["inProgress"]), _BLUE),
+                ("Failed", float(d["failed"]), (198, 40, 40)),
+                ("Out of stock", float(d["outOfStock"]), (239, 108, 0)),
+            ],
+        )
         fee = d["averageCourierFee"]
         line(
             f"Paid revenue: RM{d['revenue']:.2f}; average courier fee: "
@@ -468,6 +542,16 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
     line(f"Messages sent: {u['messagesSent']} (contents are end-to-end encrypted)")
     line(f"Health records shared with doctors: {u['recordsShared']}")
     line(f"Sign-ins: {u['logins']}")
+    bar_chart(
+        pdf,
+        "Platform activity",
+        [
+            ("Sign-ins", float(u["logins"]), _BLUE),
+            ("Messages", float(u["messagesSent"]), (0, 137, 123)),
+            ("Records shared", float(u["recordsShared"]), (94, 53, 177)),
+            ("Clinicians", float(u["activeClinicians"]), _GREY),
+        ],
+    )
 
     pdf.ln(4)
     line(

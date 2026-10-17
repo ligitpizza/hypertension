@@ -4,12 +4,33 @@ import '../../../shared/models/health_models.dart';
 
 /// Pure helpers behind the dashboard cards, kept separate for unit tests.
 
-/// "Good Morning/Afternoon/Evening" (Fig 4.3.2.1).
+/// "Good Morning/Afternoon/Evening/Night" (Fig 4.3.2.1; D-77 adds night).
 String greetingFor(DateTime now) {
   final h = now.hour;
-  if (h < 12) return 'Good Morning';
-  if (h < 18) return 'Good Afternoon';
-  return 'Good Evening';
+  if (h >= 5 && h < 12) return 'Good Morning';
+  if (h >= 12 && h < 18) return 'Good Afternoon';
+  if (h >= 18 && h < 22) return 'Good Evening';
+  return 'Good Night';
+}
+
+/// D-77: the line under the greeting follows the time of day too.
+String snapshotLineFor(DateTime now) => switch (greetingFor(now)) {
+  'Good Morning' => "Here's your morning health snapshot. A good time to check your BP.",
+  'Good Afternoon' => "Here's your afternoon check-in. Keep your plan on track.",
+  'Good Evening' => "Here's your evening health snapshot. Remember tonight's medicines.",
+  _ => "Here's today's summary. Rest well and log your BP in the morning.",
+};
+
+/// D-77: the morning "log your BP" nudge shows until noon if nothing is logged today.
+bool showMorningBpNudge({
+  required DateTime now,
+  required DateTime? latestReading,
+  required bool dismissedToday,
+}) {
+  if (dismissedToday || now.hour >= 12) return false;
+  if (latestReading == null) return true;
+  final l = latestReading.toLocal();
+  return !(l.year == now.year && l.month == now.month && l.day == now.day);
 }
 
 /// Systolic change of the latest reading versus the most recent reading taken on

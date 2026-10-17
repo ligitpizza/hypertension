@@ -120,3 +120,14 @@ describe('D-76 conversations', () => {
   });
 });
 
+describe('D-77 notifications', () => {
+  test('the bell is read only through the API', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'notifications/n1'), { userId: P, title: 'Hi', read: false });
+    });
+    await assertFails(getDoc(doc(patient(), 'notifications/n1')));
+    await assertFails(updateDoc(doc(patient(), 'notifications/n1'), { read: true }));
+    await assertFails(setDoc(doc(admin(), 'notifications/n2'), { userId: P, title: 'x' }));
+  });
+});
+

@@ -17,6 +17,7 @@ from app.core.errors import ApiError
 from app.services.account_purge import AccountPurgeJob, get_account_purge_job
 from app.services.appointment_extras import AppointmentJob, get_appointment_job
 from app.services.deterioration import DeteriorationJob, get_deterioration_job
+from app.services.inbox import InboxRepository, get_inbox_repository, purge_old
 from app.services.medication_job import MedicationJob, get_medication_job
 from app.services.orders import OrderService, get_order_service
 from app.services.unanswered import UnansweredAlertJob, get_unanswered_alert_job
@@ -82,6 +83,7 @@ def run_deterioration(
     job: DeteriorationJob = Depends(get_deterioration_job),
     purge: AccountPurgeJob = Depends(get_account_purge_job),
     summaries: WeeklySummaryJob = Depends(get_weekly_summary_job),
+    inbox: InboxRepository = Depends(get_inbox_repository),
 ) -> dict[str, Any]:
     """Daily: FR-9.6 30-day deterioration scan, D-46 purge of deleted accounts, and on
     Mondays the D-76 weekly health summaries (no extra Cloud Scheduler job)."""
@@ -96,6 +98,11 @@ def run_deterioration(
     except Exception:
         log.exception("Weekly summaries failed")
         result["weeklySummaries"] = "failed"
+    try:  # D-77: the bell keeps 30 days
+        result.update(purge_old(inbox))
+    except Exception:
+        log.exception("Notification purge failed")
+        result["notificationsPurged"] = "failed"
     return result
 
 

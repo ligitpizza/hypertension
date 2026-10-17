@@ -542,6 +542,14 @@ class _ProgressCard extends StatelessWidget {
   }
 }
 
+/// D-77: one colour per time of day, so doses are easy to tell apart.
+Color periodColor(DosePeriod p) => switch (p) {
+  DosePeriod.morning => Colors.amber.shade700,
+  DosePeriod.afternoon => Colors.deepOrange.shade400,
+  DosePeriod.evening => Colors.indigo.shade400,
+  DosePeriod.asNeeded => Colors.teal.shade500,
+};
+
 class _PeriodHeader extends StatelessWidget {
   const _PeriodHeader({required this.period});
 
@@ -555,14 +563,29 @@ class _PeriodHeader extends StatelessWidget {
       DosePeriod.evening => Icons.nightlight_outlined,
       DosePeriod.asNeeded => Icons.water_drop_outlined,
     };
+    final color = periodColor(period);
     return Padding(
       padding: const EdgeInsets.only(top: 16, bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Text(period.label.toUpperCase(), style: Theme.of(context).textTheme.labelLarge),
-        ],
+      child: Container(
+        key: Key('period-${period.name}'),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 8),
+            Text(
+              period.label.toUpperCase(),
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(color: color, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -603,10 +626,20 @@ class _DoseTile extends StatelessWidget {
                 child: const Text('Take'),
               ),
     };
+    final color = periodColor(DosePeriod.of(dose.time));
     return Card(
       key: Key('dose-${med.id}-${dose.time.hhmm}'),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: color.withValues(alpha: 0.6)),
+      ),
       child: ListTile(
-        leading: CircleAvatar(child: Icon(taken ? Icons.check_circle : Icons.medication_outlined)),
+        leading: CircleAvatar(
+          backgroundColor: color.withValues(alpha: 0.15),
+          foregroundColor: color,
+          child: Icon(taken ? Icons.check_circle : Icons.medication_outlined),
+        ),
         title: Text(
           med.name,
           style: taken ? const TextStyle(decoration: TextDecoration.lineThrough) : null,

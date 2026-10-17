@@ -37,6 +37,8 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 > Pharmacist and Admin accounts use only the common fields above; no role-specific fields apply.
 
 | address, addressLat, addressLng | String, Number, Number | Patient delivery address and map point (D-69) | Optional |
+| phone | String | Staff contact number (D-77, portal Settings) | Optional; doctors, pharmacists, admins |
+| bellPrefs | Map | D-77: bell categories switched on/off (messages, alerts, appointments, orders, medication, other) | Optional; missing = on |
 
 ### `health_profiles`  (Table 4.2.3.2)
 
@@ -342,6 +344,22 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 
 > Both are read and written only through FastAPI (Security Rules deny client access).
 
+### `notifications`  (D-77, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | Primary key | Auto-generated |
+| userId | Reference (users) | Owner | Required |
+| title, body | String | As pushed | Required |
+| type | String | Push data type (message, order, ...) | Optional |
+| category | String | messages / alerts / appointments / orders / medication / other | Required |
+| data | Map | Push data (ids for opening the right page) | |
+| urgent | Boolean | Always kept, whatever bellPrefs say | Required |
+| read | Boolean | Opened in the bell | Default false |
+| createdAt | Timestamp | Saved at | Required; removed after 30 days |
+
+> Written by the backend Notifier for every push; read only through FastAPI.
+
 ### `medication_stock`  (D-66, not in Ch4)
 
 | Field | Type | Description | Constraints / Notes |
@@ -383,6 +401,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | agent_messages | patientId ASC, sentAt ASC | AI agent history |
 | agent_messages | patientId ASC, kind ASC, sentAt ASC / DESC | D-76 chat alerts, latest weekly summary |
 | conversation_messages | conversationId ASC, sentAt DESC | D-76 chat thread |
+| notifications | userId ASC, createdAt DESC | D-77 bell |
 | users | role ASC, assignedDoctorId ASC | doctor patient list (FR-8.1) |
 | users | role ASC, patientId ASC | family members of a patient (FR-14.2) |
 | medication_orders | patientId ASC, cycleDate DESC / pharmacistId ASC, paymentStatus ASC | patient orders, pharmacist queue |

@@ -36,6 +36,7 @@ class Collection(StrEnum):
     PHARMACY_MESSAGES = "pharmacy_messages"  # D-69
     CONVERSATIONS = "conversations"  # D-76
     CONVERSATION_MESSAGES = "conversation_messages"  # D-76
+    NOTIFICATIONS = "notifications"  # D-77
 
 
 class UserRole(StrEnum):

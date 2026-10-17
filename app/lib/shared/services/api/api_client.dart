@@ -642,6 +642,30 @@ class ApiClient {
   Future<Map<String, dynamic>> sendPharmacyMessage(String patientId, String text) =>
       _post('/pharmacy-chat/$patientId/messages', {'text': text});
 
+  // D-77 notification bell and staff settings.
+  Future<Map<String, dynamic>> notifications() => _get('/notifications');
+
+  Future<void> readNotification(String id) => _post('/notifications/$id/read', const {});
+
+  Future<Map<String, dynamic>> readAllNotifications() => _post('/notifications/read-all', const {});
+
+  Future<Map<String, dynamic>> bellPrefs() => _get('/notifications/prefs');
+
+  Future<Map<String, dynamic>> updateBellPrefs(Map<String, bool> prefs) =>
+      _send('PUT', '/notifications/prefs', prefs);
+
+  Future<Map<String, dynamic>> staffProfile() => _get('/settings/staff-profile');
+
+  Future<Map<String, dynamic>> updateStaffProfile({
+    required String name,
+    String? phone,
+    String? specialty,
+  }) => _send('PUT', '/settings/staff-profile', {
+    'name': name,
+    'phone': phone,
+    'specialty': specialty,
+  });
+
   // D-76 team and admin-opened chats.
   Future<Map<String, dynamic>> conversations() => _get('/conversations');
 

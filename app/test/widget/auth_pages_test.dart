@@ -342,10 +342,12 @@ void main() {
     });
 
     test('FR-1.3 each staff role has its own home and menu', () {
-      expect(staffHome(UserRole.doctor), '/doctor');
-      expect(staffHome(UserRole.pharmacist), '/pharmacy');
-      expect(staffHome(UserRole.admin), '/admin/users');
+      expect(staffHome(UserRole.doctor), '/doctor/dashboard'); // D-77
+      expect(staffHome(UserRole.pharmacist), '/pharmacy/dashboard');
+      expect(staffHome(UserRole.admin), '/admin/dashboard');
+      expect(staffSettingsPath(UserRole.pharmacist), '/pharmacy/settings');
       expect(staffDestinations(UserRole.admin).map((d) => d.path), [
+        '/admin/dashboard', // D-77
         '/admin/users',
         '/admin/calendar', // D-60
         '/admin/appointments', // D-55
@@ -360,6 +362,7 @@ void main() {
         '/admin/system-health', // FR-11.3
       ]);
       expect(staffDestinations(UserRole.pharmacist).map((d) => d.path), [
+        '/pharmacy/dashboard', // D-77
         '/pharmacy',
         '/pharmacy/tracking', // D-70
         '/pharmacy/inventory', // D-70

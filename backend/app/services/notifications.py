@@ -10,6 +10,7 @@ from firebase_admin import firestore
 from app.core.enums import Collection
 from app.core.firebase import get_firestore
 from app.integrations.push import PushClient, PushMessage, get_push_client
+from app.services.inbox import InboxRepository, get_inbox_repository, save
 
 log = logging.getLogger("careflow.notify")
 
@@ -70,13 +71,21 @@ def get_token_repository() -> TokenRepository:
 
 
 class Notifier:
-    """Sends a push to every registered device of a user; drops rejected tokens."""
+    """Sends a push to every registered device of a user; drops rejected tokens.
 
-    def __init__(self, tokens: TokenRepository, push: PushClient) -> None:
+    D-77: also saves it to the user's bell inbox (with or without a device).
+    """
+
+    def __init__(
+        self, tokens: TokenRepository, push: PushClient, inbox: InboxRepository | None = None
+    ) -> None:
         self._tokens = tokens
         self._push = push
+        self._inbox = inbox
 
     def notify(self, uid: str, message: PushMessage) -> int:
+        if self._inbox is not None:
+            save(self._inbox, uid, message.title, message.body, message.data, message.urgent)
         tokens = self._tokens.tokens(uid)
         if not tokens:
             return 0
@@ -100,4 +109,4 @@ class Notifier:
 
 
 def get_notifier() -> Notifier:
-    return Notifier(get_token_repository(), get_push_client())
+    return Notifier(get_token_repository(), get_push_client(), get_inbox_repository())

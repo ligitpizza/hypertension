@@ -8,6 +8,7 @@ import '../auth/presentation/widgets/role_toggle.dart';
 import '../../shared/widgets/confirm_sign_out.dart';
 import '../auth/state/auth_providers.dart';
 import '../../shared/widgets/harvey_logo.dart';
+import '../notifications/presentation/notification_bell.dart';
 
 class StaffDestination {
   const StaffDestination(this.path, this.label, this.icon);
@@ -19,11 +20,13 @@ class StaffDestination {
 /// Destinations per staff role (NFR-3.2: role-specific interface). Grows per module.
 List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
   UserRole.doctor => const [
+    StaffDestination('/doctor/dashboard', 'Dashboard', Icons.dashboard_outlined), // D-77
     StaffDestination('/doctor', 'Patients', Icons.people_outline),
     StaffDestination('/doctor/calendar', 'Calendar', Icons.calendar_month_outlined),
     StaffDestination('/doctor/messages', 'Messages', Icons.chat_bubble_outline),
   ],
   UserRole.pharmacist => const [
+    StaffDestination('/pharmacy/dashboard', 'Dashboard', Icons.dashboard_outlined), // D-77
     StaffDestination('/pharmacy', 'Orders', Icons.local_pharmacy_outlined),
     // D-70: tracking, inventory and patients apart from the order queue.
     StaffDestination('/pharmacy/tracking', 'Tracking', Icons.local_shipping_outlined),
@@ -32,6 +35,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     StaffDestination('/pharmacy/messages', 'Messages', Icons.chat_bubble_outline), // D-69
   ],
   UserRole.admin => const [
+    StaffDestination('/admin/dashboard', 'Dashboard', Icons.dashboard_outlined), // D-77
     StaffDestination('/admin/users', 'Users', Icons.manage_accounts_outlined),
     StaffDestination('/admin/calendar', 'Calendar', Icons.calendar_month_outlined),
     StaffDestination('/admin/appointments', 'Appointments', Icons.event_note_outlined),
@@ -61,11 +65,18 @@ int selectedDestination(List<StaffDestination> destinations, String location) {
   return best;
 }
 
-/// Home route for each staff role.
+/// Home route for each staff role (D-77: their dashboard).
 String staffHome(UserRole? role) => switch (role) {
-  UserRole.pharmacist => '/pharmacy',
-  UserRole.admin => '/admin/users',
-  _ => '/doctor',
+  UserRole.pharmacist => '/pharmacy/dashboard',
+  UserRole.admin => '/admin/dashboard',
+  _ => '/doctor/dashboard',
+};
+
+/// D-77: each role's Settings page (bottom of the left nav).
+String staffSettingsPath(UserRole? role) => switch (role) {
+  UserRole.pharmacist => '/pharmacy/settings',
+  UserRole.admin => '/admin/settings',
+  _ => '/doctor/settings',
 };
 
 /// Sidebar shell for the Staff Web Portal (docs/05: NavigationRail at >= 800 px).
@@ -85,24 +96,38 @@ class StaffShell extends ConsumerWidget {
 
     Future<void> signOut() => confirmAndSignOut(context, ref);
 
+    final settingsPath = staffSettingsPath(role);
+    final onSettings = location.startsWith(settingsPath);
+    final light = Theme.of(context).brightness == Brightness.light;
+
+    // D-77 top bar: logo, who is signed in, the bell, theme and sign out.
     final header = AppBar(
       title: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [HarveyLogo.mark(size: 28), SizedBox(width: 10), Text('Harvey Pro')],
       ),
       actions: [
-        if (user != null)
+        if (user != null && wide)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Center(child: Text('${user.name} · ${RoleToggle.label(user.role)}')),
           ),
+        const NotificationBell(panel: true),
         const ThemeModeMenuButton(),
+        if (!wide)
+          IconButton(
+            key: const Key('staff-settings-narrow'),
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.go(settingsPath),
+          ),
         IconButton(
           key: const Key('staff-sign-out'),
           tooltip: 'Sign out',
           icon: const Icon(Icons.logout),
           onPressed: signOut,
         ),
+        const SizedBox(width: 4),
       ],
     );
 
@@ -114,13 +139,37 @@ class StaffShell extends ConsumerWidget {
       body: Row(
         children: [
           NavigationRail(
-            selectedIndex: selected < 0 ? 0 : selected,
+            // D-77: grey in light mode so the menu stands apart from the page.
+            backgroundColor: light ? Colors.grey.shade200 : null,
+            selectedIndex: onSettings || selected < 0 ? null : selected,
             labelType: NavigationRailLabelType.all,
             destinations: [
               for (final d in destinations)
                 NavigationRailDestination(icon: Icon(d.icon), label: Text(d.label)),
             ],
             onDestinationSelected: (i) => context.go(destinations[i].path),
+            trailing: Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        key: const Key('staff-settings'),
+                        tooltip: 'Settings',
+                        isSelected: onSettings,
+                        icon: const Icon(Icons.settings_outlined),
+                        selectedIcon: const Icon(Icons.settings),
+                        onPressed: () => context.go(settingsPath),
+                      ),
+                      Text('Settings', style: Theme.of(context).textTheme.labelMedium),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
           const VerticalDivider(width: 1),
           Expanded(child: child),

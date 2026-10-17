@@ -1351,3 +1351,20 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   team chats not E2E encrypted (same reasoning as D-69).
 - Tests: backend 684 (+3 skipped); Flutter 576; rules 207.
 
+### 2026-10-17 — Notification bell, portal dashboards and Settings, home refresh (D-77)
+
+- Backend: `services/inbox.py` (save every push, categories, bell prefs, 30-day purge in the
+  daily job), `routers/notifications.py`, Notifier saves before sending;
+  `GET/PUT /settings/staff-profile`; PDF report gets bar charts (risk, appointments, alerts,
+  orders, platform activity) drawn with fpdf.
+- Rules: `notifications` server-only; index userId + createdAt.
+- App: `features/notifications` (bell with unread badge, portal panel, phone page, routes per
+  notification type); staff shell grey rail, Settings at the bottom, bell in the top bar;
+  `staff_shell/dashboards.dart` (doctor, pharmacist, admin dashboards as home) and
+  `staff_settings_page.dart`; patient Home: gradient header with time-of-day greeting and line,
+  bell, morning BP nudge, tappable risk card (opens the agent with the question), "Ask my
+  doctor" on the care plan, coloured quick actions and raised cards; Settings: Delete button
+  removed (kept in Data & privacy), Sign out light blue; Meds: colour per time of day, Night.
+- Deviations / additions: `notifications` collection, `users.phone` (staff), `users.bellPrefs`.
+- Tests: backend 690 (+3 skipped); Flutter 588; rules 208.
+

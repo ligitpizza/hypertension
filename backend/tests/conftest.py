@@ -53,6 +53,7 @@ from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
 from app.services.family import get_family_repository
 from app.services.identity import EmailAlreadyRegisteredError, get_identity_provider
+from app.services.inbox import get_inbox_repository
 from app.services.medications import MedicationDoc, get_medication_repository
 from app.services.notifications import Notifier, get_notifier, get_token_repository
 from app.services.orders import get_order_repository
@@ -936,6 +937,53 @@ class InMemoryPharmacyChatRepository:
         return [(i, dict(m)) for i, m in reversed(self.messages)][:limit]
 
 
+class InMemoryInboxRepository:
+    """D-77 notification bell."""
+
+    def __init__(self, users: "InMemoryUserRepository") -> None:
+        self._users = users
+        self.items: dict[str, dict[str, Any]] = {}
+
+    def add(self, data: dict[str, Any]) -> str:
+        nid = f"n{len(self.items) + 1}"
+        self.items[nid] = dict(data)
+        return nid
+
+    def for_user(self, uid: str, limit: int) -> list[tuple[str, dict[str, Any]]]:
+        mine = [(i, dict(n)) for i, n in self.items.items() if n["userId"] == uid]
+        return list(reversed(mine))[:limit]
+
+    def unread_count(self, uid: str) -> int:
+        return sum(1 for n in self.items.values() if n["userId"] == uid and not n["read"])
+
+    def get(self, notification_id: str) -> dict[str, Any] | None:
+        n = self.items.get(notification_id)
+        return dict(n) if n else None
+
+    def mark_read(self, notification_id: str) -> None:
+        self.items[notification_id]["read"] = True
+
+    def mark_all_read(self, uid: str) -> int:
+        n = 0
+        for item in self.items.values():
+            if item["userId"] == uid and not item["read"]:
+                item["read"] = True
+                n += 1
+        return n
+
+    def bell_prefs(self, uid: str) -> dict[str, Any]:
+        return dict((self._users.users.get(uid) or {}).get("bellPrefs") or {})
+
+    def set_bell_prefs(self, uid: str, prefs: dict[str, bool]) -> None:
+        self._users.users.setdefault(uid, {})["bellPrefs"] = dict(prefs)
+
+    def purge(self, before: datetime) -> int:
+        old = [i for i, n in self.items.items() if n["createdAt"] < before]
+        for i in old:
+            del self.items[i]
+        return len(old)
+
+
 class InMemoryConversationRepository:
     """D-76 team and admin-opened chats."""
 
@@ -1368,6 +1416,11 @@ def pharmacy_chat() -> InMemoryPharmacyChatRepository:
 
 
 @pytest.fixture
+def inbox(repo: InMemoryUserRepository) -> InMemoryInboxRepository:
+    return InMemoryInboxRepository(repo)
+
+
+@pytest.fixture
 def conversations() -> InMemoryConversationRepository:
     return InMemoryConversationRepository()
 
@@ -1418,6 +1471,7 @@ def make_client(
     catalog: InMemoryCatalogRepository,
     pharmacy_chat: InMemoryPharmacyChatRepository,
     conversations: InMemoryConversationRepository,
+    inbox: InMemoryInboxRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -1433,7 +1487,7 @@ def make_client(
         app.dependency_overrides[get_risk_data_repository] = lambda: risk_repo
         app.dependency_overrides[get_risk_model] = lambda: risk_model
         app.dependency_overrides[get_token_repository] = lambda: tokens
-        app.dependency_overrides[get_notifier] = lambda: Notifier(tokens, push)
+        app.dependency_overrides[get_notifier] = lambda: Notifier(tokens, push, inbox)
         app.dependency_overrides[get_alert_repository] = lambda: alerts_repo
         app.dependency_overrides[get_deterioration_repository] = lambda: deterioration_repo
         app.dependency_overrides[get_provider_repository] = lambda: provider_repo
@@ -1460,6 +1514,7 @@ def make_client(
         app.dependency_overrides[get_catalog_repository] = lambda: catalog
         app.dependency_overrides[get_pharmacy_chat_repository] = lambda: pharmacy_chat
         app.dependency_overrides[get_conversation_repository] = lambda: conversations
+        app.dependency_overrides[get_inbox_repository] = lambda: inbox
         return TestClient(app)
 
     return _make

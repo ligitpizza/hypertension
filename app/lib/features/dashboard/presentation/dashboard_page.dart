@@ -9,6 +9,8 @@ import '../../../shared/models/health_models.dart';
 import '../../../core/constants/enums.dart';
 import '../../../shared/widgets/care_plan_history.dart';
 import '../../auth/state/auth_providers.dart';
+import '../../notifications/presentation/notification_bell.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../symptom_checker/state/symptom_providers.dart';
 import '../domain/dashboard_logic.dart';
 import '../state/dashboard_providers.dart';
@@ -26,6 +28,8 @@ class DashboardPage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Home'),
         actions: [
+          // D-77: saved notifications (messages from the doctor while away, alerts, ...).
+          const NotificationBell(),
           // Fig 4.3.9.1: one tap to the Emergency SOS screen (FR-14.2).
           IconButton(
             key: const Key('dashboard-sos'),
@@ -49,15 +53,10 @@ class DashboardPage extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            Text(
-              '${greetingFor(now)}, $firstName',
-              key: const Key('dashboard-greeting'),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 4),
-            const Text('Here is your daily health snapshot.'),
+            _GreetingHeader(now: now, firstName: firstName),
             const SizedBox(height: 16),
             const _EmergencyCallCard(),
+            const _MorningBpCard(),
             const _TodaysPlanCard(),
             const SizedBox(height: 16),
             const _LatestBpCard(),
@@ -107,22 +106,211 @@ class _Section<T> extends StatelessWidget {
 }
 
 class _CardShell extends StatelessWidget {
-  const _CardShell({super.key, required this.child, this.accent});
+  const _CardShell({super.key, required this.child, this.accent, this.onTap});
 
   final Widget child;
   final Color? accent;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
-        border: accent == null ? null : Border(left: BorderSide(color: accent!, width: 4)),
+    // D-77: raised cards with a coloured edge so each section stands out.
+    return Material(
+      color: scheme.surfaceContainerLow,
+      elevation: 2,
+      shadowColor: Colors.black26,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: accent == null ? null : Border(left: BorderSide(color: accent!, width: 5)),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: child,
+        ),
       ),
-      padding: const EdgeInsets.all(16),
-      child: child,
+    );
+  }
+}
+
+/// D-77: draft for "Ask my doctor" under the care plan.
+const askAboutCarePlan = "About my care plan: I don't fully understand this part: ";
+
+/// D-77: the question the risk card opens the AI Health Agent with.
+const askAboutRisk = [
+  'Explain my highest complication risk',
+  'What can I do to lower my risk?',
+  'Explain my risk score',
+];
+
+/// D-77: greeting header with a gradient; the greeting and line follow the time of day.
+class _GreetingHeader extends StatelessWidget {
+  const _GreetingHeader({required this.now, required this.firstName});
+  final DateTime now;
+  final String firstName;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final greeting = greetingFor(now);
+    final icon = switch (greeting) {
+      'Good Morning' => Icons.wb_sunny_outlined,
+      'Good Afternoon' => Icons.wb_cloudy_outlined,
+      'Good Evening' => Icons.wb_twilight,
+      _ => Icons.nightlight_round,
+    };
+    return Container(
+      key: const Key('dashboard-header'),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          colors: [scheme.primary, Color.lerp(scheme.primary, Colors.indigo, 0.5)!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$greeting, $firstName',
+                  key: const Key('dashboard-greeting'),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  snapshotLineFor(now),
+                  key: const Key('dashboard-snapshot-line'),
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Icon(icon, color: Colors.white, size: 40),
+        ],
+      ),
+    );
+  }
+}
+
+/// D-77: once a day, until noon, a gentle nudge to log the morning BP (never forced).
+class _MorningBpCard extends ConsumerStatefulWidget {
+  const _MorningBpCard();
+
+  @override
+  ConsumerState<_MorningBpCard> createState() => _MorningBpCardState();
+}
+
+class _MorningBpCardState extends ConsumerState<_MorningBpCard> {
+  static const _key = 'bp_nudge_dismissed';
+  String? _dismissedOn;
+  bool _loaded = false;
+
+  static String _day(DateTime d) => '${d.year}-${d.month}-${d.day}';
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance()
+        .then((p) => p.getString(_key))
+        .catchError((Object _) => null)
+        .then((v) {
+          if (!mounted) return;
+          setState(() {
+            _dismissedOn = v;
+            _loaded = true;
+          });
+        });
+  }
+
+  Future<void> _notNow(DateTime now) async {
+    setState(() => _dismissedOn = _day(now));
+    try {
+      await (await SharedPreferences.getInstance()).setString(_key, _day(now));
+    } catch (_) {
+      // A reminder that shows again is harmless.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = ref.watch(nowProvider)();
+    final readings = ref.watch(recentReadingsProvider);
+    if (!_loaded || readings.isLoading) return const SizedBox.shrink();
+    final show = showMorningBpNudge(
+      now: now,
+      latestReading: readings.value?.firstOrNull?.timestamp,
+      dismissedToday: _dismissedOn == _day(now),
+    );
+    if (!show) return const SizedBox.shrink();
+    final amber = Colors.amber.shade800;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        key: const Key('bp-nudge'),
+        color: Colors.amber.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.wb_sunny, color: amber),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Good morning! Log this morning's blood pressure",
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown.shade800),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'A reading before breakfast and medicines gives your doctor the clearest picture.',
+                style: TextStyle(color: Colors.brown.shade700),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  FilledButton.icon(
+                    key: const Key('bp-nudge-log'),
+                    style: FilledButton.styleFrom(backgroundColor: amber),
+                    onPressed: () => context.push('/vitals/log'),
+                    icon: const Icon(Icons.favorite_border),
+                    label: const Text('Log now'),
+                  ),
+                  TextButton(
+                    key: const Key('bp-nudge-later'),
+                    onPressed: () => _notNow(now),
+                    child: Text('Not now', style: TextStyle(color: Colors.brown.shade700)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -335,6 +523,8 @@ class _RiskCard extends ConsumerWidget {
     return _CardShell(
       key: const Key('card-risk'),
       accent: level == null ? Theme.of(context).colorScheme.outline : riskColor(level),
+      // D-77: tap to ask the AI Health Agent about it, with the question ready.
+      onTap: level == null ? null : () => context.push('/ai-agent', extra: askAboutRisk),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -386,6 +576,27 @@ class _RiskCard extends ConsumerWidget {
                           'Highest of your five complication risks. '
                           'Ask the AI Health Agent what it means.',
                         ),
+                        const SizedBox(height: 4),
+                        Row(
+                          key: const Key('risk-ask-agent'),
+                          children: [
+                            Icon(
+                              Icons.smart_toy_outlined,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                'Tap to ask the AI Health Agent',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -406,12 +617,12 @@ class _QuickActions extends StatelessWidget {
 
   /// Shortcuts, four per row; more rows appear as actions are added.
   static const actions = [
-    ('Log Vitals', Icons.favorite_border, '/vitals/log', Key('qa-vitals')),
-    ('Symptoms', Icons.sick_outlined, '/symptom', Key('qa-symptoms')),
-    ('Messages', Icons.chat_bubble_outline, '/chat', Key('qa-messages')),
-    ('AI Agent', Icons.smart_toy_outlined, '/ai-agent', Key('qa-agent')),
-    ('Appointments', Icons.event_outlined, '/appointments', Key('qa-appointments')),
-    ('Orders', Icons.local_pharmacy_outlined, '/orders', Key('qa-orders')), // D-69
+    ('Log Vitals', Icons.favorite_border, '/vitals/log', Key('qa-vitals'), Colors.red),
+    ('Symptoms', Icons.sick_outlined, '/symptom', Key('qa-symptoms'), Colors.orange),
+    ('Messages', Icons.chat_bubble_outline, '/chat', Key('qa-messages'), Colors.blue),
+    ('AI Agent', Icons.smart_toy_outlined, '/ai-agent', Key('qa-agent'), Colors.teal),
+    ('Appointments', Icons.event_outlined, '/appointments', Key('qa-appointments'), Colors.purple),
+    ('Orders', Icons.local_pharmacy_outlined, '/orders', Key('qa-orders'), Colors.green), // D-69
   ];
 
   @override
@@ -424,7 +635,7 @@ class _QuickActions extends StatelessWidget {
     crossAxisSpacing: 4,
     childAspectRatio: 0.82,
     children: [
-      for (final (label, icon, path, key) in actions)
+      for (final (label, icon, path, key, color) in actions)
         Card(
           key: key,
           margin: EdgeInsets.zero,
@@ -436,7 +647,12 @@ class _QuickActions extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircleAvatar(child: Icon(icon)),
+                  // D-77: each shortcut keeps its own colour.
+                  CircleAvatar(
+                    backgroundColor: color.withValues(alpha: 0.15),
+                    foregroundColor: color.shade700,
+                    child: Icon(icon),
+                  ),
                   const SizedBox(height: 6),
                   Text(
                     label,
@@ -607,6 +823,17 @@ class _CarePlanCardState extends ConsumerState<_CarePlanCard> {
                         ),
                       ],
                     ),
+                    // D-77: confused? Ask the doctor in the existing chat, draft ready.
+                    if (ref.watch(currentUserProvider).value?.assignedDoctorId case final doc?)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          key: const Key('care-plan-ask-doctor'),
+                          onPressed: () => context.push('/chat/$doc', extra: askAboutCarePlan),
+                          icon: const Icon(Icons.help_outline),
+                          label: const Text('Not clear? Ask my doctor'),
+                        ),
+                      ),
                   ],
                 );
               },

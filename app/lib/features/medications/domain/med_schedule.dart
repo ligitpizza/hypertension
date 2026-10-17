@@ -106,7 +106,7 @@ String doseId(String medicationId, DateTime moment) {
 enum DosePeriod {
   morning('Morning'),
   afternoon('Afternoon'),
-  evening('Evening'),
+  evening('Night'), // D-77: shown as Night
   asNeeded('As needed (PRN)');
 
   const DosePeriod(this.label);
