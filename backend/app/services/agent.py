@@ -237,3 +237,75 @@ def _rule_based_update(
             f"Your reading is {bp}, which is above target. Rest, cut down on salt and keep logging."
         )
     return f"Your reading is {bp}. Keep up your routine and keep logging your readings."
+
+
+# ---- D-76: the AI Health Agent in the patient-doctor chat ----
+
+# "200/150", "200 / 150", "bp 200 over 150"; plausible human values only.
+_BP_IN_TEXT = re.compile(r"\b(\d{2,3})\s*(?:/|over)\s*(\d{2,3})\b", re.IGNORECASE)
+
+
+def bp_in_text(text: str) -> tuple[int, int] | None:
+    """The first plausible blood pressure written in a message, if any."""
+    for m in _BP_IN_TEXT.finditer(text):
+        systolic, diastolic = int(m.group(1)), int(m.group(2))
+        if 60 <= systolic <= 300 and 30 <= diastolic <= 200 and systolic > diastolic:
+            return systolic, diastolic
+    return None
+
+
+def chat_concern(text: str) -> str | None:
+    """Why a chat message needs the AI to step in, or None (mirrors the phone's check)."""
+    bp = bp_in_text(text)
+    if bp and classify(*bp) is BpCategory.CRISIS:
+        return (
+            f"a blood pressure of {bp[0]}/{bp[1]} mmHg, which is in the hypertensive crisis range"
+        )
+    kind = detect_emergency(text)
+    if kind == "self_harm":
+        return "that you may be thinking about harming yourself"
+    if kind == "emergency":
+        return "words that can be signs of an emergency"
+    return None
+
+
+CHAT_ALERT_KIND = "chat_alert"
+
+
+def chat_alert_fallback(concern: str, doctor: str) -> str:
+    return (
+        f"Harvey AI here. I noticed {concern}. I have alerted {doctor} urgently. If you have "
+        "chest pain, breathlessness, weakness on one side, slurred speech or confusion, call 999 "
+        "now. Otherwise sit down, rest and check your blood pressure again in 5 minutes. "
+        "I'm an AI assistant, not a doctor."
+    )
+
+
+def write_chat_alert(
+    repo: AgentDataRepository, llm: LlmClient, uid: str, text: str, now: datetime
+) -> tuple[str, str] | None:
+    """D-76: a flagged message to the doctor gets a visible Harvey AI note in that chat.
+
+    Returns (note, concern), or None when the server's own check finds nothing.
+    """
+    concern = chat_concern(text)
+    if concern is None:
+        return None
+    user = repo.user(uid) or {}
+    doctor_id = user.get("assignedDoctorId")
+    doctor = (repo.user(str(doctor_id)) or {}).get("name") if doctor_id else None
+    doctor_name = str(doctor or "your doctor")
+    instruction = (
+        f'The patient has just sent this message to their doctor ({doctor_name}): "{text[:500]}". '
+        f"It shows {concern}. Write a short note (at most 70 words) that appears in that chat "
+        "for both the patient and the doctor. Speak to the patient: say what you noticed, that "
+        f"{doctor_name} has been alerted urgently, to call 999 now if they have chest pain, "
+        "breathlessness, weakness, slurred speech or confusion, and one calm next step. "
+        "Do not diagnose. Start with 'Harvey AI here.'"
+    )
+    try:
+        note = llm.generate(SYSTEM_PROMPT + build_context(repo, uid, now), [], instruction)
+    except LlmError:
+        note = chat_alert_fallback(concern, doctor_name)
+    repo.add_message(uid, "agent", note, {"kind": CHAT_ALERT_KIND, "doctorId": doctor_id})
+    return note, concern

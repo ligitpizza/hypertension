@@ -26,7 +26,9 @@
     "clinical_alerts",
     "medication_stock",
     "medication_catalog",
-    "pharmacy_messages"
+    "pharmacy_messages",
+    "conversations",
+    "conversation_messages"
   ],
   "user_role": [
     "patient",

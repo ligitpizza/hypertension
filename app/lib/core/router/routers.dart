@@ -28,6 +28,7 @@ import '../../features/auth/presentation/status_pages.dart';
 import '../../features/auth/state/auth_providers.dart';
 import '../../features/auth/state/auth_redirect.dart';
 import '../../features/messaging/presentation/chat_thread_page.dart';
+import '../../features/messaging/presentation/conversation_pages.dart';
 import '../../features/messaging/presentation/inbox_pages.dart';
 import '../../features/provider_portal/presentation/care_plan_page.dart';
 import '../../features/provider_portal/presentation/clinical_note_page.dart';
@@ -202,6 +203,14 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
                 path: 'messages',
                 builder: (_, _) => const DoctorMessagesPage(),
                 routes: [
+                  // D-76 team and admin chats (before :patientId, which would match "team").
+                  GoRoute(
+                    path: 'team/:id',
+                    builder: (_, s) => StaffConversationPage(
+                      conversationId: s.pathParameters['id']!,
+                      backPath: '/doctor/messages',
+                    ),
+                  ),
                   GoRoute(
                     path: ':patientId',
                     builder: (_, s) => ChatThreadPage(
@@ -254,6 +263,13 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
                 builder: (_, _) => const PharmacyMessagesPage(),
                 routes: [
                   GoRoute(
+                    path: 'team/:id',
+                    builder: (_, s) => StaffConversationPage(
+                      conversationId: s.pathParameters['id']!,
+                      backPath: '/pharmacy/messages',
+                    ),
+                  ),
+                  GoRoute(
                     path: ':uid',
                     builder: (_, s) => PharmacyThreadPage(patientId: s.pathParameters['uid']!),
                   ),
@@ -290,6 +306,20 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/admin/appointments', builder: (_, _) => const AdminAppointmentsPage()),
+          // D-76: admin chats with anyone and opens chats between two people.
+          GoRoute(
+            path: '/admin/messages',
+            builder: (_, _) => const AdminMessagesPage(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                builder: (_, s) => StaffConversationPage(
+                  conversationId: s.pathParameters['id']!,
+                  backPath: '/admin/messages',
+                ),
+              ),
+            ],
+          ),
           GoRoute(
             path: '/admin/calendar',
             builder: (_, _) => const DoctorCalendarPage(admin: true),

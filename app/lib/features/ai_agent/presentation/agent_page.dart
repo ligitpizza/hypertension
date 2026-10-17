@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/enums.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../../../shared/services/api/api_client.dart';
+import '../../auth/state/auth_providers.dart';
+import '../../messaging/presentation/chat_ui.dart';
+import '../../messaging/state/messaging_providers.dart';
 import '../data/agent_repository.dart';
 import '../state/agent_providers.dart';
 
@@ -88,6 +91,14 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   Widget build(BuildContext context) {
     final messages = ref.watch(agentMessagesProvider);
     final list = messages.value ?? const <AgentMessage>[];
+    // D-76: opening the assistant clears its unread badge in the inbox.
+    final me = ref.watch(authUidProvider).value;
+    final lastAt = list.lastOrNull?.sentAt;
+    if (me != null && lastAt != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => markChatSeen(ref, me, 'assistant', lastAt),
+      );
+    }
     // Hide the optimistic bubble once the saved copy arrives from Firestore.
     final showPending =
         _pending != null &&
@@ -123,7 +134,23 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   if (list.isEmpty && _pending == null) const _Welcome(),
-                  for (final m in list) _Bubble(text: m.text, fromPatient: m.fromPatient),
+                  for (final m in list)
+                    if (m.kind == 'weekly_summary')
+                      ChatNotice(
+                        key: Key('weekly-summary-${m.id}'),
+                        title: 'Weekly health summary',
+                        text: m.text,
+                        time: m.sentAt == null ? null : chatTime(m.sentAt!),
+                      )
+                    else if (m.kind == 'chat_alert')
+                      ChatNotice(
+                        title: 'Harvey AI · in your chat with your doctor',
+                        text: m.text,
+                        time: m.sentAt == null ? null : chatTime(m.sentAt!),
+                        urgent: true,
+                      )
+                    else
+                      _Bubble(text: m.text, fromPatient: m.fromPatient),
                   if (showPending) _Bubble(text: _pending!, fromPatient: true),
                   if (_pending != null) const _Typing(),
                   if (_unsent != null) ...[
@@ -248,37 +275,14 @@ class _Bubble extends StatelessWidget {
   final String text;
   final bool fromPatient;
 
+  /// D-76: the same bubbles as every other chat.
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    // docs/07: patient bubbles right in primary; agent left in surface colour.
-    return Align(
-      alignment: fromPatient ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: fromPatient ? scheme.primary : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!fromPatient)
-              Text(
-                'Harvey Assistant',
-                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-              ),
-            SelectableText(
-              text,
-              style: TextStyle(color: fromPatient ? scheme.onPrimary : scheme.onSurface),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ChatBubble(
+    mine: fromPatient,
+    senderName: fromPatient ? null : 'Harvey Assistant',
+    senderRole: fromPatient ? null : 'assistant',
+    child: SelectableText(text),
+  );
 }
 
 class _Typing extends StatelessWidget {

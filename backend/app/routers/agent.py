@@ -2,8 +2,10 @@
 
 POST /agent/chat       patient question -> grounded reply (or safe emergency reply)
 POST /agent/proactive  status update after the latest reading, with action buttons
+POST /agent/weekly-summary  D-76: post this week's summary if none in the last 7 days
 """
 
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Any
 
@@ -24,6 +26,7 @@ from app.services.settings import (
     get_settings_repository,
     parse_profile_field,
 )
+from app.services.weekly_summary import ensure_summary
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -101,3 +104,12 @@ def _emergency_phone(profiles: SettingsRepository, uid: str) -> str | None:
     contact = personal.get("emergencyContact")
     phone = contact.get("phone") if isinstance(contact, dict) else None
     return str(phone) if phone else None
+
+
+@router.post("/weekly-summary")
+def weekly_summary(
+    user: CurrentUser = Depends(require_roles(UserRole.PATIENT)),
+    repo: AgentDataRepository = Depends(get_agent_data_repository),
+) -> dict[str, Any]:
+    """D-76: called when the patient's inbox opens, so the first summary needs no wait."""
+    return {"created": ensure_summary(repo, user.uid, datetime.now(UTC))}

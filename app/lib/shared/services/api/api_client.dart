@@ -642,6 +642,32 @@ class ApiClient {
   Future<Map<String, dynamic>> sendPharmacyMessage(String patientId, String text) =>
       _post('/pharmacy-chat/$patientId/messages', {'text': text});
 
+  // D-76 team and admin-opened chats.
+  Future<Map<String, dynamic>> conversations() => _get('/conversations');
+
+  Future<Map<String, dynamic>> conversationContacts(String q) =>
+      _getQuery('/conversations/contacts', {'q': q});
+
+  Future<Map<String, dynamic>> startConversation(String userId) =>
+      _post('/conversations', {'userId': userId});
+
+  Future<Map<String, dynamic>> pairConversation(String userA, String userB) =>
+      _post('/conversations/pair', {'userA': userA, 'userB': userB});
+
+  Future<Map<String, dynamic>> conversationThread(String id) => _get('/conversations/$id/messages');
+
+  Future<Map<String, dynamic>> sendConversationMessage(String id, String text) =>
+      _post('/conversations/$id/messages', {'text': text});
+
+  Future<void> markConversationRead(String id) => _post('/conversations/$id/read', const {});
+
+  /// D-76: Harvey AI reviews one flagged patient message (its text only).
+  Future<Map<String, dynamic>> aiReviewMessage(String messageId, String text) =>
+      _post('/messages/$messageId/ai-review', {'text': text}, receiveTimeout: agentTimeout);
+
+  /// D-76: posts this week's summary to the Harvey Assistant if none yet.
+  Future<Map<String, dynamic>> ensureWeeklySummary() => _post('/agent/weekly-summary', const {});
+
   Future<Map<String, dynamic>> updateAddress(String address, {double? lat, double? lng}) =>
       _send('PUT', '/settings/address', {'address': address, 'lat': lat, 'lng': lng});
 

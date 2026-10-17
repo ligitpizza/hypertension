@@ -230,6 +230,8 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | role | String | patient / agent | Required distinguishes the patient's message from the Gemini-generated reply |
 | text | String | Message content | Required |
 | sentAt | Timestamp | Send time | Required |
+| kind | String | chat_alert / weekly_summary (D-76) | Optional; absent for ordinary turns |
+| doctorId | Reference (users) | The doctor whose chat a chat_alert belongs to (D-76) | Only for chat_alert |
 
 > Persists the AI Health Agent's conversation history (FR-14.1) so Gemini has session context and past exchanges can be reviewed. A separate collection rather than an embedded array, since a 24/7 agent produces an unbounded, ever-growing history per patient.
 
@@ -313,6 +315,33 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | text | String | Message | Required; ≤ 2000; not end-to-end encrypted (D-69) |
 | sentAt | Timestamp | Send time | Required |
 
+### `conversations`  (D-76, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | `{uidA}__{uidB}` (sorted) | One chat per pair |
+| participantIds | Array | The two users | Required |
+| openedBy | Reference (users) | Who started it | Required |
+| openedByRole | String | Role of the opener | Required |
+| openedByAdmin | Boolean | An admin opened it between two other people | Required |
+| createdAt, lastMessageAt | Timestamp | Created / latest message | Required |
+| lastText, lastSenderId | String | Inbox preview (≤ 120 chars) | |
+| unread | Map | uid -> unread count | Updated by FastAPI |
+
+### `conversation_messages`  (D-76, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | Primary key | Auto-generated |
+| conversationId | Reference (conversations) | The chat | Required |
+| senderId | Reference (users) | Sender | Required |
+| senderRole | String | doctor / pharmacist / admin / patient / system | Required |
+| senderName | String | Shown in the chat | Required |
+| text | String | Message | Required; ≤ 2000; not end-to-end encrypted (D-76) |
+| sentAt | Timestamp | Send time | Required |
+
+> Both are read and written only through FastAPI (Security Rules deny client access).
+
 ### `medication_stock`  (D-66, not in Ch4)
 
 | Field | Type | Description | Constraints / Notes |
@@ -352,6 +381,8 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | appointments | patientId ASC, dateTime ASC / doctorId ASC, dateTime ASC | patient + doctor schedules |
 | messages | senderId ASC, recipientId ASC, sentAt ASC | chat thread |
 | agent_messages | patientId ASC, sentAt ASC | AI agent history |
+| agent_messages | patientId ASC, kind ASC, sentAt ASC / DESC | D-76 chat alerts, latest weekly summary |
+| conversation_messages | conversationId ASC, sentAt DESC | D-76 chat thread |
 | users | role ASC, assignedDoctorId ASC | doctor patient list (FR-8.1) |
 | users | role ASC, patientId ASC | family members of a patient (FR-14.2) |
 | medication_orders | patientId ASC, cycleDate DESC / pharmacistId ASC, paymentStatus ASC | patient orders, pharmacist queue |

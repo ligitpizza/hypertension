@@ -20,6 +20,7 @@ from app.services.deterioration import DeteriorationJob, get_deterioration_job
 from app.services.medication_job import MedicationJob, get_medication_job
 from app.services.orders import OrderService, get_order_service
 from app.services.unanswered import UnansweredAlertJob, get_unanswered_alert_job
+from app.services.weekly_summary import WeeklySummaryJob, get_weekly_summary_job
 
 router = APIRouter(prefix="/internal/jobs", tags=["jobs"])
 log = logging.getLogger("careflow.jobs")
@@ -80,14 +81,21 @@ JOBS: dict[str, Callable[[AuditLogger], dict[str, Any]]] = {
 def run_deterioration(
     job: DeteriorationJob = Depends(get_deterioration_job),
     purge: AccountPurgeJob = Depends(get_account_purge_job),
+    summaries: WeeklySummaryJob = Depends(get_weekly_summary_job),
 ) -> dict[str, Any]:
-    """Daily: FR-9.6 30-day deterioration scan, and D-46 purge of deleted accounts."""
+    """Daily: FR-9.6 30-day deterioration scan, D-46 purge of deleted accounts, and on
+    Mondays the D-76 weekly health summaries (no extra Cloud Scheduler job)."""
     result = {"job": "deterioration", "status": "ok", **job.run()}
     try:
         result.update(purge.run())
     except Exception:
         log.exception("Account purge failed")
         result["accountPurge"] = "failed"
+    try:
+        result.update(summaries.run())
+    except Exception:
+        log.exception("Weekly summaries failed")
+        result["weeklySummaries"] = "failed"
     return result
 
 

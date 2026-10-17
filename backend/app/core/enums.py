@@ -34,6 +34,8 @@ class Collection(StrEnum):
     MEDICATION_STOCK = "medication_stock"  # D-66
     MEDICATION_CATALOG = "medication_catalog"  # D-69
     PHARMACY_MESSAGES = "pharmacy_messages"  # D-69
+    CONVERSATIONS = "conversations"  # D-76
+    CONVERSATION_MESSAGES = "conversation_messages"  # D-76
 
 
 class UserRole(StrEnum):

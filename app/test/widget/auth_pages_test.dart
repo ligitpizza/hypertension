@@ -350,6 +350,7 @@ void main() {
         '/admin/calendar', // D-60
         '/admin/appointments', // D-55
         '/admin/assignments', // D-54
+        '/admin/messages', // D-76
         '/admin/audit-logs', // UC11.3
         '/admin/orders', // D-70 order tracking
         '/admin/deliveries', // UC11.4 (Module 13)

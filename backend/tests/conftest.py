@@ -20,7 +20,7 @@ for _var, _host in (
 os.environ["DEV_APPOINTMENT_TIMES"] = "false"
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -48,6 +48,7 @@ from app.services.appointments import get_appointment_repository
 from app.services.assignments import get_assignment_repository
 from app.services.audit_view import get_audit_reader
 from app.services.catalog import get_catalog_repository
+from app.services.conversations import get_conversation_repository
 from app.services.deterioration import get_deterioration_repository
 from app.services.escalation import get_alert_repository
 from app.services.family import get_family_repository
@@ -935,6 +936,46 @@ class InMemoryPharmacyChatRepository:
         return [(i, dict(m)) for i, m in reversed(self.messages)][:limit]
 
 
+class InMemoryConversationRepository:
+    """D-76 team and admin-opened chats."""
+
+    def __init__(self) -> None:
+        self.convs: dict[str, dict[str, Any]] = {}
+        self.msgs: list[tuple[str, dict[str, Any]]] = []
+
+    def get(self, cid: str) -> dict[str, Any] | None:
+        c = self.convs.get(cid)
+        return dict(c) if c else None
+
+    def create(self, cid: str, data: dict[str, Any]) -> None:
+        self.convs[cid] = {**data, "unread": dict(data.get("unread") or {})}
+
+    def for_user(self, uid: str) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(c)) for i, c in self.convs.items() if uid in c["participantIds"]]
+
+    def opened_by(self, uid: str) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(c)) for i, c in self.convs.items() if c.get("openedBy") == uid]
+
+    def add_message(self, data: dict[str, Any], recipients: list[str]) -> str:
+        message_id = f"cm{len(self.msgs) + 1}"
+        self.msgs.append((message_id, dict(data)))
+        c = self.convs[str(data["conversationId"])]
+        c.update(
+            lastText=str(data["text"])[:120],
+            lastSenderId=data["senderId"],
+            lastMessageAt=data["sentAt"],
+        )
+        for uid in recipients:
+            c["unread"][uid] = c["unread"].get(uid, 0) + 1
+        return message_id
+
+    def messages(self, cid: str, limit: int) -> list[tuple[str, dict[str, Any]]]:
+        return [(i, dict(m)) for i, m in self.msgs if m["conversationId"] == cid][-limit:]
+
+    def mark_read(self, cid: str, uid: str) -> None:
+        self.convs[cid]["unread"][uid] = 0
+
+
 class InMemoryAgentDataRepository:
     """Agent context over the shared in-memory users / readings / risk repositories."""
 
@@ -952,6 +993,7 @@ class InMemoryAgentDataRepository:
         self.plans: dict[str, dict[str, Any]] = {}
         self.prescriptions: dict[str, list[dict[str, Any]]] = {}
         self.messages: list[dict[str, Any]] = []
+        self.sent_at: list[datetime] = []
 
     def user(self, uid: str) -> dict[str, Any] | None:
         return self._users.users.get(uid)
@@ -984,9 +1026,28 @@ class InMemoryAgentDataRepository:
         mine = [m for m in self.messages if m["patientId"] == uid][-limit:]
         return [Turn(m["role"], m["text"]) for m in mine]
 
-    def add_message(self, uid: str, role: str, text: str) -> str:
-        self.messages.append({"patientId": uid, "role": role, "text": text})
+    def add_message(
+        self, uid: str, role: str, text: str, extra: dict[str, Any] | None = None
+    ) -> str:
+        self.messages.append({"patientId": uid, "role": role, "text": text, **(extra or {})})
+        self.sent_at.append(datetime.now(UTC))
         return f"msg{len(self.messages)}"
+
+    def risk_before(self, uid: str, before: Any) -> dict[str, Any] | None:
+        mine = [
+            d
+            for d in self._risk.saved
+            if d["patientId"] == uid and d.get("generatedAt") and d["generatedAt"] < before
+        ]
+        return mine[-1] if mine else None
+
+    def latest_of_kind(self, uid: str, kind: str) -> Any:
+        times = [
+            t
+            for m, t in zip(self.messages, self.sent_at, strict=True)
+            if m["patientId"] == uid and m.get("kind") == kind
+        ]
+        return times[-1] if times else None
 
 
 class InMemoryTriageRepository:
@@ -1307,6 +1368,11 @@ def pharmacy_chat() -> InMemoryPharmacyChatRepository:
 
 
 @pytest.fixture
+def conversations() -> InMemoryConversationRepository:
+    return InMemoryConversationRepository()
+
+
+@pytest.fixture
 def gateway() -> FakeGateway:
     return FakeGateway()
 
@@ -1351,6 +1417,7 @@ def make_client(
     courier: FakeGrabClient,
     catalog: InMemoryCatalogRepository,
     pharmacy_chat: InMemoryPharmacyChatRepository,
+    conversations: InMemoryConversationRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -1392,6 +1459,7 @@ def make_client(
         app.dependency_overrides[get_courier_client] = lambda: courier
         app.dependency_overrides[get_catalog_repository] = lambda: catalog
         app.dependency_overrides[get_pharmacy_chat_repository] = lambda: pharmacy_chat
+        app.dependency_overrides[get_conversation_repository] = lambda: conversations
         return TestClient(app)
 
     return _make

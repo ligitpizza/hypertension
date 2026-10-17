@@ -14,6 +14,9 @@ import 'package:hypertension/features/orders/presentation/pharmacy_page.dart';
 import 'package:hypertension/features/orders/presentation/pharmacy_patient_page.dart';
 import 'package:hypertension/features/orders/state/orders_providers.dart';
 
+import 'package:hypertension/features/auth/state/auth_providers.dart';
+import 'package:hypertension/features/messaging/state/messaging_providers.dart';
+import '../helpers/conversation_fakes.dart';
 import '../helpers/fakes.dart';
 import '../helpers/order_fakes.dart';
 import 'package:hypertension/features/orders/presentation/inventory_page.dart';
@@ -132,6 +135,9 @@ Widget host(String initial) {
   return ProviderScope(
     overrides: [
       ordersRepositoryProvider.overrideWithValue(repo),
+      // D-76: the pharmacist's team chats and per-device unread state.
+      conversationsRepositoryProvider.overrideWithValue(FakeConversationsRepository()),
+      authUidProvider.overrideWith((ref) => Stream.value('u-pharm')),
       locationSourceProvider.overrideWithValue(location),
       mapBuilderProvider.overrideWithValue((lat, lng, label) => Text('PREVIEW $lat,$lng')),
       pickerMapBuilderProvider.overrideWithValue(

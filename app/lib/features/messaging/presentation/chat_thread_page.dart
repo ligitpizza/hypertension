@@ -9,6 +9,7 @@ import '../../auth/state/auth_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
 import '../data/messaging_repository.dart';
 import '../state/messaging_providers.dart';
+import 'chat_ui.dart';
 import '../../settings/state/settings_providers.dart';
 
 /// Fig 4.3.15.2 Chat Thread / 4.3.15.3 Flagged Message (FR-10.1, FR-10.3, FR-14.4;
@@ -52,7 +53,11 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
       _error = null;
     });
     try {
-      await ref.read(messagingRepositoryProvider).send(me: me, to: to, text: text);
+      final isDoctor = ref.read(currentUserProvider).value?.role == UserRole.doctor;
+      // D-76: on the patient's side, a flagged message also brings in Harvey AI.
+      await ref
+          .read(messagingRepositoryProvider)
+          .send(me: me, to: to, text: text, aiReview: !isDoctor);
       _input.clear();
       _toBottom();
     } on RecipientNotReadyException {
@@ -191,6 +196,10 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
 
     final messages = thread.value ?? const <ChatMessage>[];
     final lastFlaggedMine = messages.lastIndexWhere((m) => m.fromMe && m.isFlagged);
+    // D-76: Harvey AI notes for this patient, merged into the conversation by time.
+    final patientId = isDoctor ? widget.otherId : me;
+    final notes = ref.watch(chatAlertsProvider(patientId)).value ?? const <AgentNote>[];
+    final items = <Object>[...messages, ...notes]..sort((a, b) => _at(a).compareTo(_at(b)));
 
     return Scaffold(
       appBar: AppBar(
@@ -218,13 +227,14 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
       ),
       body: Column(
         children: [
+          const ChatNoteBar('Messages are end-to-end encrypted', icon: Icons.lock_outline),
           Expanded(
             child: thread.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, _) => const Center(
                 child: Text('Could not load the conversation. Check your connection.'),
               ),
-              data: (list) => list.isEmpty
+              data: (_) => items.isEmpty
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
@@ -234,32 +244,37 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
                   : ListView.builder(
                       key: const Key('chat-list'),
                       controller: _scroll,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: list.length,
-                      itemBuilder: (_, i) => Column(
-                        children: [
-                          _MessageBubble(
-                            me: me,
-                            message: list[i],
-                            showFlag: isDoctor && list[i].isFlagged && !list[i].fromMe,
-                            onDismissFlag: () =>
-                                ref.read(messagingRepositoryProvider).clearFlag(list[i].id),
-                          ),
-                          if (!isDoctor && i == lastFlaggedMine) const _FlaggedBanner(),
-                        ],
-                      ),
+                      padding: const EdgeInsets.all(12),
+                      itemCount: items.length,
+                      itemBuilder: (_, i) {
+                        final item = items[i];
+                        if (item is AgentNote) {
+                          return ChatNotice(
+                            key: Key('ai-note-${item.id}'),
+                            title: 'Harvey AI · not a substitute for a doctor',
+                            text: item.text,
+                            time: chatTime(item.sentAt),
+                            urgent: true,
+                          );
+                        }
+                        final m = item as ChatMessage;
+                        return Column(
+                          children: [
+                            _MessageBubble(
+                              me: me,
+                              message: m,
+                              senderName: m.fromMe ? null : contact?.name,
+                              senderRole: m.fromMe ? null : (isDoctor ? 'patient' : 'doctor'),
+                              showFlag: isDoctor && m.isFlagged && !m.fromMe,
+                              onDismissFlag: () =>
+                                  ref.read(messagingRepositoryProvider).clearFlag(m.id),
+                            ),
+                            if (!isDoctor && messages.indexOf(m) == lastFlaggedMine)
+                              const _FlaggedBanner(),
+                          ],
+                        );
+                      },
                     ),
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.lock_outline, size: 14),
-                SizedBox(width: 4),
-                Text('Messages are end-to-end encrypted', style: TextStyle(fontSize: 12)),
-              ],
             ),
           ),
           if (_error != null)
@@ -280,47 +295,18 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
                 key: const Key('chat-not-ready'),
               ),
             ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-              child: Row(
-                children: [
-                  IconButton(
-                    key: const Key('chat-attach'),
-                    tooltip: 'Attach a photo or PDF',
-                    onPressed: contact?.publicKey == null || _sending
-                        ? null
-                        : () => _attach(me, contact!),
-                    icon: const Icon(Icons.attach_file),
-                  ),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('chat-input'),
-                      controller: _input,
-                      minLines: 1,
-                      maxLines: 4,
-                      maxLength: 2000,
-                      enabled: contact?.publicKey != null,
-                      decoration: const InputDecoration(
-                        hintText: 'Type a message...',
-                        counterText: '',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    key: const Key('chat-send'),
-                    tooltip: 'Send',
-                    onPressed: contact?.publicKey == null || _sending
-                        ? null
-                        : () => _send(me, contact!),
-                    icon: const Icon(Icons.send),
-                  ),
-                ],
-              ),
+          ChatComposer(
+            controller: _input,
+            enabled: contact?.publicKey != null,
+            hint: 'Type a message...',
+            onSend: contact?.publicKey == null || _sending ? null : () => _send(me, contact!),
+            leading: IconButton(
+              key: const Key('chat-attach'),
+              tooltip: 'Attach a photo or PDF',
+              onPressed: contact?.publicKey == null || _sending
+                  ? null
+                  : () => _attach(me, contact!),
+              icon: const Icon(Icons.attach_file),
             ),
           ),
         ],
@@ -329,79 +315,70 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
   }
 }
 
+DateTime _at(Object item) => item is AgentNote ? item.sentAt : (item as ChatMessage).sentAt;
+
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.me,
     required this.message,
     required this.showFlag,
     required this.onDismissFlag,
+    this.senderName,
+    this.senderRole,
   });
 
   final String me;
   final ChatMessage message;
   final bool showFlag;
   final VoidCallback onDismissFlag;
-
-  static String _time(DateTime t) {
-    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-    return '${t.day}/${t.month} $h:${t.minute.toString().padLeft(2, '0')} '
-        '${t.hour < 12 ? 'AM' : 'PM'}';
-  }
+  final String? senderName;
+  final String? senderRole;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final mine = message.fromMe;
-    // docs/07: own messages right in primary; the other side left in surface colour.
-    final fg = mine ? scheme.onPrimary : scheme.onSurface;
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: mine ? scheme.primary : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-          border: showFlag
-              ? Border.all(color: BpClassifier.color(BpCategory.crisis), width: 2)
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (showFlag)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.flag, size: 16, color: BpClassifier.color(BpCategory.crisis)),
-                  const SizedBox(width: 4),
-                  const Text('Flagged: high-risk words'),
-                  TextButton(
-                    key: Key('dismiss-flag-${message.id}'),
-                    onPressed: onDismissFlag,
-                    child: const Text('Dismiss flag'),
-                  ),
-                ],
-              ),
-            if (message.attachment != null)
-              _AttachmentView(me: me, attachment: message.attachment!, color: fg),
-            if (message.text == null)
-              Text(
-                'This message was encrypted for an earlier device and cannot be shown here.',
-                key: Key('earlier-device-${message.id}'),
-                style: TextStyle(color: fg, fontStyle: FontStyle.italic),
-              )
-            else if (message.text!.isNotEmpty || message.attachment == null)
-              SelectableText(message.text!, style: TextStyle(color: fg)),
-            const SizedBox(height: 4),
+    final fg = Theme.of(context).colorScheme.onSurface;
+    final red = BpClassifier.color(BpCategory.crisis);
+    return ChatBubble(
+      mine: message.fromMe,
+      senderName: senderName,
+      senderRole: senderRole,
+      highlight: showFlag ? red : null,
+      time: message.pending ? null : chatTime(message.sentAt),
+      header: showFlag
+          ? Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Icon(Icons.flag, size: 16, color: red),
+                const SizedBox(width: 4),
+                const Text('Flagged: high-risk words'),
+                TextButton(
+                  key: Key('dismiss-flag-${message.id}'),
+                  onPressed: onDismissFlag,
+                  child: const Text('Dismiss flag'),
+                ),
+              ],
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (message.attachment != null)
+            _AttachmentView(me: me, attachment: message.attachment!, color: fg),
+          if (message.text == null)
             Text(
-              message.pending ? 'Sending... (will send when online)' : _time(message.sentAt),
-              key: message.pending ? Key('pending-${message.id}') : null,
-              style: TextStyle(color: fg.withValues(alpha: 0.7), fontSize: 11),
+              'This message was encrypted for an earlier device and cannot be shown here.',
+              key: Key('earlier-device-${message.id}'),
+              style: const TextStyle(fontStyle: FontStyle.italic),
+            )
+          else if (message.text!.isNotEmpty || message.attachment == null)
+            SelectableText(message.text!),
+          if (message.pending)
+            Text(
+              'Sending... (will send when online)',
+              key: Key('pending-${message.id}'),
+              style: Theme.of(context).textTheme.labelSmall,
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

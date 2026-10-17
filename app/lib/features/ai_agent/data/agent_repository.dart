@@ -10,11 +10,15 @@ class AgentMessage {
     required this.fromPatient,
     required this.text,
     this.sentAt,
+    this.kind,
   });
 
   final String id;
   final bool fromPatient;
   final String text;
+
+  /// D-76: "weekly_summary" or "chat_alert"; null for ordinary replies.
+  final String? kind;
 
   /// Null for a moment after sending (server timestamp pending).
   final DateTime? sentAt;
@@ -24,6 +28,7 @@ class AgentMessage {
     fromPatient: d['role'] == 'patient',
     text: d['text'] as String? ?? '',
     sentAt: (d['sentAt'] as Timestamp?)?.toDate(),
+    kind: d['kind'] as String?,
   );
 }
 

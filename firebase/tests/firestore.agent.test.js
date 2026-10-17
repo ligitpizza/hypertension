@@ -65,3 +65,18 @@ describe('FR-14.3 triage_outcomes', () => {
       { patientId: P, symptoms: [], severity: 'mild', outcome: 'monitor_at_home' }));
   });
 });
+
+describe('D-76 Harvey AI notes in the doctor chat', () => {
+  test('patient and assigned doctor query the chat alerts; another doctor cannot', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'agent_messages/alert'),
+        { patientId: P, role: 'agent', kind: 'chat_alert', doctorId: 'u-doctor', text: 'x', sentAt: new Date() });
+    });
+    const alerts = (db) => query(collection(db, 'agent_messages'),
+      where('patientId', '==', P), where('kind', '==', 'chat_alert'), orderBy('sentAt', 'asc'));
+    await assertSucceeds(getDocs(alerts(patient())));
+    await assertSucceeds(getDocs(alerts(as(env, 'doctor', 'u-doctor').firestore())));
+    await assertFails(getDocs(alerts(as(env, 'doctor', 'd2').firestore())));
+  });
+});
+

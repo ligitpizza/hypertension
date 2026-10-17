@@ -5,7 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/services/api/api_client.dart';
-import '../../appointments/domain/appointment_text.dart' show dateLabel, timeLabel;
+import '../../auth/state/auth_providers.dart';
+import '../../messaging/data/conversations_repository.dart';
+import '../../messaging/presentation/chat_ui.dart';
+import '../../messaging/presentation/conversation_pages.dart';
+import '../../messaging/state/messaging_providers.dart';
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 
@@ -81,21 +85,26 @@ class _PharmacyChatViewState extends ConsumerState<PharmacyChatView> {
     }
   }
 
+  /// D-76: opening the chat marks it read on this device.
+  void _seen(List<PharmacyMessage> list) {
+    final me = ref.read(authUidProvider).value;
+    final last = list.lastOrNull?.sentAt;
+    if (me == null || last == null) return;
+    final id = widget.patientId;
+    markChatSeen(ref, me, id == null ? 'pharmacy' : 'pharmacy_$id', last);
+  }
+
   @override
   Widget build(BuildContext context) {
     final id = widget.patientId;
     final AsyncValue<List<PharmacyMessage>> messages = id == null
         ? ref.watch(myPharmacyChatProvider)
         : ref.watch(pharmacyThreadProvider(id)).whenData((t) => t.messages);
-    final theme = Theme.of(context);
+    final list = messages.value;
+    if (list != null) WidgetsBinding.instance.addPostFrameCallback((_) => _seen(list));
     return Column(
       children: [
-        Container(
-          width: double.infinity,
-          color: theme.colorScheme.surfaceContainerHighest,
-          padding: const EdgeInsets.all(8),
-          child: Text(pharmacyChatNote, style: theme.textTheme.bodySmall),
-        ),
+        const ChatNoteBar(pharmacyChatNote, icon: Icons.info_outline),
         Expanded(
           child: messages.when(
             skipLoadingOnRefresh: true,
@@ -117,77 +126,24 @@ class _PharmacyChatViewState extends ConsumerState<PharmacyChatView> {
                     padding: const EdgeInsets.all(12),
                     children: [
                       for (final m in list.reversed)
-                        _Bubble(
-                          message: m,
+                        ChatBubble(
                           mine: widget.forPharmacist ? m.fromPharmacy : !m.fromPharmacy,
+                          senderName: m.senderName,
+                          senderRole: m.senderRole,
+                          time: m.sentAt == null ? null : chatTime(m.sentAt!),
+                          child: Text(m.text),
                         ),
                     ],
                   ),
           ),
         ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 8, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    key: const Key('pharmacy-chat-input'),
-                    controller: _text,
-                    minLines: 1,
-                    maxLines: 4,
-                    maxLength: 2000,
-                    decoration: const InputDecoration(hintText: 'Write a message', counterText: ''),
-                  ),
-                ),
-                IconButton(
-                  key: const Key('pharmacy-chat-send'),
-                  tooltip: 'Send',
-                  onPressed: _sending ? null : _send,
-                  icon: const Icon(Icons.send),
-                ),
-              ],
-            ),
-          ),
+        ChatComposer(
+          controller: _text,
+          onSend: _sending ? null : _send,
+          inputKey: const Key('pharmacy-chat-input'),
+          sendKey: const Key('pharmacy-chat-send'),
         ),
       ],
-    );
-  }
-}
-
-class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.mine});
-  final PharmacyMessage message;
-  final bool mine;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final sent = message.sentAt;
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(10),
-        constraints: const BoxConstraints(maxWidth: 420),
-        decoration: BoxDecoration(
-          color: mine ? scheme.primaryContainer : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!mine) Text(message.senderName, style: Theme.of(context).textTheme.labelSmall),
-            Text(message.text),
-            if (sent != null)
-              Text(
-                '${dateLabel(sent)}, ${timeLabel(sent)}',
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -203,27 +159,33 @@ class PatientPharmacyChatPage extends StatelessWidget {
   );
 }
 
-/// Staff portal: the pharmacist's inbox (one conversation per patient).
+/// Staff portal: the pharmacist's inbox. Patients' Harvey Pharmacy chats (shared by all
+/// pharmacists) and, since D-76, team and admin chats.
 class PharmacyMessagesPage extends ConsumerWidget {
   const PharmacyMessagesPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(authUidProvider).value;
     final list = ref.watch(pharmacyConversationsProvider);
+    final team = ref.watch(myConversationsProvider).value ?? const <Conversation>[];
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('Pharmacy messages', style: Theme.of(context).textTheme.headlineSmall),
-            ),
+        InboxHeader(
+          title: 'Pharmacy messages',
+          subtitle:
+              'Patient chats are shared by all pharmacists. Patients see them as '
+              '"Harvey Pharmacy".',
+          actions: [
             IconButton(
               tooltip: 'Refresh',
-              onPressed: () => ref.invalidate(pharmacyConversationsProvider),
+              onPressed: () {
+                ref.invalidate(pharmacyConversationsProvider);
+                ref.invalidate(myConversationsProvider);
+              },
               icon: const Icon(Icons.refresh),
             ),
-            const SizedBox(width: 8),
             // D-70: start a conversation with any patient.
             FilledButton.icon(
               key: const Key('new-message'),
@@ -235,47 +197,63 @@ class PharmacyMessagesPage extends ConsumerWidget {
                 if (uid != null && context.mounted) context.go('/pharmacy/messages/$uid');
               },
               icon: const Icon(Icons.edit_square),
-              label: const Text('New message'),
+              label: const Text('Message a patient'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('message-staff'),
+              onPressed: () => startChat(context, ref, '/pharmacy/messages/team'),
+              icon: const Icon(Icons.groups_outlined),
+              label: const Text('Message staff'),
             ),
           ],
         ),
-        const Text('Shared by all pharmacists. Patients see it as "Harvey Pharmacy".'),
-        const SizedBox(height: 12),
         list.when(
           loading: () => const LinearProgressIndicator(),
           error: (_, _) => TextButton(
             onPressed: () => ref.invalidate(pharmacyConversationsProvider),
             child: const Text('Could not load messages. Retry'),
           ),
-          data: (convs) => convs.isEmpty
-              ? const Padding(
-                  key: Key('pharmacy-inbox-empty'),
-                  padding: EdgeInsets.all(16),
-                  child: Text('No conversations yet.'),
-                )
-              : Card(
-                  child: Column(
-                    children: [
-                      for (final c in convs)
-                        ListTile(
-                          key: Key('conversation-${c.last.patientId}'),
-                          leading: const Icon(Icons.person_outline),
-                          title: Text(c.patientName ?? 'Patient'),
-                          subtitle: Text(
-                            '${c.last.fromPharmacy ? 'You: ' : ''}${c.last.text}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: c.last.fromPharmacy
-                              ? null
-                              : const Icon(Icons.mark_chat_unread_outlined),
-                          onTap: () => context.go('/pharmacy/messages/${c.last.patientId}'),
-                        ),
-                    ],
-                  ),
-                ),
+          data: (convs) => InboxSection(
+            key: const Key('pharmacy-inbox-empty'),
+            title: 'Patients',
+            empty: 'No conversations yet.',
+            children: [
+              for (final c in convs)
+                if (me != null) _PatientRow(me: me, conversation: c),
+            ],
+          ),
+        ),
+        InboxSection(
+          title: 'Team and admin',
+          empty: 'No team chats yet.',
+          children: conversationTiles(context, team, me, (c) => '/pharmacy/messages/team/${c.id}'),
         ),
       ],
+    );
+  }
+}
+
+/// One patient's pharmacy chat; a dot when the patient wrote last and it wasn't opened here.
+class _PatientRow extends ConsumerWidget {
+  const _PatientRow({required this.me, required this.conversation});
+  final String me;
+  final PharmacyConversation conversation;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final last = conversation.last;
+    final seen = ref.watch(seenAtProvider((me, 'pharmacy_${last.patientId}'))).value;
+    final unread =
+        !last.fromPharmacy && last.sentAt != null && (seen == null || last.sentAt!.isAfter(seen));
+    return InboxTile(
+      key: Key('conversation-${last.patientId}'),
+      title: conversation.patientName ?? 'Patient',
+      role: 'patient',
+      preview: '${last.fromPharmacy ? 'You: ' : ''}${last.text}',
+      time: last.sentAt == null ? null : inboxTime(last.sentAt!, DateTime.now()),
+      unread: unread ? -1 : 0,
+      unreadKey: Key('unread-${last.patientId}'),
+      onTap: () => context.go('/pharmacy/messages/${last.patientId}'),
     );
   }
 }

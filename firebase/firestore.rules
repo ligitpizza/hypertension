@@ -190,6 +190,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // D-76 team and admin-opened chats: read and written only through FastAPI (who may
+    // talk to whom, unread counts, pushes). Not end-to-end encrypted (like D-69).
+    match /conversations/{conversationId} {
+      allow read, write: if false;
+    }
+    match /conversation_messages/{messageId} {
+      allow read, write: if false;
+    }
+
     // ---- agent_messages (FR-14.1, Table 4.2.3.16) ----
     // Written only by FastAPI (it calls Gemini). Read by the patient for the chat screen,
     // and by the assigned doctor / admin like other patient-owned data (docs/04).

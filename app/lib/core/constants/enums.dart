@@ -30,6 +30,8 @@ abstract final class Collections {
   static const medicationStock = 'medication_stock'; // D-66
   static const medicationCatalog = 'medication_catalog'; // D-69
   static const pharmacyMessages = 'pharmacy_messages'; // D-69
+  static const conversations = 'conversations'; // D-76
+  static const conversationMessages = 'conversation_messages'; // D-76
 
   static const all = [
     users,
@@ -58,6 +60,8 @@ abstract final class Collections {
     medicationStock,
     medicationCatalog,
     pharmacyMessages,
+    conversations,
+    conversationMessages,
   ];
 }
 

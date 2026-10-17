@@ -82,7 +82,19 @@ class AgentDataRepository(Protocol):
         """Oldest first."""
         ...
 
-    def add_message(self, uid: str, role: str, text: str) -> str: ...
+    def add_message(
+        self, uid: str, role: str, text: str, extra: dict[str, Any] | None = None
+    ) -> str:
+        """[extra] adds D-76 fields: kind ("chat_alert" / "weekly_summary"), doctorId."""
+        ...
+
+    def risk_before(self, uid: str, before: datetime) -> dict[str, Any] | None:
+        """D-76: the latest risk score generated before [before]."""
+        ...
+
+    def latest_of_kind(self, uid: str, kind: str) -> datetime | None:
+        """D-76: when the latest agent message of this kind was saved."""
+        ...
 
 
 class FirestoreAgentDataRepository:
@@ -153,11 +165,39 @@ class FirestoreAgentDataRepository:
         rows = [d.to_dict() for d in query.stream()]
         return [Turn(r["role"], r["text"]) for r in reversed(rows)]
 
-    def add_message(self, uid: str, role: str, text: str) -> str:
+    def add_message(
+        self, uid: str, role: str, text: str, extra: dict[str, Any] | None = None
+    ) -> str:
         _, ref = self._db.collection(Collection.AGENT_MESSAGES.value).add(
-            {"patientId": uid, "role": role, "text": text, "sentAt": firestore.SERVER_TIMESTAMP}
+            {
+                "patientId": uid,
+                "role": role,
+                "text": text,
+                "sentAt": firestore.SERVER_TIMESTAMP,
+                **(extra or {}),
+            }
         )
         return str(ref.id)
+
+    def risk_before(self, uid: str, before: datetime) -> dict[str, Any] | None:
+        query = (
+            self._where(Collection.RISK_SCORES, uid)
+            .where(filter=firestore.FieldFilter("generatedAt", "<", before))
+            .order_by("generatedAt", direction=firestore.Query.DESCENDING)
+            .limit(1)
+        )
+        return next((dict(d.to_dict()) for d in query.stream()), None)
+
+    def latest_of_kind(self, uid: str, kind: str) -> datetime | None:
+        query = (
+            self._where(Collection.AGENT_MESSAGES, uid)
+            .where(filter=firestore.FieldFilter("kind", "==", kind))
+            .order_by("sentAt", direction=firestore.Query.DESCENDING)
+            .limit(1)
+        )
+        row = next((d.to_dict() for d in query.stream()), None)
+        sent = (row or {}).get("sentAt")
+        return sent if isinstance(sent, datetime) else None
 
 
 def get_agent_data_repository() -> AgentDataRepository:

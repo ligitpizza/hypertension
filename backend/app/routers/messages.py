@@ -6,19 +6,29 @@ offline queue flushes, UC10.1 E1), the sending client calls it to:
   - push "New message from <name>" to the recipient's devices;
   - if the sender's on-device scan flagged the message (isFlagged), raise a
     `flagged_message` clinical alert for the assigned doctor (UC10.3).
+
+D-76: for a flagged patient message the phone also calls POST /messages/{id}/ai-review
+with that one message's text (the patient's own words, only when flagged). The AI Health
+Agent then posts a visible "Harvey AI" note into the chat (agent_messages, kind
+"chat_alert") and pushes the doctor urgently. Ordinary messages are never sent here.
 """
 
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
 from app.core.enums import ClinicalAlertType, Collection, RiskLevel, UserRole
 from app.core.errors import ApiError
 from app.core.firebase import get_firestore
+from app.core.rate_limit import RateLimiter
+from app.integrations.gemini import LlmClient, get_llm_client
 from app.integrations.push import PushMessage
+from app.services.agent import write_chat_alert
+from app.services.agent_context import AgentDataRepository, get_agent_data_repository
 from app.services.escalation import DoctorAlert, EscalationPlan, Escalator, get_escalator
 from app.services.notifications import Notifier, get_notifier
 
@@ -85,7 +95,8 @@ def notify(
                 DoctorAlert(
                     ClinicalAlertType.FLAGGED_MESSAGE,
                     RiskLevel.HIGH,
-                    f"Flagged message from {name}: high-risk words detected. "
+                    f"Flagged message from {name}: high-risk words or a crisis-range blood "
+                    "pressure detected. "
                     "Open the conversation to review.",
                 )
             ]
@@ -99,3 +110,60 @@ def notify(
         target_type=Collection.MESSAGES.value,
         target_id=message_id,
     )
+
+
+class AiReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    text: str = Field(min_length=1, max_length=2000)
+
+
+def _agent_limiter() -> RateLimiter:
+    from app.routers.agent import get_agent_limiter
+
+    return get_agent_limiter()
+
+
+@router.post("/{message_id}/ai-review")
+def ai_review(
+    message_id: str,
+    body: AiReviewRequest,
+    user: CurrentUser = Depends(require_roles(UserRole.PATIENT)),
+    repo: MessageRepository = Depends(get_message_repository),
+    agent_repo: AgentDataRepository = Depends(get_agent_data_repository),
+    llm: LlmClient = Depends(get_llm_client),
+    limiter: RateLimiter = Depends(_agent_limiter),
+    notifier: Notifier = Depends(get_notifier),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-76: the AI Health Agent steps into the patient-doctor chat for a flagged message."""
+    msg = repo.message(message_id)
+    if msg is None or msg.get("senderId") != user.uid:
+        raise ApiError("MESSAGE_NOT_FOUND", "Message not found.", status.HTTP_404_NOT_FOUND)
+    if not msg.get("isFlagged"):
+        return {"posted": False}
+    if not limiter.allow(user.uid):
+        raise ApiError(
+            "TOO_MANY_REQUESTS", "Please wait a moment.", status.HTTP_429_TOO_MANY_REQUESTS
+        )
+    result = write_chat_alert(agent_repo, llm, user.uid, body.text, datetime.now(UTC))
+    if result is None:
+        return {"posted": False}
+    note, concern = result
+    sender = repo.user(user.uid) or {}
+    notifier.notify(
+        str(msg.get("recipientId")),
+        PushMessage(
+            f"Harvey AI flagged a message from {sender.get('name') or 'a patient'}",
+            f"The patient reported {concern}.",
+            {"type": "message", "from": user.uid},
+            urgent=True,
+        ),
+    )
+    audit.log(
+        user_id=user.uid,
+        action="AI_CHAT_ALERT",
+        details="Harvey AI reviewed a flagged chat message.",
+        target_type=Collection.MESSAGES.value,
+        target_id=message_id,
+    )
+    return {"posted": True, "note": note}

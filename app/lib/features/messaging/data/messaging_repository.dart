@@ -162,6 +162,29 @@ class StoredMessage {
   }
 }
 
+/// D-76: a Harvey AI note in the patient-doctor chat (agent_messages, kind "chat_alert").
+/// Written by FastAPI when the patient's phone flags a message; both sides read it.
+class AgentNote {
+  const AgentNote({required this.id, required this.text, required this.sentAt});
+
+  final String id;
+  final String text;
+  final DateTime sentAt;
+}
+
+/// D-76: true when the text contains a blood pressure in the crisis range (180/120 or
+/// above), e.g. "my bp was 200/150" or "bp 190 over 100". Mirrors the server's check.
+bool hasCrisisBp(String text) {
+  final re = RegExp(r'\b(\d{2,3})\s*(?:/|over)\s*(\d{2,3})\b', caseSensitive: false);
+  for (final m in re.allMatches(text)) {
+    final sys = int.parse(m.group(1)!);
+    final dia = int.parse(m.group(2)!);
+    final plausible = sys >= 60 && sys <= 300 && dia >= 30 && dia <= 200 && sys > dia;
+    if (plausible) return sys >= 180 || dia >= 120;
+  }
+  return false;
+}
+
 /// FR-10.1 secure messaging (Fig 4.1.1.10 MessagingCtrl). Messages go straight to
 /// Firestore under Security Rules (the server cannot read them); FastAPI is only told
 /// afterwards so it can push the recipient and escalate flagged messages.
@@ -175,7 +198,17 @@ abstract interface class MessagingRepository {
   Stream<List<ChatMessage>> thread(String me, String other);
 
   /// Scans, encrypts and stores [text]; returns true when the keyword scan flagged it.
-  Future<bool> send({required String me, required Contact to, required String text});
+  /// D-76: with [aiReview] (the patient's side) a flagged message is also sent to the
+  /// AI Health Agent, which posts a Harvey AI note in the chat and alerts the doctor.
+  Future<bool> send({
+    required String me,
+    required Contact to,
+    required String text,
+    bool aiReview = false,
+  });
+
+  /// D-76: Harvey AI notes in this patient's chat with their doctor, oldest first.
+  Stream<List<AgentNote>> chatAlerts(String patientId);
 
   /// UC10.3 E1: the doctor clears a false-positive flag.
   Future<void> clearFlag(String messageId);
@@ -247,10 +280,35 @@ class FirestoreMessagingRepository implements MessagingRepository {
       });
 
   @override
-  Future<bool> send({required String me, required Contact to, required String text}) async {
+  Stream<List<AgentNote>> chatAlerts(String patientId) => _db
+      .collection(Collections.agentMessages)
+      .where('patientId', isEqualTo: patientId)
+      .where('kind', isEqualTo: 'chat_alert')
+      .orderBy('sentAt')
+      .limitToLast(50)
+      .snapshots()
+      .map(
+        (s) => [
+          for (final d in s.docs)
+            AgentNote(
+              id: d.id,
+              text: d.data()['text'] as String? ?? '',
+              sentAt: (d.data()['sentAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            ),
+        ],
+      );
+
+  @override
+  Future<bool> send({
+    required String me,
+    required Contact to,
+    required String text,
+    bool aiReview = false,
+  }) async {
     final key = to.publicKey;
     if (key == null) throw const RecipientNotReadyException();
-    final flagged = (await _scanner).isHighRisk(text);
+    // D-76: a crisis-range blood pressure in the text also flags it.
+    final flagged = (await _scanner).isHighRisk(text) || hasCrisisBp(text);
     final sealed = await _crypto.encrypt(
       text: text,
       senderId: me,
@@ -260,20 +318,22 @@ class FirestoreMessagingRepository implements MessagingRepository {
     final ref = _db.collection(Collections.messages).doc();
     // Not awaited: offline, the write is queued and shows at once (UC10.1 E1). Once the
     // server has it, FastAPI pushes the recipient (and escalates if flagged).
-    unawaited(
-      ref
-          .set({
-            'senderId': me,
-            'recipientId': to.uid,
-            'encryptedText': sealed.encryptedText,
-            'isFlagged': flagged,
-            'sentAt': FieldValue.serverTimestamp(),
-            'senderPublicKey': sealed.senderPublicKey,
-            'recipientPublicKey': key,
-          })
-          .then((_) => _api.notifyMessage(ref.id))
-          .catchError((Object _) {}),
-    );
+    Future<void> store() async {
+      await ref.set({
+        'senderId': me,
+        'recipientId': to.uid,
+        'encryptedText': sealed.encryptedText,
+        'isFlagged': flagged,
+        'sentAt': FieldValue.serverTimestamp(),
+        'senderPublicKey': sealed.senderPublicKey,
+        'recipientPublicKey': key,
+      });
+      await _api.notifyMessage(ref.id);
+      // D-76: only this flagged message's text goes to the AI; others stay private.
+      if (flagged && aiReview) await _api.aiReviewMessage(ref.id, text);
+    }
+
+    unawaited(store().catchError((Object _) {}));
     return flagged;
   }
 

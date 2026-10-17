@@ -20,6 +20,14 @@ import 'package:hypertension/features/settings/state/settings_providers.dart';
 import 'package:hypertension/features/staff_shell/staff_shell.dart';
 import 'package:hypertension/shared/models/health_models.dart';
 
+import 'package:hypertension/features/ai_agent/data/agent_repository.dart';
+import 'package:hypertension/features/ai_agent/state/agent_providers.dart';
+import 'package:hypertension/features/messaging/data/conversations_repository.dart';
+import 'package:hypertension/features/messaging/presentation/conversation_pages.dart';
+import 'package:hypertension/features/orders/data/order_models.dart';
+import 'package:hypertension/features/orders/state/orders_providers.dart';
+
+import '../helpers/conversation_fakes.dart';
 import '../helpers/fakes.dart';
 
 // Module 10 messaging UI (FR-10.1, FR-10.2, FR-10.3; UC10.1, UC10.2, UC10.3; D-42).
@@ -44,11 +52,24 @@ class FakeMessagingRepository implements MessagingRepository {
   @override
   Stream<List<ChatMessage>> thread(String me, String other) => Stream.value(history);
 
+  final reviewed = <String>[];
+  List<AgentNote> notes = const [];
+
   @override
-  Future<bool> send({required String me, required Contact to, required String text}) async {
+  Future<bool> send({
+    required String me,
+    required Contact to,
+    required String text,
+    bool aiReview = false,
+  }) async {
     sent.add(text);
-    return flagNext;
+    final flagged = flagNext || hasCrisisBp(text);
+    if (flagged && aiReview) reviewed.add(text);
+    return flagged;
   }
+
+  @override
+  Stream<List<AgentNote>> chatAlerts(String patientId) => Stream.value(notes);
 
   @override
   Future<void> clearFlag(String messageId) async => cleared.add(messageId);
@@ -200,6 +221,11 @@ AppUser user(UserRole role, {String? doctor}) => AppUser(
   assignedDoctorId: doctor,
 );
 
+// D-76 inbox sources.
+var convRepo = FakeConversationsRepository();
+List<PharmacyMessage> pharmacyChat = const [];
+List<AgentMessage> agentHistory = const [];
+
 Widget chatApp(FakeMessagingRepository repo, AppUser me, String location) {
   final router = GoRouter(
     initialLocation: location,
@@ -210,10 +236,27 @@ Widget chatApp(FakeMessagingRepository repo, AppUser me, String location) {
         builder: (_, s) => ChatThreadPage(otherId: s.pathParameters['id']!),
       ),
       GoRoute(path: '/ai-agent', builder: (_, _) => const Text('ROUTE /ai-agent')),
+      GoRoute(path: '/pharmacy-chat', builder: (_, _) => const Text('ROUTE /pharmacy-chat')),
+      GoRoute(
+        path: '/conversation/:id',
+        builder: (_, s) => PatientConversationPage(conversationId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/admin/messages',
+        builder: (_, _) => const Scaffold(body: AdminMessagesPage()),
+      ),
+      GoRoute(
+        path: '/admin/messages/:id',
+        builder: (_, s) => Text('ROUTE /admin/messages/${s.pathParameters['id']}'),
+      ),
     ],
   );
   return ProviderScope(
     overrides: [
+      conversationsRepositoryProvider.overrideWithValue(convRepo),
+      myPharmacyChatProvider.overrideWith((ref) async => pharmacyChat),
+      agentMessagesProvider.overrideWith((ref) => Stream.value(agentHistory)),
+      weeklySummaryRequestProvider.overrideWith((ref) async {}),
       messagingRepositoryProvider.overrideWithValue(repo),
       attachmentPickerProvider.overrideWithValue(picker),
       fileSharerProvider.overrideWithValue(sharer),
@@ -231,6 +274,9 @@ void main() {
   late FakeMessagingRepository repo;
   setUp(() {
     repo = FakeMessagingRepository();
+    convRepo = FakeConversationsRepository();
+    pharmacyChat = const [];
+    agentHistory = const [];
     picker.next = null;
     sharer.shared.clear();
     SharedPreferences.setMockInitialValues({}); // per-device unread state (D-42)
@@ -431,6 +477,171 @@ void main() {
       ];
       await openChat(t);
       expect(find.textContaining('encrypted for an earlier device'), findsOneWidget);
+    });
+  });
+
+  group('D-76 messaging', () {
+    tallTest('the inbox labels who is who and counts unread messages', (t) async {
+      pharmacyChat = [
+        PharmacyMessage(
+          id: 'pm1',
+          patientId: 'p1',
+          senderRole: 'pharmacist',
+          senderName: 'Harvey Pharmacy (Aisyah)',
+          text: 'Your order is ready',
+          sentAt: now,
+        ),
+      ];
+      agentHistory = [
+        AgentMessage(
+          id: 'w1',
+          fromPatient: false,
+          text: 'Your weekly health summary...',
+          sentAt: now,
+          kind: 'weekly_summary',
+        ),
+      ];
+      convRepo.list = [
+        conversation(
+          'c1',
+          const ChatPerson(uid: 'a1', name: 'Admin Lee', role: 'admin'),
+          lastText: 'Please update your IC',
+          unread: 2,
+        ),
+      ];
+      await t.pumpWidget(chatApp(repo, user(UserRole.patient, doctor: 'd1'), '/chat'));
+      await t.pumpAndSettle();
+      for (final label in ['Doctor', 'Pharmacy', 'Admin', 'Assistant']) {
+        expect(find.text(label), findsWidgets, reason: label);
+      }
+      expect(find.byKey(const Key('unread-pharmacy')), findsOneWidget);
+      expect(find.byKey(const Key('unread-assistant')), findsOneWidget);
+      expect(find.text('Your weekly health summary is ready'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const Key('team-unread-c1')), matching: find.text('2')),
+        findsOneWidget,
+      );
+      await t.tap(find.text('Admin Lee'));
+      await t.pumpAndSettle();
+      expect(convRepo.calls, contains('read:c1'));
+    });
+
+    tallTest('the patient replies in a chat the admin opened', (t) async {
+      convRepo.list = [
+        conversation(
+          'c1',
+          const ChatPerson(uid: 'ph1', name: 'Aisyah', role: 'pharmacist'),
+          byAdmin: true,
+        ),
+      ];
+      convRepo.threads['c1'] = const [
+        ConversationMessage(
+          id: 'm0',
+          senderId: 'a1',
+          senderRole: 'system',
+          senderName: 'Harvey',
+          text: 'Admin Lee (admin) opened this chat between Aisyah and Siti.',
+        ),
+        ConversationMessage(
+          id: 'm1',
+          senderId: 'ph1',
+          senderRole: 'pharmacist',
+          senderName: 'Aisyah',
+          text: 'Hello Siti',
+        ),
+      ];
+      await t.pumpWidget(chatApp(repo, user(UserRole.patient, doctor: 'd1'), '/conversation/c1'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Chat opened by Admin Lee'), findsOneWidget);
+      expect(find.textContaining('opened this chat between'), findsOneWidget);
+      expect(find.text('Pharmacy'), findsWidgets);
+      await t.enterText(find.byKey(const Key('conversation-input')), 'Hi Aisyah');
+      await t.tap(find.byKey(const Key('conversation-send')));
+      await t.pumpAndSettle();
+      expect(convRepo.calls, contains('send:c1:Hi Aisyah'));
+    });
+
+    tallTest('a crisis BP sent to the doctor brings in Harvey AI; its note shows', (t) async {
+      repo.notes = [
+        AgentNote(id: 'n1', text: 'Harvey AI here. 200/150 is very high.', sentAt: now),
+      ];
+      await t.pumpWidget(chatApp(repo, user(UserRole.patient, doctor: 'd1'), '/chat/d1'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('ai-note-n1')), findsOneWidget);
+      expect(find.textContaining('not a substitute for a doctor'), findsOneWidget);
+      await t.enterText(find.byKey(const Key('chat-input')), 'my bp was 200/150');
+      await t.tap(find.byKey(const Key('chat-send')));
+      await t.pumpAndSettle();
+      expect(repo.reviewed, ['my bp was 200/150']);
+    });
+
+    tallTest('the doctor sees the Harvey AI note but never triggers a review', (t) async {
+      repo.contacts['p1'] = const Contact(
+        uid: 'p1',
+        name: 'Siti',
+        subtitle: 'Patient',
+        publicKey: 'k',
+      );
+      repo.notes = [AgentNote(id: 'n1', text: 'Harvey AI here.', sentAt: now)];
+      await t.pumpWidget(chatApp(repo, user(UserRole.doctor), '/chat/p1'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('ai-note-n1')), findsOneWidget);
+      await t.enterText(find.byKey(const Key('chat-input')), 'Your bp 200/150 is high');
+      await t.tap(find.byKey(const Key('chat-send')));
+      await t.pumpAndSettle();
+      expect(repo.reviewed, isEmpty);
+    });
+
+    test('crisis BP is found in the message text', () {
+      expect(hasCrisisBp('my bp was 200/150'), isTrue);
+      expect(hasCrisisBp('BP 185 over 100'), isTrue);
+      expect(hasCrisisBp('bp 150/95'), isFalse);
+      expect(hasCrisisBp('see you 12/10'), isFalse);
+    });
+
+    tallTest('admin starts a chat and opens one between two people', (t) async {
+      convRepo.people = const [
+        ChatPerson(uid: 'ph1', name: 'Aisyah', role: 'pharmacist'),
+        ChatPerson(uid: 'p1', name: 'Siti', role: 'patient'),
+      ];
+      final admin = AppUser(
+        uid: 'a1',
+        email: 'a@y.my',
+        name: 'Admin Lee',
+        role: UserRole.admin,
+        isActive: true,
+        onboardingComplete: true,
+      );
+      await t.pumpWidget(chatApp(repo, admin, '/admin/messages'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('pair-chat')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('pick-person-ph1')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('pick-person-ph1')), findsNothing); // can't pick twice
+      await t.tap(find.byKey(const Key('pick-person-p1')));
+      await t.pumpAndSettle();
+      expect(convRepo.calls, contains('pair:ph1:p1'));
+      expect(find.text('ROUTE /admin/messages/ph1__p1'), findsOneWidget);
+    });
+
+    tallTest('an admin watching a chat they opened cannot write in it', (t) async {
+      convRepo.list = [
+        conversation(
+          'c9',
+          null,
+          observer: true,
+          byAdmin: true,
+          participants: const [
+            ChatPerson(uid: 'ph1', name: 'Aisyah', role: 'pharmacist'),
+            ChatPerson(uid: 'p1', name: 'Siti', role: 'patient'),
+          ],
+        ),
+      ];
+      await t.pumpWidget(chatApp(repo, user(UserRole.patient, doctor: 'd1'), '/conversation/c9'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('conversation-input')), findsNothing);
+      expect(find.textContaining('Only the two people in it can write'), findsOneWidget);
     });
   });
 }

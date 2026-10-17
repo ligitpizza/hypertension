@@ -14,6 +14,14 @@
       { "fieldPath": "createdAt", "order": "ASCENDING" } ] },
     { "collectionGroup": "agent_messages", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "sentAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "agent_messages", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "kind", "order": "ASCENDING" },
+      { "fieldPath": "sentAt", "order": "ASCENDING" } ] },
+    { "collectionGroup": "agent_messages", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "kind", "order": "ASCENDING" },
+      { "fieldPath": "sentAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "conversation_messages", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "conversationId", "order": "ASCENDING" }, { "fieldPath": "sentAt", "order": "DESCENDING" } ] },
     { "collectionGroup": "clinical_notes", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "patientId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
     { "collectionGroup": "prescriptions", "queryScope": "COLLECTION", "fields": [

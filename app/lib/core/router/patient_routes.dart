@@ -5,6 +5,7 @@ import '../../features/medications/data/medications_repository.dart';
 import '../../features/medications/presentation/medication_form_page.dart';
 import '../../features/medications/presentation/medications_page.dart';
 import '../../features/messaging/presentation/chat_thread_page.dart';
+import '../../features/messaging/presentation/conversation_pages.dart';
 import '../../features/prescriptions/presentation/reported_prescription_page.dart';
 import '../../features/provider_portal/domain/portal_models.dart';
 import '../../features/settings/presentation/data_privacy_page.dart';
@@ -113,6 +114,11 @@ final List<RouteBase> patientFeatureRoutes = [
   GoRoute(path: '/orders', builder: (_, _) => const OrdersPage()),
   // D-69: the Harvey Pharmacy conversation and the delivery address.
   GoRoute(path: '/pharmacy-chat', builder: (_, _) => const PatientPharmacyChatPage()),
+  // D-76: a chat an admin opened with the patient (or between them and a pharmacist).
+  GoRoute(
+    path: '/conversation/:id',
+    builder: (_, s) => PatientConversationPage(conversationId: s.pathParameters['id']!),
+  ),
   GoRoute(path: '/settings/address', builder: (_, _) => const AddressPage()),
   GoRoute(
     path: '/orders/:id/confirm',

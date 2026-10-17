@@ -36,6 +36,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     StaffDestination('/admin/calendar', 'Calendar', Icons.calendar_month_outlined),
     StaffDestination('/admin/appointments', 'Appointments', Icons.event_note_outlined),
     StaffDestination('/admin/assignments', 'Assignments', Icons.assignment_ind_outlined),
+    StaffDestination('/admin/messages', 'Messages', Icons.chat_bubble_outline), // D-76
     StaffDestination('/admin/audit-logs', 'Audit logs', Icons.policy_outlined),
     StaffDestination('/admin/orders', 'Orders', Icons.receipt_long_outlined), // D-70
     StaffDestination('/admin/deliveries', 'Deliveries', Icons.local_shipping_outlined),

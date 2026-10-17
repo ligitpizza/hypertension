@@ -102,3 +102,21 @@ describe('D-69 medication_catalog and pharmacy_messages', () => {
     await assertFails(setDoc(doc(pharmacist(), 'pharmacy_messages/y'), { patientId: P, text: 'hi' }));
   });
 });
+
+describe('D-76 conversations', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'conversations/a__b'), { participantIds: [P, 'u-pharm'], unread: {} });
+      await setDoc(doc(db, 'conversation_messages/c1'), { conversationId: 'a__b', senderId: P, text: 'hi' });
+    });
+  });
+  test('chats are read and written only through the API', async () => {
+    await assertFails(getDoc(doc(patient(), 'conversations/a__b')));
+    await assertFails(getDoc(doc(pharmacist(), 'conversation_messages/c1')));
+    await assertFails(getDoc(doc(admin(), 'conversations/a__b')));
+    await assertFails(setDoc(doc(patient(), 'conversation_messages/x'), { conversationId: 'a__b', text: 'x' }));
+    await assertFails(updateDoc(doc(patient(), 'conversations/a__b'), { unread: {} }));
+  });
+});
+

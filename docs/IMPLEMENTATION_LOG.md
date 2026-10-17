@@ -1328,3 +1328,26 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   shown on sign-in screens and the portal header; launcher and web icons regenerated.
   Infrastructure names unchanged. `EMAIL_FROM_NAME=Harvey` in the local `.env`.
 - Tests: backend 669; Flutter 569. Patient APK and staff web build.
+
+### 2026-10-17 — Messaging for every role, Harvey AI in the doctor chat, weekly summary (D-76)
+
+- Backend: `services/conversations.py`, `routers/conversations.py` (list, contacts, start,
+  admin pair, thread, send, read); `POST /messages/{id}/ai-review` (Harvey AI note +
+  urgent push, server re-checks with `chat_concern`/`bp_in_text`); `services/weekly_summary.py`
+  (template summary, `POST /agent/weekly-summary`, Mondays in the daily job).
+  `agent_messages` gains `kind` / `doctorId`.
+- Rules: `conversations`, `conversation_messages` server-only; indexes for kind queries and
+  the conversation thread. Rules tests for both and for doctors reading chat alerts.
+- App: shared chat widgets `messaging/presentation/chat_ui.dart` (bubbles, note bar, role
+  chips, inbox rows, composer) used by the doctor chat, pharmacy chat, team chats and the
+  assistant; `conversation_pages.dart` (thread, patient and staff pages, person picker,
+  admin Messages page with "Open chat between…"); patient inbox redesigned with role labels
+  and unread counts for every chat; the phone flags crisis BP numbers before encryption
+  (`hasCrisisBp`) and asks for an AI review of flagged messages only; Harvey AI notes shown in
+  the doctor chat; weekly summaries shown as cards in the assistant. Routes
+  `/conversation/:id`, `/doctor/messages/team/:id`, `/pharmacy/messages/team/:id`,
+  `/admin/messages[/:id]`; admin nav gets Messages.
+- Deviations / additions: two new collections and two `agent_messages` fields (D-76);
+  team chats not E2E encrypted (same reasoning as D-69).
+- Tests: backend 684 (+3 skipped); Flutter 576; rules 207.
+
